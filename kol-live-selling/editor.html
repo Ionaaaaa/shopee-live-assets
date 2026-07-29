@@ -687,7 +687,7 @@ input[type="file"] { display:none; }
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="handleImportExcel(event)">
       <div id="import-logo-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importLogoFolder').click()"
-        onmouseenter="this.style.borderColor='#3d9970'" onmouseleave="this.style.borderColor=''">
+        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor=''">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><path d="M1 4h14v10H1z"/><path d="M1 4l2-2h4l2 2"/></svg>
         <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳 Logo 素材資料夾（可選）</div>
         <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動對應工單 Logo</div>
@@ -697,7 +697,7 @@ input[type="file"] { display:none; }
       <!-- ── 直播主圖片資料夾（新增）── -->
       <div id="import-host-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importHostFolder').click()"
-        onmouseenter="this.style.borderColor='#5b8dee'" onmouseleave="this.style.borderColor=''">
+        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor=''">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
         <div id="import-host-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳直播主圖片資料夾（可選）</div>
         <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動比對主持人</div>
@@ -900,6 +900,11 @@ function saveCurrentTabState(cb){
   if(!tab) { if(cb) cb(); return; }
   tab.data = tab.data || {};
   tab.data.theme = S.theme;
+  /* layout 跟 theme 保持同步：layout 原本只在「工單匯入當下」有意義，
+     一旦使用者手動切換過款式（存檔時一定會經過這裡），就讓兩者同步成
+     目前實際顯示的款式，避免 applyTabData() 裡「d.layout || d.theme」
+     的優先順序，把使用者手動改過的款式被匯入時的舊 layout 蓋掉。 */
+  tab.data.layout = S.theme;
   /* txt-main（主標）固定值，不存進分頁狀態 */
   /* txt-sub 現在是 LPBN 副標，直接存進 subLpbn */
   tab.data.subLpbn = v('txt-sub') || '';
@@ -1842,8 +1847,8 @@ function handleImportLogoFolder(e){
       if(++done>=imgs.length){
         _importPending.logoCount=imgs.length;
         var z=document.getElementById('import-logo-zone'),l=document.getElementById('import-logo-label');
-        if(z){z.style.borderColor='#3d9970';z.style.background='rgba(61,153,112,.06)';}
-        if(l){l.textContent='✓ 已載入 '+imgs.length+' 個 Logo';l.style.color='#3d9970';}
+        if(z){z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+        if(l){l.textContent='✓ 已載入 '+imgs.length+' 個 Logo';l.style.color='var(--accent)';}
         _updateImportStatus();
       }
     };r.readAsDataURL(f);
@@ -1879,8 +1884,8 @@ function handleImportHostFolder(e){
       if(++done>=imgs.length){
         _importPending.hostCount=imgs.length;
         var z=document.getElementById('import-host-zone'),l=document.getElementById('import-host-label');
-        if(z){z.style.borderColor='#5b8dee';z.style.background='rgba(91,141,238,.06)';}
-        if(l){l.textContent='✓ 已載入 '+imgs.length+' 張直播主圖片';l.style.color='#5b8dee';}
+        if(z){z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+        if(l){l.textContent='✓ 已載入 '+imgs.length+' 張直播主圖片';l.style.color='var(--accent)';}
         _updateImportStatus();
       }
     };r.readAsDataURL(f);
@@ -1952,7 +1957,7 @@ function doImport(){
 }
 function openImportModal(){
   _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0};
-  ['import-excel-zone','import-logo-zone','import-host-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.style.borderColor='';el.style.background='';}});
+  ['import-excel-zone','import-logo-zone','import-host-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.style.borderStyle='dashed';el.style.borderColor='';el.style.background='';}});
   var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊上傳 Excel 工單';el.style.color='';}
   var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='上傳 Logo 素材資料夾（可選）';ll.style.color='';}
   var hl=document.getElementById('import-host-label');if(hl){hl.textContent='上傳直播主圖片資料夾（可選）';hl.style.color='';}
@@ -1963,7 +1968,7 @@ function handleImportExcel(e){
   var file=e.target.files[0];if(!file)return;
   _importPending.excelFile=file;
   var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
-  if(z){z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+  if(z){z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
   if(l){l.textContent='✓ '+file.name;l.style.color='var(--accent)';}
   _updateImportStatus();e.target.value='';
 }
