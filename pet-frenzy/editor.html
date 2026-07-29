@@ -183,6 +183,9 @@ input[type="file"] { display:none; }
 .popup-overlay {
   position:fixed;inset:0;background:rgba(0,0,0,.7);
   display:none;align-items:center;justify-content:center;z-index:300;
+  zoom:0.75; /* 2026-07-29 跟 Iona 對照「蝦殺二選一」設計系統文件第8節套用：popup整體統一縮小
+                比例，不用再對每個popup內部元素各自調padding/字級，畫布互動判定本身是即時量測
+                getBoundingClientRect() 算縮放比例，不是寫死px，套zoom不影響拖曳/縮放判定 */
 }
 .popup-overlay.open { display:flex; }
 .popup-panel {
@@ -505,7 +508,7 @@ input[type="file"] { display:none; }
       <span class="popup-title">Logo2 編輯</span>
       <button class="popup-close" onclick="closePopup('logo2')">×</button>
     </div>
-    <div style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;">
+    <div style="padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
 
       <!-- 左：上傳/操作/下一步 -->
       <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
@@ -578,29 +581,29 @@ input[type="file"] { display:none; }
       <span class="popup-title">商品／主持人 陰影編輯</span>
       <button class="popup-close" onclick="closePopup('shadow')">×</button>
     </div>
-    <div style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;">
+    <div style="padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
 
       <!-- 左：版型/角度/素材控制（素材清單本身可拖曳排序前後、右上角 × 刪除，點縮圖可直接選取） -->
       <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
-        <div style="font-size:11px;color:var(--text-dim);">畫布上可拖曳移動，縮圖右上角 × 可刪除。</div>
         <div id="shadow-editor-mount"></div>
         <div class="lc-field">
-          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
           <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
         </div>
         <button class="dl-btn" onclick="exportShadowComposite()" style="padding:7px;">確認並匯出到主持人圖層</button>
       </div>
 
       <!-- 右：1200x1200 合成畫布
-           2026-07-29 跟 Iona 確認：canvas 需要同時被「容器寬度／固定560px上限／視窗高度56vh」
-           三個條件夾住，但還要維持 aspect-ratio:1/1 正方形。
-           一開始寫成 width:100%;max-width:560px;max-height:56vh 是錯的：
-           width 已經被定值決定了，max-height 又獨立去夾高度，兩條路各自算出不同數字，
-           畫布就被拉成長方形（變形的原因）。
-           正確寫法是只給「寬度」一個算式，用 min() 把三個限制都收進同一個值裡，
-           高度完全不另外設定、單純靠 aspect-ratio 跟著寬度走，永遠維持正方形 -->
+           2026-07-29 跟 Iona 確認兩件事：
+           1) 外層灰底wrapper原本用預設align-items:stretch，會被撐到跟左欄一樣高
+              （左欄內容比畫布還高時），畫布本身用align-items:center在裡面置中，
+              上下就留出大片看起來像「灰底很大、商品圖只佔一部分」的空白。
+              改成外層整排align-items:flex-start，灰底wrapper不再被強制撐高，
+              直接貼著畫布實際高度，視覺上就不會有多餘空白。
+           2) 畫布尺寸夾住方式維持「只給width一個算式」的安全寫法（避免變形），
+              popup整體已經靠 .popup-overlay 的 zoom:0.75 縮小過一輪，
+              這裡不用再疊加vh去夾高度，改回單純px上限即可 -->
       <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:10px;">
-        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:min(100%,560px,56vh);aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
+        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:500px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 
     </div>
