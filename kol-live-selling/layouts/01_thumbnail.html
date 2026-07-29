@@ -858,7 +858,7 @@ if(!msg||msg.type!=='BN_UPDATE') return;
   var _bgUrl  = null;
   if(p.bgBase!==undefined){
     _needBg = true;
-    _bgUrl  = p.bgBase ? p.bgBase + '01_thumbnail.JPG' : null;
+    _bgUrl  = p.bgBase ? p.bgBase + '01_thumbnail.jpg' : null;
   } else if(p.bgUrl!==undefined){
     _needBg = true;
     _bgUrl  = p.bgUrl || null;
@@ -989,7 +989,7 @@ Promise.all([
   document.fonts.load('400 16px ShopeeNoto'),
 ]).catch(function(){}).then(function(){
   loadDefaultLogos(function(){
-    loadBg('../backgrounds/01_thumbnail.JPG');
+    loadBg('../backgrounds/fashion/01_thumbnail.jpg');
     render();
     if(window.parent!==window){
       window.parent.postMessage({type:'BN_READY',id:'01_thumbnail'},'*');
