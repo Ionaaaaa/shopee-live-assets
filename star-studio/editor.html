@@ -254,14 +254,14 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
+    <a class="tbtn" href="admin.html" style="display:none;">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -1479,9 +1479,28 @@ function _downloadAll(){
         a.download = zipName+'.zip';
         a.click();
         setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+
+        /* 圖片 zip 觸發下載後，先把畫面復原回原本停留的分頁，
+           等復原動作真的套用完（給一點緩衝時間），才去存暫存檔——
+           避免存到「整包下載跑批次時」殘留的中間狀態，也避免暫存檔的產生
+           跟上面圖片 zip 的下載動作互相搶時間、互相影響。 */
         applyTabData(TABS[ACTIVE_TAB], true);
-        pm.done('已下載：'+zipName+'.zip');
-        pm.hide();
+        pm.update(97, '準備暫存檔…');
+        setTimeout(function(){
+          saveCurrentTabState(function(){
+            var state = collectState();
+            state.tabs = TABS;
+            state.activeTab = ACTIVE_TAB;
+            var stateBlob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+            var a2 = document.createElement('a');
+            a2.href = URL.createObjectURL(stateBlob);
+            a2.download = zipName+'_暫存.json';
+            a2.click();
+            setTimeout(function(){URL.revokeObjectURL(a2.href);},1000);
+            pm.done('已下載：'+zipName+'.zip ＋ 暫存檔');
+            pm.hide();
+          });
+        }, 500);
       });
       return;
     }
