@@ -1294,12 +1294,21 @@ function getFmt(id){
   return 'jpeg';
 }
 
+/* 日期格式化：抓 M/D，兩邊補0成4碼 MMDD（資料夾/檔名用，補0後長度固定、好排序） */
+function formatDateMMDD(raw){
+  if(!raw) return '';
+  var m = String(raw).match(/(\d{1,2})\/(\d{1,2})/);
+  if(!m) return String(raw).replace(/\//g,'');
+  function pad(n){ return n.length<2 ? '0'+n : n; }
+  return pad(m[1])+pad(m[2]);
+}
+
 /* ── 取得當前分頁日期（用於資料夾命名）── */
 function getTabDate(){
   var tab = TABS[ACTIVE_TAB];
   if(!tab) return '';
   var d = tab.data && tab.data.date;
-  if(d) return d.replace(/\//g,'');
+  if(d) return formatDateMMDD(d);
   return '';
 }
 
@@ -1460,7 +1469,7 @@ function downloadAll(){
   checkOverLimit(_downloadAll);
 }
 function _downloadAll(){
-  var allDates = TABS.map(function(t){ return (t.data&&t.data.date?t.data.date.replace(/\//g,''):'tab'+(TABS.indexOf(t)+1)); });
+  var allDates = TABS.map(function(t){ return (t.data&&t.data.date?formatDateMMDD(t.data.date):'tab'+(TABS.indexOf(t)+1)); });
   var startDate = allDates[0] || '';
   var endDate = allDates[allDates.length-1] || '';
   var zipName = (startDate && endDate && startDate!==endDate ? startDate+'-'+endDate : startDate) + '_明星直播間';
