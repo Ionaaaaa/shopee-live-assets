@@ -579,21 +579,33 @@ input[type="file"] { display:none; }
       <button class="popup-close" onclick="closePopup('shadow')">×</button>
     </div>
     <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;">
+    <div style="padding:14px;display:flex;gap:14px;flex-wrap:wrap;">
 
       <!-- 左：版型/角度/素材控制（素材清單本身可拖曳排序前後、右上角 × 刪除，點縮圖可直接選取） -->
       <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;">
+      <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
         <div style="font-size:11px;color:var(--text-dim);">畫布上可拖曳移動，縮圖右上角 × 可刪除。</div>
         <div id="shadow-editor-mount"></div>
         <div class="lc-field">
           <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
           <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
         </div>
         <button class="dl-btn" onclick="exportShadowComposite()">確認並匯出到主持人圖層</button>
+        <button class="dl-btn" onclick="exportShadowComposite()" style="padding:7px;">確認並匯出到主持人圖層</button>
       </div>
 
       <!-- 右：1200x1200 合成畫布 -->
       <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
         <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:560px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
+      <!-- 右：1200x1200 合成畫布
+           2026-07-29 跟 Iona 確認：canvas 原本只靠 max-width:560px 限制寬度，
+           高度完全沒受視窗高度約束，遇到比較矮的螢幕/視窗，畫布還是照樣長到560px高，
+           結果被 .popup-panel 的 overflow:hidden 從下面裁掉（含左欄的匯出按鈕）。
+           這裡補上 max-height（用vh，隨視窗高度自動縮放，等於響應式），
+           跟 max-width 兩個一起夾，畫布固定1:1，取兩者較小值 -->
+      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:10px;">
+        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:560px;max-height:56vh;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 
     </div>
