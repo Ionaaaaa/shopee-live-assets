@@ -283,7 +283,7 @@ input[type="file"] { display:none; }
     if(document.getElementById('_bn_lm_css')) return;
     var s = document.createElement('style');
     s.id = '_bn_lm_css';
-    s.textContent = "<style id=\"jimmy-new-logo-menu-only-style\">\n.logo-edit-btn,\n.logo-swap-btn,\n.logo-delete-btn,\n.logo-white-btn,\n.logo-main-pen-btn,\n.logo-action-menu{\n  display:none !important;\n}\n\n.logo-v14-trigger{\n  position:absolute !important;\n  top:-24px !important;\n  right:-2px !important;\n  width:20px !important;\n  height:20px !important;\n  border-radius:50% !important;\n  background:#000 !important;\n  color:#fff !important;\n  display:flex !important;\n  align-items:center !important;\n  justify-content:center !important;\n  cursor:pointer !important;\n  z-index:2147483645 !important;\n  font-size:12px !important;\n  line-height:1 !important;\n  user-select:none !important;\n  box-shadow:0 2px 6px rgba(0,0,0,.25);\n}\n.logo-item,\n#square .brand{ overflow:visible !important; }\n\n#logoMenuV14{\n  position:fixed !important;\n  min-width:118px !important;\n  background:#111 !important;\n  color:#fff !important;\n  border-radius:10px !important;\n  box-shadow:0 8px 24px rgba(0,0,0,.28) !important;\n  padding:6px 0 !important;\n  display:none !important;\n  z-index:2147483647 !important;\n}\n#logoMenuV14.show{ display:block !important; }\n#logoMenuV14 button{\n  width:100% !important;\n  border:0 !important;\n  background:transparent !important;\n  color:#fff !important;\n  text-align:left !important;\n  padding:7px 12px !important;\n  font-size:12px !important;\n  line-height:1.35 !important;\n  cursor:pointer !important;\n}\n#logoMenuV14 button:hover{ background:#2b2b2b !important; }\n#logoMenuV14 button[hidden]{ display:none !important; }\n\n.is-exporting .logo-v14-trigger,\n.is-exporting #logoMenuV14{ display:none !important; }\n\n#logoCropModal{ z-index:2147483646 !important; }\n</style>\n\n\n<style id=\"logo-cropper-modal-style\">\n  .cropper-modal-wrap{\n    position:fixed; inset:0; background:rgba(0,0,0,.5);\n    display:none; align-items:center; justify-content:center; z-index:10020;\n  }\n  .cropper-modal-wrap.open{ display:flex; }\n  .cropper-panel{\n    width:min(90vw, 900px); background:#fff; border-radius:12px; overflow:hidden;\n    display:flex; flex-direction:column;\n  }\n  .cropper-panel header{\n    display:flex; align-items:center; justify-content:space-between;\n    padding:10px 14px; margin:0;\n  }\n  .cropper-panel .body{ padding:10px; }\n  .cropper-panel .actions{ display:flex; gap:8px; padding:10px; justify-content:flex-end; }\n  .cropper-panel img{ max-width:100%; max-height:65vh; display:block; margin:0 auto; }\n";
+    s.textContent = "<style id=\"jimmy-new-logo-menu-only-style\">\n.logo-edit-btn,\n.logo-swap-btn,\n.logo-delete-btn,\n.logo-white-btn,\n.logo-main-pen-btn,\n.logo-action-menu{\n  display:none !important;\n}\n\n.logo-v14-trigger{\n  position:absolute !important;\n  top:-24px !important;\n  right:-2px !important;\n  width:20px !important;\n  height:20px !important;\n  border-radius:50% !important;\n  background:#000 !important;\n  color:#fff !important;\n  display:flex !important;\n  align-items:center !important;\n  justify-content:center !important;\n  cursor:pointer !important;\n  z-index:2147483645 !important;\n  font-size:12px !important;\n  line-height:1 !important;\n  user-select:none !important;\n  box-shadow:0 2px 6px rgba(0,0,0,.25);\n}\n.logo-item,\n#square .brand{ overflow:visible !important; }\n\n#logoMenuV14{\n  position:fixed !important;\n  min-width:118px !important;\n  background:#111 !important;\n  color:#fff !important;\n  border-radius:10px !important;\n  box-shadow:0 8px 24px rgba(0,0,0,.28) !important;\n  padding:6px 0 !important;\n  display:none !important;\n  z-index:2147483647 !important;\n}\n#logoMenuV14.show{ display:block !important; }\n#logoMenuV14 button{\n  width:100% !important;\n  border:0 !important;\n  background:transparent !important;\n  color:#fff !important;\n  text-align:left !important;\n  padding:7px 12px !important;\n  font-size:12px !important;\n  line-height:1.35 !important;\n  cursor:pointer !important;\n}\n#logoMenuV14 button:hover{ background:#2b2b2b !important; }\n#logoMenuV14 button[hidden]{ display:none !important; }\n\n.is-exporting .logo-v14-trigger,\n.is-exporting #logoMenuV14{ display:none !important; }\n\n#logoCropModal{ z-index:2147483646 !important; }\n</style>\n\n\n<style id=\"logo-cropper-modal-style\">\n  .cropper-modal-wrap{\n    position:fixed; inset:0; background:rgba(0,0,0,.5);\n    display:none; align-items:center; justify-content:center; z-index:10020;\n  }\n  .cropper-modal-wrap.open{ display:flex; }\n  .cropper-panel{\n    width:min(90vw, 900px); background:#fff; border:2px solid #EE4D2D; border-radius:12px; overflow:hidden;\n    display:flex; flex-direction:column;\n  }\n  .cropper-panel header{\n    display:flex; align-items:center; justify-content:space-between;\n    padding:10px 14px; margin:0;\n  }\n  .cropper-panel .body{ padding:10px; }\n  .cropper-panel .actions{ display:flex; gap:8px; padding:10px; justify-content:flex-end; }\n  .cropper-panel img{ max-width:100%; max-height:65vh; display:block; margin:0 auto; }\n";
     document.head.appendChild(s);
   }
 
@@ -495,14 +495,14 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
+    <a class="tbtn" href="admin.html" style="display:none;">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -543,7 +543,7 @@ input[type="file"] { display:none; }
       <div class="sg">
         <div class="sg-label">款式背景</div>
         <div class="sg-body">
-          <select id="theme-select" class="fi" onchange="setTheme(this.value)" style="width:100%;cursor:pointer;">
+          <select id="theme-select" class="fi" onchange="setTheme(this.value)" style="width:100%;cursor:pointer;appearance:none;-webkit-appearance:none;-moz-appearance:none;padding-right:28px;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22 fill=%22none%22 stroke=%22%23999%22 stroke-width=%221.5%22><path d=%22M4 6l4 4 4-4%22/></svg>');background-repeat:no-repeat;background-position:right 10px center;background-size:12px;">
             <!-- 由 buildThemeSelect() 動態填入 -->
           </select>
         </div>
@@ -582,12 +582,6 @@ input[type="file"] { display:none; }
             <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;">
               <img id="logo2-thumb" src="" alt="logo2" style="max-height:32px;max-width:90px;object-fit:contain;border-radius:3px;flex-shrink:0;">
               <div style="flex:1;display:flex;gap:4px;justify-content:flex-end;">
-                <button onclick="editorLogo2Crop()"
-                  style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap;"
-                  onmouseenter="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
-                  onmouseleave="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>裁切
-                </button>
                 <button onclick="document.getElementById('logo2Up').click()"
                   style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;"
                   onmouseenter="this.style.color='var(--text)'"
@@ -806,21 +800,16 @@ if(typeof BN_THEME_MAP !== 'undefined'){
   });
 }
 
-var STORE_KEY = 'bn_admin_star_studio_v1';
+var STORE_KEY = 'bn_admin_kol_live_selling_v1';
 
 /* ── iframe 清單 ── */
 /* LAYOUTS 從後台 localStorage 讀取啟用的版位 */
 var DEFAULT_LAYOUTS = [
   { id:'01_thumbnail', name:'直播時縮圖',                  file:'01_thumbnail.html', w:720,  h:720,  enabled:true },
   { id:'02_lpbn',      name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html',      w:1125, h:360,  enabled:true },
-  { id:'04_ig',        name:'IG',                          file:'04_ig.html',        w:900,  h:1600, enabled:true },
-  { id:'05_fb_post',   name:'FB Post',                     file:'05_fb_post.html',   w:1200, h:630,  enabled:true },
-  { id:'06_opening',   name:'開播字卡',                    file:'06_opening.html',   w:1080, h:1920, enabled:true },
-  { id:'07_msbn',      name:'MSBN',                        file:'07_msbn.html',      w:1200, h:360,  enabled:true },
-  { id:'08_popup',     name:'直播大廳 Popup',              file:'08_popup.html',     w:870,  h:1160, enabled:true },
 ];
 /* 版本號：每次更新 DEFAULT_LAYOUTS 時遞增，強制後台讀新清單 */
-var DEFAULT_LAYOUTS_VERSION = 7;
+var DEFAULT_LAYOUTS_VERSION = 8;
 
 function getLayouts(){
   try{

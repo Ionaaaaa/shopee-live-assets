@@ -282,7 +282,7 @@ function toast(msg, type, duration){
 }
 
 /* ── Storage key ── */
-var STORE_KEY = 'bn_admin_star_studio_v1';
+var STORE_KEY = 'bn_admin_kol_live_selling_v1';
 
 /* ── Load / Save layout list ── */
 function loadList(){
@@ -290,14 +290,13 @@ function loadList(){
     var raw = localStorage.getItem(STORE_KEY);
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  /* 預設：把 js/index.js 裡的清單帶進來 */
+  /* 預設：這個專案實際只有 2 個製作物（01_thumbnail、02_lpbn） */
   return {
     layouts: [
-      { id:'02_lpbn',    name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html',    w:1125, h:360, enabled:true, note:'' },
-      { id:'05_fb_post', name:'FB Post',                      file:'05_fb_post.html', w:1200, h:630, enabled:true, note:'' },
-      { id:'07_msbn',    name:'MSBN',                         file:'07_msbn.html',    w:1200, h:360, enabled:true, note:'' },
+      { id:'01_thumbnail', name:'直播時縮圖',                  file:'01_thumbnail.html', w:720,  h:720, enabled:true, note:'' },
+      { id:'02_lpbn',      name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html',      w:1125, h:360, enabled:true, note:'' },
     ],
-    version: 4
+    version: 8
   };
 }
 
