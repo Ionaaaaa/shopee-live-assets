@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>09 直播間FL</title>
+<style>:root{ --cw:336px; --ch:120px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="336" height="120"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 336, H = 120;
+
+/* ── PSD 規格（Iona 提供的實際 CSS 座標）──
+   .背景：深藍色 rgb(31,48,93)，330x98，置中在 336x120 的畫布裡（四邊留一點邊界）
+   .文案6字內：50px，黃色 rgb(255,232,139)，text-align:center ──
+   原始 CSS 座標是相對一個更大的母畫布，沒有給這個版位自己的外框基準點，
+   所以文字位置這裡改用「在背景框內置中」處理（跟 CSS 給的 text-align:center 一致），
+   如果之後看起來跟設計稿對不上，麻煩截圖給我對一下實際要往哪裡偏 */
+var BG_BOX = { x:3, y:11, w:330, h:98 };
+var TEXT_COLOR = '#FFE88B';
+var FONT_SIZE = 50, FONT_WEIGHT = 500;
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ──
+   flText：這個版位專屬的一行文案。目前暫時沿用 editor 廣播的 main（主標）欄位，
+   如果之後想要獨立一個專屬欄位（不跟主標共用），跟 Iona 確認後再另外接一個新欄位即可。 */
+var D = {
+  theme:'A', bg:null, bgUrl:null,
+  flText: '文案內容$6字內',
+};
+
+var BG_FALLBACK = { A:'#F5C842', B:'#F5A0C5', C:'#bee1f2' };
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  /* 這個版位背景本來就是透明疊圖（疊在直播畫面上），原本這裡先鋪一層白色
+     是抄其他版位「防止透明 PNG 合成殘留前一張顏色」的寫法，但 09 的背景圖
+     (09_FL.png) 本身就有透明區塊，先鋪白色會讓 drawImage 用 source-over
+     疊上去時，透明的地方直接透出底下的白色，等於整張圖都變不透明了。
+     clearRect 已經把畫布清成全透明，這裡不用再多鋪白色。 */
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else {
+    // 沒有背景圖時，畫規格給的深藍色框（.背景 rgb(31,48,93)）方便編輯時定位，
+    // 畫布其他地方維持透明
+    ctx.fillStyle = '#1F305D';
+    ctx.fillRect(BG_BOX.x, BG_BOX.y, BG_BOX.w, BG_BOX.h);
+  }
+
+  drawText();
+}
+
+function drawText(){
+  if(!D.flText) return;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = font(FONT_SIZE, FONT_WEIGHT);
+  ctx.fillStyle = TEXT_COLOR;
+  ctx.fillText(D.flText, BG_BOX.x + BG_BOX.w/2, BG_BOX.y + BG_BOX.h/2);
+  ctx.textBaseline = 'alphabetic'; // 還原預設值，避免影響其他繪製
+}
+
+/* ── postMessage ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  if(p.theme!==undefined) D.theme = p.theme;
+  /* 專屬文案欄位：跟 editor 的 txt-fl 對應，不再沿用主標(main)欄位 */
+  if(p.flText!==undefined) D.flText = p.flText;
+
+  /* bgBase 是資料夾路徑，自己補上版位檔名──
+     背景資料夾裡實際檔名是 09_FL.png（大寫 FL、副檔名是 png 不是 jpg，
+     這張背景本身就是透明底，所以用 png 才留得住透明度） */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '09_FL.png' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null);
+  }
+
+  render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+window.BNExport = {
+  getBlob:function(fmt,q,cb){
+    render();
+    exportBlob(fmt, q, cb);
+  },
+  getDataURL:function(fmt,q){
+    render();
+    return cv.toDataURL('image/'+(fmt||'jpeg'), q||0.95);
+  },
+  spec:{id:'09_fl', name:'直播間FL', width:W, height:H, hasCTAVariant:false, fmt:'png'} // 背景是透明的，要用 PNG 匯出才留得住透明度，沒有指定 fmt 的話 editor-export.js 預設是 jpeg 會把透明背景填成實色
+};
+
+/* ── Init ── */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  render();
+  if(window.parent!==window){
+    window.parent.postMessage({type:'BN_READY',id:'09_fl'},'*');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>明星直播間 編輯器</title>
+<style>
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+
+*,*::before,*::after { box-sizing:border-box;margin:0;padding:0; }
+:root {
+  --bg:#1a1a1a; --sidebar:#242424; --surface:#383838; --border:#383838;
+  --border2:#444; --text:#f0f0f0; --text-muted:#999; --text-dim:#666;
+  --accent:#EE4D2D; --accent-dim:rgba(238,77,45,0.12); --success:#3d9970; --radius:15px;
+  --panel:#303030;
+}
+html,body { height:100%;overflow:hidden; }
+body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);font-size:13px; }
+
+/* Topbar */
+.topbar {
+  height:44px;background:var(--sidebar);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px 0 20px;position:fixed;top:0;left:0;right:0;z-index:200;
+}
+.topbar-left { display:flex;align-items:center;gap:10px; }
+.topbar-logo { width:20px;height:20px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center; }
+.topbar-logo svg { width:12px;height:12px;fill:white; }
+.topbar-title { font-size:13px;font-weight:600; }
+.topbar-badge { font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:3px;letter-spacing:.5px; }
+.topbar-right { display:flex;align-items:center;gap:8px; }
+.tbtn {
+  height:28px;padding:0 12px;border-radius:var(--radius);border:1px solid var(--border2);
+  background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;text-decoration:none;
+}
+.tbtn:hover { color:var(--text);background:#2e2e2e; }
+.tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
+.tbtn.primary:hover { background:#d4442a; }
+.tbtn svg { width:13px;height:13px;flex-shrink:0; }
+input[type="file"] { display:none; }
+
+/* Layout */
+.layout { display:grid;grid-template-columns:220px 1fr 288px;height:calc(100vh - 44px);margin-top:44px; }
+
+/* Sidebar */
+.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
+.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:visible; }
+#sidebar-scroll { flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent; }
+#sidebar-scroll::-webkit-scrollbar { width:4px; }
+#sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border2);border-radius:2px; }
+
+.sg { margin-bottom:8px;border-bottom:1px solid var(--border);overflow:visible; }
+.sg:last-child { border-bottom:none; }
+.sg-label { font-size:13px;font-weight:700;color:#ffffff;letter-spacing:0.3px;text-transform:none;padding:20px 16px 8px; }
+.sg-body { padding:0 12px;overflow:visible; }
+
+/* Theme chips */
+.theme-row { display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px; }
+.theme-chip {
+  height:36px;border-radius:var(--radius);border:1.5px solid var(--border2);cursor:pointer;
+  font-size:12px;font-weight:600;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .15s;user-select:none;background:var(--surface);
+}
+.theme-chip.active { border-color:var(--accent);color:white;background:var(--accent-dim); }
+.theme-chip:not(.active):hover { border-color:var(--border2);color:var(--text);background:var(--border); }
+.chip-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+
+/* Upload rows */
+.upload-row { display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border); }
+.upload-row:last-child { border-bottom:none; }
+.upload-icon { width:28px;height:28px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer; }
+.upload-icon svg { width:13px;height:13px;stroke:var(--text-muted);fill:none;stroke-width:1.5; }
+.upload-label { font-size:12px;color:var(--text-muted);flex:1;cursor:pointer; }
+.upload-row.done .upload-icon { background:rgba(61,153,112,.12);border-color:var(--success); }
+.upload-row.done .upload-icon svg { stroke:var(--success); }
+.upload-row.done .upload-label { color:var(--success); }
+.upload-row:hover .upload-label { color:var(--text); }
+.edit-btn { display:none;height:22px;padding:0 8px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0; }
+.upload-row.done .edit-btn { display:block; }
+.edit-btn:hover { color:var(--accent);border-color:var(--accent); }
+
+/* Fields */
+.field { margin-bottom:14px; }
+.field-label { display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:4px; }
+.cc { font-size:10px;color:var(--text-dim);font-variant-numeric:tabular-nums; }
+.cc.over { color:var(--accent); }
+.fi { width:100%;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;font-family:inherit;transition:border-color .15s;-webkit-appearance:none; }
+.fi::placeholder { color:var(--text-dim); }
+.fi:focus { outline:none;border-color:#444;box-shadow:0 0 0 3px rgba(255,255,255,.04); }
+.fi-row { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
+
+/* Color rows */
+.color-row { display:flex;align-items:center;height:32px;padding:0 4px;border-radius:var(--radius); }
+.color-row:hover { background:var(--surface); }
+.color-label { font-size:12px;color:var(--text-muted);flex:1; }
+.color-swatch { width:28px;height:20px;border-radius:4px;border:1px solid var(--border2);cursor:pointer;padding:0;-webkit-appearance:none; }
+.color-swatch::-webkit-color-swatch-wrapper { padding:0; }
+.color-swatch::-webkit-color-swatch { border:none; }
+
+/* Toggle */
+.toggle-row { display:flex;align-items:center;height:32px;padding:0 4px;border-radius:var(--radius);cursor:pointer; }
+.toggle-row:hover { background:var(--surface); }
+.toggle-label { font-size:12px;color:var(--text-muted);flex:1; }
+.sw { position:relative;width:32px;height:18px;flex-shrink:0; }
+.sw input { opacity:0;width:0;height:0;position:absolute; }
+.sw-track { position:absolute;inset:0;background:var(--border2);border-radius:18px;transition:background .2s;cursor:pointer; }
+.sw-track::after { content:'';position:absolute;width:12px;height:12px;background:var(--text-muted);border-radius:50%;top:3px;left:3px;transition:transform .2s,background .2s; }
+.sw input:checked + .sw-track { background:var(--accent-dim); }
+.sw input:checked + .sw-track::after { transform:translateX(14px);background:var(--accent); }
+
+/* Pills */
+.pill-row { display:flex;gap:4px; }
+.pill { flex:1;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;user-select:none; }
+.pill:hover { border-color:var(--border2);color:var(--text); }
+.pill.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600; }
+
+/* Download bar */
+#bn-download-bar { padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0; }
+.dl-btn { width:100%;padding:9px;background:var(--accent);border:none;border-radius:var(--radius);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;font-family:inherit; }
+.dl-btn:hover { background:#d4442a; }
+
+/* Canvas area */
+.canvas-area { background:var(--bg);overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:28px 36px;gap:28px;scrollbar-width:none; }
+.canvas-area::-webkit-scrollbar { display:none; }
+
+/* Canvas wrapper */
+.canvas-wrapper { display:flex;flex-direction:column;flex:1;overflow:hidden; }
+
+/* Nav bar */
+.canvas-nav {
+  height:48px;background:var(--panel);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:4px;padding:0 16px;flex-shrink:0;
+  overflow-x:auto;scrollbar-width:none;
+}
+.canvas-nav::-webkit-scrollbar { display:none; }
+.nav-btn {
+  height:32px;padding:0 16px;border-radius:var(--radius);
+  border:1.5px solid transparent;background:transparent;
+  color:var(--text-muted);font-size:12px;font-weight:500;
+  cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;
+}
+.nav-btn:hover { color:var(--text);background:var(--surface); }
+.nav-btn.active { border-color:var(--accent);color:var(--accent);background:var(--accent-dim);font-weight:600; }
+.nav-add-btn {
+  height:28px;width:28px;border-radius:var(--radius);border:1.5px solid var(--border2);
+  background:transparent;color:var(--text-dim);font-size:16px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:4px;
+}
+.nav-add-btn:hover { color:var(--text);border-color:#555; }
+.canvas-block { width:100%;max-width:1125px; }
+.canvas-meta { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
+.canvas-name { font-size:12px;font-weight:600;color:var(--text); }
+.canvas-size { font-size:11px;color:var(--text-dim); }
+.canvas-dl-btn { margin-left:auto;height:22px;padding:0 10px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all .15s; }
+.canvas-dl-btn:hover { color:var(--accent);border-color:var(--accent); }
+
+/* iframe wrapper */
+.iframe-wrap {
+  position:relative;border-radius:0;overflow:hidden;
+  box-shadow:0 0 0 1px var(--border),0 8px 32px rgba(0,0,0,.5);
+  background:#fff;
+}
+.iframe-wrap iframe {
+  display:block;border:none;
+  transform-origin:top left;
+}
+
+/* editor-item for editor-plugin */
+.editor-item { position:relative;display:inline-block; }
+.editor-item img { display:block;max-width:100%; }
+
+/* Popup overlay */
+.popup-overlay {
+  position:fixed;inset:0;background:rgba(0,0,0,.7);
+  display:none;align-items:center;justify-content:center;z-index:300;
+}
+.popup-overlay.open { display:flex; }
+.popup-panel {
+  width:min(90vw,600px);background:var(--sidebar);
+  border:1px solid var(--border2);border-radius:15px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;
+  max-height:80vh;display:flex;flex-direction:column;
+}
+.popup-header {
+  padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.popup-title { font-size:13px;font-weight:600;color:var(--text); }
+.popup-close {
+  background:none;border:none;color:var(--text-muted);
+  cursor:pointer;font-size:20px;line-height:1;padding:0;
+}
+.popup-close:hover { color:var(--text); }
+.popup-body {
+  padding:16px;overflow-y:auto;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;
+}
+.popup-card {
+  border-radius:8px;overflow:hidden;cursor:pointer;
+  border:2px solid var(--border);transition:border-color .15s;
+  background:var(--surface);
+}
+.popup-card:hover { border-color:var(--accent); }
+.popup-card.selected { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim); }
+.popup-card img { width:100%;display:block;object-fit:cover; }
+.popup-card-label {
+  padding:5px 8px;font-size:11px;color:var(--text-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* Toast */
+.toast { position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:9999;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none; }
+.toast.show { opacity:1;transform:translateY(0); }
+.toast.ok { border-left:3px solid var(--success); }
+.toast.err { border-left:3px solid var(--accent); }
+
+/* Asset list */
+.asset-list { padding:8px 0; }
+.asset-item { display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:0;transition:background .12s;cursor:pointer; }
+.asset-item:hover { background:var(--surface); }
+.asset-item.active { background:var(--surface);border-left:2px solid var(--accent); }
+.asset-icon { width:32px;height:32px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.asset-icon svg { width:14px;height:14px;stroke:var(--text-muted);fill:none;stroke-width:1.5; }
+.asset-info { flex:1;min-width:0; }
+.asset-name { font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.asset-meta { font-size:10px;color:var(--text-dim);margin-top:1px; }
+.asset-dl { height:22px;padding:0 8px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);font-size:11px;cursor:pointer;transition:all .15s;flex-shrink:0; }
+.asset-dl:hover { color:var(--accent);border-color:var(--accent); }
+.panel-section { padding:12px 16px 6px;font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border); }
+.canvas-ref-btn {
+  font-size:11px; padding:3px 8px; border-radius:4px;
+  border:1px solid var(--border2); cursor:pointer;
+  color:var(--text-muted); background:var(--surface);
+  transition:all .15s; white-space:nowrap;
+}
+.canvas-ref-btn:hover { border-color:#888; color:var(--text); }
+</style>
+.color-swatch { width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;padding:0;-webkit-appearance:none;flex-shrink:0; }
+.color-swatch::-webkit-color-swatch-wrapper { padding:0; }
+.color-swatch::-webkit-color-swatch { border:none;border-radius:4px; }
+</style>
+<script id="bn-logo-editor-plugin">
+/* === Logo Editor Plugin（裁切編輯器）=== */
+/*!
+ * Logo Menu Plugin v14
+ * 從 hbn.html jimmy-new-logo-menu-only-script 抽取
+ * 提供：logo 縮圖右上角 ✎ 觸發器 + 下拉選單（編輯/往右移/刪除/加圓角）
+ *       + CropperJS Logo 裁切 Modal
+ *
+ * 使用：
+ *   window.BNLogoMenu.attach(imgEl, options)
+ *     options.onEdit(imgEl)    → 點「編輯」
+ *     options.onSwap(imgEl)    → 點「往右移」（可選）
+ *     options.onDelete(imgEl)  → 點「刪除」
+ *     options.showSwap         → 是否顯示「往右移」
+ *
+ *   window.BNLogoMenu.openCropEditor(src, onDone)
+ *     → 開啟 CropperJS 裁切視窗，完成後呼叫 onDone(newSrc)
+ */
+(function(global){
+  if(global.__BN_LOGO_MENU_PLUGIN__) return;
+  global.__BN_LOGO_MENU_PLUGIN__ = true;
+
+  /* ── 載入 CropperJS ── */
+  function loadCropper(cb){
+    if(global.Cropper){ cb(); return; }
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css';
+    document.head.appendChild(link);
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js';
+    s.onload = cb;
+    document.head.appendChild(s);
+  }
+
+  /* ── 注入 CSS ── */
+  function injectCSS(){
+    if(document.getElementById('_bn_lm_css')) return;
+    var s = document.createElement('style');
+    s.id = '_bn_lm_css';
+    s.textContent = "<style id=\"jimmy-new-logo-menu-only-style\">\n.logo-edit-btn,\n.logo-swap-btn,\n.logo-delete-btn,\n.logo-white-btn,\n.logo-main-pen-btn,\n.logo-action-menu{\n  display:none !important;\n}\n\n.logo-v14-trigger{\n  position:absolute !important;\n  top:-24px !important;\n  right:-2px !important;\n  width:20px !important;\n  height:20px !important;\n  border-radius:50% !important;\n  background:#000 !important;\n  color:#fff !important;\n  display:flex !important;\n  align-items:center !important;\n  justify-content:center !important;\n  cursor:pointer !important;\n  z-index:2147483645 !important;\n  font-size:12px !important;\n  line-height:1 !important;\n  user-select:none !important;\n  box-shadow:0 2px 6px rgba(0,0,0,.25);\n}\n.logo-item,\n#square .brand{ overflow:visible !important; }\n\n#logoMenuV14{\n  position:fixed !important;\n  min-width:118px !important;\n  background:#111 !important;\n  color:#fff !important;\n  border-radius:10px !important;\n  box-shadow:0 8px 24px rgba(0,0,0,.28) !important;\n  padding:6px 0 !important;\n  display:none !important;\n  z-index:2147483647 !important;\n}\n#logoMenuV14.show{ display:block !important; }\n#logoMenuV14 button{\n  width:100% !important;\n  border:0 !important;\n  background:transparent !important;\n  color:#fff !important;\n  text-align:left !important;\n  padding:7px 12px !important;\n  font-size:12px !important;\n  line-height:1.35 !important;\n  cursor:pointer !important;\n}\n#logoMenuV14 button:hover{ background:#2b2b2b !important; }\n#logoMenuV14 button[hidden]{ display:none !important; }\n\n.is-exporting .logo-v14-trigger,\n.is-exporting #logoMenuV14{ display:none !important; }\n\n#logoCropModal{ z-index:2147483646 !important; }\n</style>\n\n\n<style id=\"logo-cropper-modal-style\">\n  .cropper-modal-wrap{\n    position:fixed; inset:0; background:rgba(0,0,0,.5);\n    display:none; align-items:center; justify-content:center; z-index:10020;\n  }\n  .cropper-modal-wrap.open{ display:flex; }\n  .cropper-panel{\n    width:min(90vw, 900px); background:#fff; border-radius:12px; overflow:hidden;\n    display:flex; flex-direction:column;\n  }\n  .cropper-panel header{\n    display:flex; align-items:center; justify-content:space-between;\n    padding:10px 14px; margin:0;\n  }\n  .cropper-panel .body{ padding:10px; }\n  .cropper-panel .actions{ display:flex; gap:8px; padding:10px; justify-content:flex-end; }\n  .cropper-panel img{ max-width:100%; max-height:65vh; display:block; margin:0 auto; }\n";
+    document.head.appendChild(s);
+  }
+
+  /* ── 注入 Modal HTML ── */
+  function injectHTML(){
+    if(document.getElementById('logoCropModal')) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = "<div id=\"logoCropModal\" class=\"cropper-modal-wrap\">\n  <div class=\"cropper-panel\">\n    <header>\n      <strong>Logo \u88c1\u5207</strong>\n      <button id=\"logoCropClose\" class=\"btn secondary\" type=\"button\">\u95dc\u9589</button>\n    </header>\n    <div class=\"body\"><img id=\"logoCropImg\" alt=\"Logo \u88c1\u5207\" /></div>\n    <div class=\"actions\">\n<div style=\"font-size:12px;color:#888;padding:0 12px 10px;\">\u540c\u7b49\u6bd4\u88c1\u5207\uff1a\u6309\u4f4fshift\u9375\u518d\u7528\u6ed1\u9f20\u62c9\u6846\u7dda</div>\n      <button id=\"logoCropApply\" class=\"btn\" type=\"button\">\u5957\u7528</button>\n    </div>\n  </div>\n</div>\n\n";
+    while(tmp.firstChild) document.body.appendChild(tmp.firstChild);
+  }
+
+  /* ── 核心邏輯（從 hbn.html 抽取，移除 hbn 專屬 DOM 依賴） ── */
+
+  var ctx = null;
+  var activeCropper = null;
+  var activeTarget = null;
+  var _cropDone = null;
+
+  function q(sel, root){ return (root||document).querySelector(sel); }
+
+  function closeMenu(){
+    var menu = document.getElementById('logoMenuV14');
+    if(menu) menu.classList.remove('show');
+  }
+
+  function ensureMenu(){
+    var menu = document.getElementById('logoMenuV14');
+    if(menu) return menu;
+    menu = document.createElement('div');
+    menu.id = 'logoMenuV14';
+    menu.innerHTML =
+      '<button type="button" data-action="edit">編輯</button>' +
+      '<button type="button" data-action="swap">往右移</button>' +
+      '<button type="button" data-action="delete">刪除</button>' +
+      '<button type="button" data-action="round">加圓角</button>';
+    document.body.appendChild(menu);
+    menu.addEventListener('mousedown', function(e){ e.stopPropagation(); }, true);
+    menu.addEventListener('click', function(e){
+      var btn = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;
+      if(!btn) return;
+      e.preventDefault(); e.stopPropagation();
+      runAction(btn.dataset.action);
+      closeMenu();
+    }, true);
+    return menu;
+  }
+
+  function updateMenu(){
+    var menu = ensureMenu();
+    var swapBtn = menu.querySelector('[data-action="swap"]');
+    if(swapBtn) swapBtn.hidden = !(ctx && ctx.showSwap);
+    var roundBtn = menu.querySelector('[data-action="round"]');
+    if(roundBtn){
+      roundBtn.textContent = (ctx && ctx.img && ctx.img.dataset.bnLogoRound === '1') ? '取消圓角' : '加圓角';
+    }
+  }
+
+  function openMenu(wrap, img, trigger, opts){
+    ctx = { wrap:wrap, img:img, opts:opts||{}, showSwap:!!(opts&&opts.showSwap) };
+    var menu = ensureMenu();
+    updateMenu();
+    var rect = trigger.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.round(rect.right - 118)) + 'px';
+    menu.style.top  = Math.max(8, Math.round(rect.bottom + 6)) + 'px';
+    menu.classList.add('show');
+  }
+
+  function runAction(action){
+    if(!ctx || !ctx.img) return;
+    var img = ctx.img, opts = ctx.opts||{};
+    if(action === 'edit'){
+      /* 開啟 CropperJS 裁切，完成後回呼 opts.onEdit */
+      openCropEditor(img.src, function(newSrc){
+        if(!newSrc) return;
+        img.src = newSrc;
+        if(typeof opts.onEdit === 'function') opts.onEdit(img, newSrc);
+      });
+    } else if(action === 'swap'){
+      if(typeof opts.onSwap === 'function') opts.onSwap(img);
+    } else if(action === 'delete'){
+      if(typeof opts.onDelete === 'function') opts.onDelete(img);
+    } else if(action === 'round'){
+      var isRound = ctx.img.dataset.bnLogoRound === '1';
+      ctx.img.dataset.bnLogoRound = isRound ? '' : '1';
+      ctx.img.style.borderRadius = isRound ? '' : '50%';
+      updateMenu();
+      if(typeof opts.onRound === 'function') opts.onRound(img, !isRound);
+    }
+  }
+
+  /* ── CropperJS 裁切 ── */
+  function destroyCropper(){
+    try{ activeCropper && activeCropper.destroy(); }catch(_){}
+    activeCropper = null;
+  }
+
+  function openCropEditor(src, onDone){
+    injectCSS();
+    injectHTML();
+    _cropDone = onDone || null;
+    loadCropper(function(){
+      var modal   = document.getElementById('logoCropModal');
+      var cropImg = document.getElementById('logoCropImg');
+      var apply   = document.getElementById('logoCropApply');
+      var close   = document.getElementById('logoCropClose');
+      if(!modal || !cropImg) return;
+
+      activeTarget = null;
+      destroyCropper();
+      /* 重設 img 讓瀏覽器重新 load */
+      cropImg.removeAttribute('src');
+      modal.classList.add('open');
+
+      cropImg.onload = function(){
+        cropImg.onload = null;
+        destroyCropper();
+        activeCropper = new Cropper(cropImg, {
+          viewMode: 1,
+          autoCropArea: 1,
+          movable: true,
+          zoomable: true,
+          scalable: true,
+          background: false
+        });
+      };
+      cropImg.src = src;
+
+      /* 「套用」按鈕 */
+      if(apply && apply.dataset.bnBound !== '1'){
+        apply.dataset.bnBound = '1';
+        apply.addEventListener('click', function(){
+          if(!activeCropper) return;
+          var out = activeCropper.getCroppedCanvas();
+          if(!out) return;
+          var url = out.toDataURL('image/png');
+          destroyCropper();
+          modal.classList.remove('open');
+          if(typeof _cropDone === 'function'){ _cropDone(url); _cropDone = null; }
+        });
+      }
+      /* 「關閉」按鈕 */
+      if(close && close.dataset.bnBound !== '1'){
+        close.dataset.bnBound = '1';
+        close.addEventListener('click', function(){
+          destroyCropper();
+          modal.classList.remove('open');
+          _cropDone = null;
+        });
+      }
+    });
+  }
+
+  /* ── 附加觸發器到 logo 縮圖 ── */
+  function attach(imgEl, opts){
+    injectCSS();
+    var wrap = imgEl.parentElement;
+    if(!wrap) return;
+    wrap.style.overflow = 'visible';
+    wrap.style.position = 'relative';
+
+    /* 移除舊觸發器 */
+    var old = wrap.querySelector('.logo-v14-trigger');
+    if(old) old.remove();
+
+    var trigger = document.createElement('div');
+    trigger.className = 'logo-v14-trigger';
+    trigger.textContent = '✎';
+    trigger.title = 'Logo 功能';
+    wrap.appendChild(trigger);
+
+    trigger.style.display = imgEl.getAttribute('src') ? 'flex' : 'none';
+
+    trigger.addEventListener('click', function(e){
+      e.preventDefault(); e.stopPropagation();
+      document.addEventListener('click', closeMenu, { once:true });
+      openMenu(wrap, imgEl, trigger, opts||{});
+    }, true);
+
+    /* src 變化時更新顯示 */
+    var obs = new MutationObserver(function(){
+      trigger.style.display = imgEl.getAttribute('src') ? 'flex' : 'none';
+    });
+    obs.observe(imgEl, { attributes:true, attributeFilter:['src'] });
+  }
+
+  /* ── 關閉 menu 點外部 ── */
+  document.addEventListener('click', function(e){
+    var menu = document.getElementById('logoMenuV14');
+    if(menu && !menu.contains(e.target)) closeMenu();
+  });
+
+  /* ── 公開 API ── */
+  global.BNLogoMenu = {
+    attach: attach,
+    openCropEditor: openCropEditor
+  };
+
+}(window));
+
+</script>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo"><svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg></div>
+    <span class="topbar-title">明星直播間</span>
+    <span class="topbar-badge">素材編輯器 v2</span>
+  </div>
+  <div class="topbar-right">
+    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
+    <input type="file" id="zipFile" accept=".zip,.xlsx">
+    <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
+    </button>
+    <input type="file" id="loadFile" accept=".json">
+    <button class="tbtn" onclick="document.getElementById('loadFile').click()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+    </button>
+    <button class="tbtn" id="btn-save">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
+    </button>
+    <button class="tbtn primary" onclick="downloadAll()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>整包下載
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- 左側：素材清單 -->
+  <div class="sidebar" id="sidebar">
+    <div class="panel-section">素材清單</div>
+    <div id="asset-list-body" style="flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;">
+      <div style="padding:20px 16px;font-size:12px;color:var(--text-dim);text-align:center;">載入中...</div>
+    </div>
+  </div>
+
+  <!-- 中央：分頁 bar + 畫布區 -->
+  <div class="canvas-wrapper">
+    <div class="canvas-nav" id="canvas-nav">
+      <!-- 動態產生分頁 -->
+      <div id="nav-placeholder" style="display:flex;align-items:center;gap:8px;width:100%;">
+        <button class="nav-add-btn" onclick="openImportModal()" title="匯入工單建立分頁">+</button>
+        <span style="font-size:12px;color:var(--text-dim);">點 + 匯入工單，自動建立分頁</span>
+      </div>
+    </div>
+    <div class="canvas-area" id="canvas-area">
+      <!-- 動態產生 iframe 畫布 -->
+    </div>
+  </div>
+
+  <!-- 右側：控制面板 -->
+  <div class="right-panel" id="right-panel">
+    <div id="sidebar-scroll" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;">
+
+      <div class="sg">
+        <div class="sg-label">款式背景</div>
+        <div class="sg-body">
+          <select id="theme-select" class="fi" onchange="setTheme(this.value)" style="width:100%;cursor:pointer;">
+            <!-- 由 buildThemeSelect() 動態填入 -->
+          </select>
+        </div>
+      </div>
+
+      <div class="sg">
+        <div class="sg-label">主持人</div>
+        <div class="sg-body">
+          <div style="height:44px;border-radius:var(--radius);border:1px solid var(--border2);display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--surface);margin-bottom:6px;">
+            <div id="host-preview-thumb" style="width:28px;height:28px;border-radius:50%;background:var(--border2);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+            </div>
+            <span id="host-preview-label" style="font-size:12px;color:var(--text-muted);flex:1;">尚未套用</span>
+          </div>
+          <div onclick="openPopup('host')" style="height:32px;border-radius:var(--radius);border:1px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);font-size:12px;color:var(--text-muted);transition:all .15s;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text-muted)'">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+            從圖庫選擇主持人
+          </div>
+          <input type="file" id="hostUp" accept="image/*" onchange="handleUpload(event,'host')" style="display:none">
+          <input type="file" id="logo1Up" accept="image/*" onchange="handleUpload(event,'logo1')" style="display:none">
+          <input type="file" id="logo2Up" accept="image/*" onchange="handleUpload(event,'logo2')" style="display:none">
+        </div>
+      </div>
+
+      <div class="sg">
+        <div class="sg-label">贊助商 Logo</div>
+        <div class="sg-body">
+          <!-- 找不到本地 LOGO 時的提示 -->
+          <div id="logo2-hint" style="display:none;margin-bottom:8px;padding:8px 10px;border-radius:var(--radius);background:rgba(238,77,45,.08);border:1px solid rgba(238,77,45,.25);font-size:11px;color:var(--text-muted);line-height:1.5;">
+            找不到「<span id="logo2-hint-name"></span>」的本地 Logo<br>
+            請將圖檔放入 <code style="background:var(--border);padding:1px 4px;border-radius:3px;">logos/sponsors/</code> 或手動上傳，
+            <a id="logo2-hint-link" href="#" target="_blank" style="color:var(--accent);display:none;">從雲端下載 ↗</a>
+          </div>
+          <!-- 預覽縮圖 + 操作按鈕（無 ✎ 觸發器，改用明確按鈕）-->
+          <div id="logo2-preview-wrap" style="display:none;margin-bottom:8px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface);">
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;">
+              <img id="logo2-thumb" src="" alt="logo2" style="max-height:32px;max-width:90px;object-fit:contain;border-radius:3px;flex-shrink:0;">
+              <div style="flex:1;display:flex;gap:4px;justify-content:flex-end;">
+                <button onclick="editorLogo2Crop()"
+                  style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap;"
+                  onmouseenter="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
+                  onmouseleave="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>裁切
+                </button>
+                <button onclick="document.getElementById('logo2Up').click()"
+                  style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;"
+                  onmouseenter="this.style.color='var(--text)'"
+                  onmouseleave="this.style.color='var(--text-muted)'">更換</button>
+                <button onclick="clearLogo2()"
+                  style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;"
+                  onmouseenter="this.style.color='#f87171';this.style.borderColor='#f87171'"
+                  onmouseleave="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">刪除</button>
+              </div>
+            </div>
+          </div>
+          <!-- 上傳按鈕 -->
+          <div onclick="document.getElementById('logo2Up').click()"
+            style="height:32px;border-radius:var(--radius);border:1px dashed var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);font-size:12px;color:var(--text-muted);transition:all .15s;"
+            onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text-muted)'">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+            上傳贊助商 Logo
+          </div>
+          <input type="file" id="logo2Up" accept="image/*" onchange="handleLogo2Upload(event)" style="display:none">
+        </div>
+      </div>
+
+      <div class="sg">
+        <div class="sg-label">文案</div>
+        <div class="sg-body">
+          <div class="field">
+            <div class="field-label"><span>主標（小字）</span><span class="cc" id="cc-sub">0 / 9</span></div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input class="fi" id="txt-main" type="text" value="直播灑50%蝦幣回饋" oninput="cc('txt-main','cc-sub',9);broadcast()" style="flex:1;">
+              <input type="color" class="color-swatch" id="cSub" value="#AD6B00" oninput="broadcast()" title="主標顏色">
+            </div>
+          </div>
+          <!-- LPBN 副標：連動 S.subLpbn，無 LPBN 時 disabled -->
+          <div class="field" id="field-sublpbn">
+            <div class="field-label">
+              <span>LPBN 副標</span>
+              <span id="sublpbn-badge" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--border);color:var(--text-dim);display:none;">無 LPBN</span>
+              <span class="cc" id="cc-main">0 / 8</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input class="fi" id="txt-sub" type="text" placeholder="LPBN 副標文案（最多8字）"
+                oninput="cc('txt-sub','cc-main',8);S.subLpbn=this.value;if(TABS[ACTIVE_TAB])TABS[ACTIVE_TAB].data.subLpbn=this.value;broadcastText();"
+                style="flex:1;">
+              <input type="color" class="color-swatch" id="cMain" value="#EE4D2D" oninput="broadcast()" title="副標顏色">
+            </div>
+          </div>
+          <div class="field">
+            <div class="field-label"><span>主持人名稱</span></div>
+            <input class="fi" id="txt-brand" type="text" value="XXX" oninput="broadcast()">
+          </div>
+          <div class="fi-row">
+            <div class="field">
+              <div class="field-label"><span>日期</span></div>
+              <input class="fi" id="txt-date" type="text" value="XX/XX" placeholder="XX/XX" oninput="broadcast()">
+            </div>
+            <div class="field">
+              <div class="field-label"><span>時間</span></div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input class="fi" id="txt-time" type="text" value="19:00" placeholder="19:00" oninput="broadcast()" style="flex:1;">
+                <input type="color" class="color-swatch" id="cDate" value="#AD6B00" oninput="broadcast()" title="日期／時間顏色">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 整頁下載：固定在文案下方，不因面板高度而消失 -->
+      <div style="padding:10px 12px 16px;flex-shrink:0;">
+        <button class="dl-btn" onclick="downloadPage()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+          整頁下載
+        </button>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+    <!-- 原本的 download bar 移除，已內嵌至 scroll 區 -->
+  </div><!-- /right-panel -->
+
+</div><!-- /layout -->
+
+<!-- 匯入工單 modal -->
+<div class="popup-overlay" id="popup-import">
+  <div class="popup-panel" style="width:min(90vw,480px);">
+    <div class="popup-header">
+      <span class="popup-title">匯入工單</span>
+      <button class="popup-close" onclick="closePopup('import')">×</button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div id="import-excel-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;transition:all .15s;"
+        onclick="document.getElementById('importExcelFile').click()"
+        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor=''">
+        <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:3px;">點擊上傳 Excel 工單</div>
+        <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
+      </div>
+      <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="handleImportExcel(event)">
+      <div id="import-logo-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
+        onclick="document.getElementById('importLogoFolder').click()"
+        onmouseenter="this.style.borderColor='#3d9970'" onmouseleave="this.style.borderColor=''">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><path d="M1 4h14v10H1z"/><path d="M1 4l2-2h4l2 2"/></svg>
+        <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳 Logo 素材資料夾（可選）</div>
+        <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動對應工單 Logo</div>
+      </div>
+      <input type="file" id="importLogoFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportLogoFolder(event)">
+
+      <!-- ── 直播主圖片資料夾（新增）── -->
+      <div id="import-host-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
+        onclick="document.getElementById('importHostFolder').click()"
+        onmouseenter="this.style.borderColor='#5b8dee'" onmouseleave="this.style.borderColor=''">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+        <div id="import-host-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳直播主圖片資料夾（可選）</div>
+        <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動比對主持人</div>
+      </div>
+      <input type="file" id="importHostFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportHostFolder(event)">
+
+      <div id="import-status" style="display:none;padding:8px 12px;border-radius:var(--radius);background:rgba(61,153,112,.08);border:1px solid rgba(61,153,112,.3);font-size:11px;color:#3d9970;line-height:1.7;"></div>
+      <button class="dl-btn" onclick="doImport()">確認匯入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 背景選擇 popup -->
+<div class="popup-overlay" id="popup-bg">
+  <div class="popup-panel">
+    <div class="popup-header">
+      <span class="popup-title">選擇背景款式</span>
+      <button class="popup-close" onclick="closePopup('bg')">×</button>
+    </div>
+    <div class="popup-body" id="popup-bg-body"></div>
+  </div>
+</div>
+
+<!-- 主持人選擇 popup -->
+<div class="popup-overlay" id="popup-host">
+  <div class="popup-panel">
+    <div class="popup-header">
+      <span class="popup-title">選擇主持人</span>
+      <div style="display:flex;gap:8px;">
+        <button class="tbtn" onclick="document.getElementById('hostUp').click()">＋ 上傳新圖</button>
+        <button class="popup-close" onclick="closePopup('host')">×</button>
+      </div>
+    </div>
+    <div class="popup-body" id="popup-host-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast-el"></div>
+
+<!-- editor-item containers for editor-plugin -->
+<div id="host-item"  class="editor-item" style="display:none;position:fixed;left:-9999px;top:-9999px;width:400px;height:600px;">
+  <img id="host-img" src="" alt="host" style="width:100%;height:100%;object-fit:contain;">
+</div>
+<div id="logo1-item" class="editor-item" style="display:none;position:fixed;left:-9999px;top:-9999px;width:200px;height:80px;">
+  <img id="logo1-img" src="" alt="logo1" style="width:100%;height:100%;object-fit:contain;">
+</div>
+<div id="logo2-item" class="editor-item" style="display:none;position:fixed;left:-9999px;top:-9999px;width:200px;height:80px;">
+  <img id="logo2-img" src="" alt="logo2" style="width:100%;height:100%;object-fit:contain;">
+</div>
+
+<!-- 公版設定檔（色碼/文字/分隔線，新增公版在此修改）-->
+<script src="js/themes.js"></script>
+
+<!-- JSZip + SheetJS for ZIP import -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- JS Plugins -->
+<script src="js/banwords-engine-hbn.js"></script>
+
+<script src="js/editor-plugin.js"></script>
+<script src="js/bn-state-plugin.js"></script>
+
+<script>
+'use strict';
+
+function toast(msg,type,duration){
+  var el=document.getElementById('toast-el');
+  el.textContent=msg; el.className='toast '+(type||'')+' show';
+  clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},duration||2500);
+}
+window.showToast=toast;
+
+/* ── 背景款式（可擴充，後台 backgrounds/ 資料夾） ── */
+/* BG_THEMES → 由 themes.js 的 BN_THEMES 提供，這裡建立相容別名 */
+var BG_THEMES = (typeof BN_THEMES !== 'undefined') ? BN_THEMES : [];
+
+/* ── State ── */
+var S = {
+  theme:'A',
+  bgUrls: (function(){
+    var m = {};
+    var src = (typeof BN_THEMES !== 'undefined') ? BN_THEMES : BG_THEMES;
+    src.forEach(function(t){ m[t.key] = '../backgrounds/'+t.key+'/'; });
+    return m;
+  }()),
+  imgs:{ host:null, logo1:null, logo2:null },
+  subLpbn: '',
+};
+/* BG_TEXT_DEF → 由 themes.js 的 BN_THEME_MAP 提供，這裡建立相容別名 */
+var BG_TEXT_DEF = {};
+if(typeof BN_THEME_MAP !== 'undefined'){
+  Object.keys(BN_THEME_MAP).forEach(function(k){
+    var t = BN_THEME_MAP[k];
+    BG_TEXT_DEF[k] = { s: t.cSub, m: t.cMain };
+  });
+}
+
+var STORE_KEY = 'bn_admin_star_studio_v1';
+
+/* ── iframe 清單 ── */
+/* LAYOUTS 從後台 localStorage 讀取啟用的版位 */
+var DEFAULT_LAYOUTS = [
+  { id:'01_thumbnail', name:'直播時縮圖',                  file:'01_thumbnail.html', w:720,  h:720,  enabled:true },
+  { id:'02_lpbn',      name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html',      w:1125, h:360,  enabled:true },
+  { id:'04_ig',        name:'IG',                          file:'04_ig.html',        w:900,  h:1600, enabled:true },
+  { id:'05_fb_post',   name:'FB Post',                     file:'05_fb_post.html',   w:1200, h:630,  enabled:true },
+  { id:'06_opening',   name:'開播字卡',                    file:'06_opening.html',   w:1080, h:1920, enabled:true },
+  { id:'07_msbn',      name:'MSBN',                        file:'07_msbn.html',      w:1200, h:360,  enabled:true },
+  { id:'08_popup',     name:'直播大廳 Popup',              file:'08_popup.html',     w:870,  h:1160, enabled:true },
+];
+/* 版本號：每次更新 DEFAULT_LAYOUTS 時遞增，強制後台讀新清單 */
+var DEFAULT_LAYOUTS_VERSION = 7;
+
+function getLayouts(){
+  try{
+    var stored = JSON.parse(localStorage.getItem(STORE_KEY)||'null');
+    if(stored && stored.layouts && stored.layouts.length){
+      /* 版本不符：合併新版位進去，但保留後台的 enabled 設定 */
+      if(stored.version !== DEFAULT_LAYOUTS_VERSION){
+        var existingMap = {};
+        stored.layouts.forEach(function(l){ existingMap[l.id] = l; });
+        var merged = DEFAULT_LAYOUTS.map(function(d){
+          return existingMap[d.id] || d;
+        });
+        var updated = { layouts: merged, version: DEFAULT_LAYOUTS_VERSION };
+        localStorage.setItem(STORE_KEY, JSON.stringify(updated));
+        return merged.filter(function(l){ return l.enabled; });
+      }
+      return stored.layouts.filter(function(l){ return l.enabled; });
+    }
+  }catch(e){}
+  /* 沒有資料，寫入預設清單 */
+  localStorage.setItem(STORE_KEY, JSON.stringify({
+    layouts: DEFAULT_LAYOUTS,
+    version: DEFAULT_LAYOUTS_VERSION
+  }));
+  return DEFAULT_LAYOUTS.filter(function(l){ return l.enabled; });
+}
+
+var LAYOUTS = getLayouts();
+
+/* ── 分頁（每天一組工單資料）── */
+var TABS = [
+  { id:'tab-1', label:'分頁 1', data:{} }
+];
+var ACTIVE_TAB = 0;
+
+function buildTabs(tabs){
+  TABS = tabs;
+  ACTIVE_TAB = 0;
+  renderTabBar();
+  /* 等 iframe 就緒再套用第一個分頁 */
+  setTimeout(function(){
+    applyTabData(TABS[0], true);
+  }, 800);
+}
+
+function getTabLabel(g, i){
+  /* 新格式：日期 + 品牌名 */
+  if(g.logoName){
+    var parts = [];
+    if(g.date) parts.push(g.date);
+    parts.push(g.logoName);
+    return parts.join(' ');
+  }
+  /* 舊格式：用日期或序號 */
+  return g.date ? g.date : ('第'+(i+1)+'天');
+}
+
+function renderTabBar(){
+  var nav = document.getElementById('canvas-nav');
+  if(!nav) return;
+  nav.innerHTML = TABS.map(function(tab, i){
+    return '<button class="nav-btn'+(i===ACTIVE_TAB?' active':'')+'" onclick="switchTab('+i+')">'+tab.label+'</button>';
+  }).join('');
+}
+
+function switchTab(i){
+  saveCurrentTabState(function(){
+    ACTIVE_TAB = i;
+    renderTabBar();
+    applyTabData(TABS[i], true);
+    updateAssetList();
+  });
+}
+
+function saveCurrentTabState(cb){
+  var tab = TABS[ACTIVE_TAB];
+  if(!tab) { if(cb) cb(); return; }
+  tab.data = tab.data || {};
+  tab.data.theme = S.theme;
+  /* txt-main（主標）固定值，不存進分頁狀態 */
+  /* txt-sub 現在是 LPBN 副標，直接存進 subLpbn */
+  tab.data.subLpbn = v('txt-sub') || '';
+  S.subLpbn = tab.data.subLpbn;
+  tab.data.date  = v('txt-date');
+  tab.data.time  = v('txt-time');
+  tab.data.brand = v('txt-brand');
+  /* hostImg：來自上傳資料夾的圖才存 base64（否則載入時依 brand 名從 hosts/ 重抓）*/
+  if(tab.data.hostImgUploaded && S.imgs.host){
+    tab.data.hostImg = S.imgs.host;
+  } else {
+    tab.data.hostImg = null; /* 路徑圖：載入時重抓，不佔暫存空間 */
+  }
+  /* logo2Img 從 iframe 直接讀，避免全局 S.imgs.logo2 被其他分頁污染 */
+  var _logo2Src = null;
+  try{
+    var _cw = iframes['01_thumbnail'] && iframes['01_thumbnail'].contentWindow;
+    if(_cw && _cw.D && _cw.D._logo2DataUrl) _logo2Src = _cw.D._logo2DataUrl;
+  }catch(e){}
+  if(_logo2Src) tab.data.logo2Img = _logo2Src;
+  else if(S.imgs.logo2) tab.data.logo2Img = S.imgs.logo2;
+  tab.data.subLpbn = S.subLpbn || tab.data.subLpbn || '';
+
+  /* 直接讀 iframe 的 D 物件，不用 postMessage */
+  tab.data.canvasState = {};
+  Object.keys(iframes).forEach(function(id){
+    try{
+      var cw = iframes[id].contentWindow;
+      var D = cw.D;
+      var state = {};
+      if(D){ state.imgX=D.imgX; state.imgY=D.imgY; state.imgScale=D.imgScale; }
+      /* logo2 縮放與偏移 */
+      if(cw._logo2Scale !== undefined) state.logo2Scale = cw._logo2Scale;
+      if(cw._logo2OffX  !== undefined) state.logo2OffX  = cw._logo2OffX;
+      if(cw._logo2OffY  !== undefined) state.logo2OffY  = cw._logo2OffY;
+      if(Object.keys(state).length) tab.data.canvasState[id] = state;
+    }catch(e){}
+  });
+
+  if(cb) cb();
+}
+
+function applyTabData(tab, loadHost){
+  var d = tab.data || {};
+
+  /* ── 根據工單勾選欄位，show/hide 對應的版位畫布區塊 ── */
+  if(d.excludedLayouts && d.excludedLayouts.length){
+    LAYOUTS.forEach(function(layout){
+      var block = document.getElementById('canvas-block-'+layout.id);
+      if(!block) return;
+      /* 判斷此版位是否在排除清單（比對版位名稱前綴，如 02_lpbn）*/
+      var excluded = d.excludedLayouts.some(function(name){
+        return layout.id === name || name.indexOf(layout.id) === 0 || layout.id.indexOf(name.split('_')[0]+'_') === 0;
+      });
+      block.style.display = excluded ? 'none' : '';
+    });
+  } else {
+    /* 沒有排除清單（手動操作或舊格式）→ 全部顯示 */
+    LAYOUTS.forEach(function(layout){
+      var block = document.getElementById('canvas-block-'+layout.id);
+      if(block) block.style.display = '';
+    });
+  }
+
+  /* 版型（工單H欄）優先，其次用已存的 theme */
+  var themeKey = d.layout || d.theme;
+  if(themeKey) setTheme(themeKey);
+  /* 把 LPBN 副標存到 S 供 broadcast 分版位使用 */
+  S.subLpbn = d.subLpbn || '';
+
+  /* txt-main（主標）固定為「直播灑50%蝦幣回饋」，不跟分頁切換 */
+  var fields = {
+    'txt-sub':  d.subLpbn || '',   /* LPBN 副標 */
+    'txt-date': d.date    || '',
+    'txt-time': d.time    || '',
+    'txt-brand':d.brand   || ''
+  };
+  Object.keys(fields).forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.value = fields[id];
+  });
+
+  /* ── LPBN 副標欄位 disabled 狀態 ── */
+  /* 判斷此分頁是否有 LPBN（02_lpbn 不在 excludedLayouts 裡）*/
+  var hasLpbn = !(d.excludedLayouts || []).some(function(name){
+    return name === '02_lpbn' || name.indexOf('02_') === 0 || '02_lpbn'.indexOf(name.split('_')[0]+'_') === 0;
+  });
+  var subInput  = document.getElementById('txt-sub');
+  var mainInput = document.getElementById('txt-main');
+  var subBadge  = document.getElementById('sublpbn-badge');
+  var subField  = document.getElementById('field-sublpbn');
+  var mainField = subField && subField.previousElementSibling; /* 主標 field 在副標上方 */
+  if(subInput){
+    subInput.disabled = !hasLpbn;
+    subInput.style.opacity = hasLpbn ? '' : '0.35';
+    subInput.style.cursor  = hasLpbn ? '' : 'not-allowed';
+  }
+  if(mainInput){
+    mainInput.disabled = !hasLpbn;
+    mainInput.style.opacity = hasLpbn ? '' : '0.35';
+    mainInput.style.cursor  = hasLpbn ? '' : 'not-allowed';
+  }
+  if(subBadge) subBadge.style.display = hasLpbn ? 'none' : 'inline-block';
+  if(subField) subField.style.opacity = hasLpbn ? '' : '0.5';
+  /* 主標 field 容器 — 用 id 定位比較可靠 */
+  var mainFieldWrap = document.getElementById('txt-main') && document.getElementById('txt-main').closest('.field');
+  if(mainFieldWrap) mainFieldWrap.style.opacity = hasLpbn ? '' : '0.5';
+
+  /* ── LOGO2：優先用已存的 base64，否則嘗試本地端搜尋，最後顯示提示 ── */
+  if(loadHost){
+    if(d.logo2Img){
+      /* 已有暫存的 base64 */
+      S.imgs.logo2 = d.logo2Img;
+      updateLogo2UI(d.logo2Img);
+    } else if(d.logoName){
+      /* 嘗試從 logos/sponsors/<品牌名>.png 讀取 */
+      tryLoadSponsorLogo(d.logoName, d.logoPath);
+    }
+  }
+
+  /* ── 主持人 ── */
+  if(loadHost){
+    if(d.hostImg){
+      S.imgs.host = d.hostImg;
+      /* 標記為「上傳來源」，確保再次儲存時保留 base64 */
+      tab.data.hostImgUploaded = true;
+      applyHost(d.hostImg, d.brand || '');
+      broadcastFull();
+      /* downloadAll 模式下跳過 canvasState（由 downloadAll 自己控制時序）*/
+      if(d.canvasState && !window._downloadMode){
+        setTimeout(function(){
+          Object.keys(d.canvasState).forEach(function(id){
+            var ifr = iframes[id];
+            if(ifr && ifr.contentWindow){
+              ifr.contentWindow.postMessage({type:'BN_RESTORE_STATE', state:d.canvasState[id]}, '*');
+            }
+          });
+        }, 300);
+      }
+    } else if(d.brand){
+      var _tabAtLoad = TABS.indexOf(tab); /* 記錄目標分頁，防止非同步污染 */
+      loadHostByName(d.brand, function(src){
+        if(TABS.indexOf(tab) !== _tabAtLoad && ACTIVE_TAB !== _tabAtLoad) return;
+        if(src) loadSrcAsBase64(src, function(b64){
+          if(b64){ S.imgs.host = b64; applyHost(b64, d.brand); }
+          broadcastFull();
+          /* 圖片載完後才套位置 */
+          if(d.canvasState && !window._downloadMode){
+            setTimeout(function(){
+              Object.keys(d.canvasState).forEach(function(id){
+                var ifr = iframes[id];
+                if(ifr && ifr.contentWindow){
+                  ifr.contentWindow.postMessage({type:'BN_RESTORE_STATE', state:d.canvasState[id]}, '*');
+                }
+              });
+            }, 300);
+          }
+        });
+      });
+    } else {
+      broadcast();
+    }
+  } else {
+    broadcast();
+  }
+}
+
+/* 嘗試從本地端 logos/sponsors/ 資料夾載入贊助商 LOGO */
+function tryLoadSponsorLogo(logoName, logoPath){
+  /* 記錄啟動時的分頁，非同步完成後確認仍在同一頁才套用 */
+  var targetTab = ACTIVE_TAB;
+  var exts = ['png','jpg','jpeg','svg'];
+  var j = 0;
+  function tryNext(){
+    if(j >= exts.length){
+      if(ACTIVE_TAB === targetTab) showLogo2Hint(logoName, logoPath);
+      return;
+    }
+    var src = 'logos/sponsors/'+logoName+'.'+exts[j++];
+    var img = new Image();
+    img.onload = function(){
+      loadSrcAsBase64(src, function(b64){
+        if(ACTIVE_TAB !== targetTab) return; /* 已切換分頁，丟棄 */
+        if(b64){ applyLogo2(b64); }
+        else { showLogo2Hint(logoName, logoPath); }
+      });
+    };
+    img.onerror = tryNext;
+    img.src = src;
+  }
+  tryNext();
+}
+
+/* 更新 logo2 預覽縮圖 UI */
+function updateLogo2UI(src){
+  var thumb = document.getElementById('logo2-thumb');
+  var wrap  = document.getElementById('logo2-preview-wrap');
+  var item  = document.getElementById('logo2-item');
+  var imgEl = document.getElementById('logo2-img');
+  if(thumb){ thumb.src = src; }
+  if(wrap)  wrap.style.display = 'flex';  /* flex 顯示預覽列 */
+  if(item)  item.style.display = 'block';
+  if(imgEl){ imgEl.src = src; imgEl.dataset.baseSrc = src; }
+  /* 不使用 BNLogoMenu.attach（✎ 觸發器），改用 HTML 按鈕（裁切/更換/刪除）*/
+}
+
+/* 顯示找不到 LOGO 的提示列 */
+function showLogo2Hint(logoName, logoPath){
+  var hint = document.getElementById('logo2-hint');
+  if(!hint) return;
+  hint.style.display = 'block';
+  var nameEl = document.getElementById('logo2-hint-name');
+  if(nameEl) nameEl.textContent = logoName;
+  var linkEl = document.getElementById('logo2-hint-link');
+  if(linkEl && logoPath){
+    linkEl.href = logoPath;
+    linkEl.style.display = logoPath.startsWith('http') ? 'inline' : 'none';
+  }
+}
+
+function clearLogo2(){
+  S.imgs.logo2 = null;
+  var els = ['logo2-img','logo2-thumb'];
+  els.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){ el.src=''; if(el.dataset) el.dataset.baseSrc=''; }
+  });
+  var wrap = document.getElementById('logo2-preview-wrap');
+  if(wrap) wrap.style.display = 'none';
+  var item = document.getElementById('logo2-item');
+  if(item) item.style.display = 'none';
+  broadcastFull();
+  toast('贊助商 Logo 已移除','ok');
+}
+var iframes = {}; // id -> iframe element
+
+function buildCanvasArea(){
+  var area = document.getElementById('canvas-area');
+  area.innerHTML = '';
+  LAYOUTS.forEach(function(layout){
+    var block = document.createElement('div');
+    block.className = 'canvas-block';
+    block.id = 'canvas-block-'+layout.id;
+
+    var areaW = area.getBoundingClientRect().width || (window.innerWidth - 268);
+    var padding = 72; // 左右 padding 各 36px
+    var scale = Math.min(1, (areaW - padding) / layout.w);
+
+    block.innerHTML =
+      '<div class="canvas-meta">'+
+        '<span class="canvas-name">'+layout.name+'</span>'+
+        '<span class="canvas-size">'+layout.w+' × '+layout.h+' px</span>'+
+        '<label class="canvas-ref-btn" title="上傳參考圖（不輸出）">'+
+          '🖼 參考層'+
+          '<input type="file" accept="image/*" style="display:none" onchange="setRefLayer(\''+layout.id+'\',this)">'+
+        '</label>'+
+        '<button class="canvas-dl-btn" onclick="downloadSingle(\''+layout.id+'\')">⬇ 下載</button>'+
+      '</div>'+
+      '<div class="iframe-wrap" id="wrap-'+layout.id+'" style="position:relative;">'+
+        '<img id="ref-'+layout.id+'" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:999;" />'+
+      '</div>';
+
+    area.appendChild(block);
+
+    var wrap = block.querySelector('#wrap-'+layout.id);
+    var iframe = document.createElement('iframe');
+    iframe.src = 'layouts/'+layout.file;
+    iframe.style.width  = layout.w + 'px';
+    iframe.style.height = layout.h + 'px';
+    iframe.style.transform = 'scale('+scale+')';
+    iframe.style.transformOrigin = 'top left';
+    wrap.style.width  = (layout.w * scale) + 'px';
+    wrap.style.height = (layout.h * scale) + 'px';
+    iframe.setAttribute('scrolling','no');
+    wrap.appendChild(iframe);
+    iframes[layout.id] = iframe;
+  });
+  updateAssetList();
+  renderTabBar();
+}
+
+function updateAssetList(){
+  var body = document.getElementById('asset-list-body');
+  if(!body) return;
+  var layouts = getLayouts();
+  if(!layouts.length){ body.innerHTML = '<div style="padding:20px 16px;font-size:12px;color:var(--text-dim);text-align:center;">無素材</div>'; return; }
+  /* 過濾掉當前分頁不需製作的版位 */
+  var activeData = (TABS[ACTIVE_TAB] && TABS[ACTIVE_TAB].data) || {};
+  var excluded = activeData.excludedLayouts || [];
+  var visibleLayouts = layouts.filter(function(l){
+    return excluded.every(function(name){
+      return !(l.id===name || name.indexOf(l.id)===0 || l.id.indexOf(name.split('_')[0]+'_')===0);
+    });
+  });
+  if(!visibleLayouts.length){ body.innerHTML = '<div style="padding:20px 16px;font-size:12px;color:var(--text-dim);text-align:center;">無素材</div>'; return; }
+  body.innerHTML = visibleLayouts.map(function(l){
+    return '<div class="asset-item" id="asset-item-'+l.id+'" onclick="scrollToCanvas(\''+l.id+'\')">'+
+      '<div class="asset-icon">'+
+        '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 10l3-3 3 3 2-2 4 4"/></svg>'+
+      '</div>'+
+      '<div class="asset-info">'+
+        '<div class="asset-name">'+l.name+'</div>'+
+        '<div class="asset-meta">'+l.w+' × '+l.h+' px</div>'+
+      '</div>'+
+      '<button class="asset-dl" onclick="event.stopPropagation();downloadSingle(\''+l.id+'\')">↓</button>'+
+    '</div>';
+  }).join('');
+
+  /* 監聽 canvas-area 滾動，更新 active 狀態 */
+  var area = document.getElementById('canvas-area');
+  if(area && !area._assetScrollBound){
+    area._assetScrollBound = true;
+    area.addEventListener('scroll', updateActiveAsset);
+  }
+  updateActiveAsset();
+}
+
+function scrollToCanvas(id){
+  var block = document.getElementById('canvas-block-'+id);
+  if(block) block.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function updateActiveAsset(){
+  var area = document.getElementById('canvas-area');
+  if(!area) return;
+  var areaTop = area.getBoundingClientRect().top;
+  var closest = null, closestDist = Infinity;
+  Object.keys(iframes).forEach(function(id){
+    var block = document.getElementById('canvas-block-'+id);
+    if(!block) return;
+    var dist = Math.abs(block.getBoundingClientRect().top - areaTop - 60);
+    if(dist < closestDist){ closestDist = dist; closest = id; }
+  });
+  /* 只更新左側清單，不動分頁 tab */
+  document.querySelectorAll('.asset-item').forEach(function(el){ el.classList.remove('active'); });
+  if(closest){
+    var active = document.getElementById('asset-item-'+closest);
+    if(active) active.classList.add('active');
+  }
+}
+
+/* ── broadcast：把所有資料推送給每個 iframe ── */
+/* ── Broadcast：分兩種
+   broadcastText() — 只傳文案/顏色，不傳圖片，畫布不會重設位置
+   broadcastFull() — 含圖片，只在上傳/刪除/載入暫存時呼叫
+── */
+function broadcastPayload(payload){
+  Object.keys(iframes).forEach(function(id){
+    var ifr=iframes[id];
+    if(ifr.contentWindow){
+      /* 按版位調整 sub：
+           02_lpbn        → S.subLpbn（LPBN 副標文案）
+           01_thumbnail   → 「直播主 XXX」（brand name）
+           其他版位       → payload.sub（brand name）*/
+      var p = payload;
+      if(id === '02_lpbn'){
+        p = Object.assign({}, payload, { main: '直播灑50%蝦幣回饋', sub: S.subLpbn || '' });
+      } else if(id === '01_thumbnail'){
+        p = Object.assign({}, payload, { sub: '直播主 ' + (payload.brand || '') });
+      }
+      ifr.contentWindow.postMessage({type:'BN_UPDATE', payload:p},'*');
+    }
+  });
+}
+
+function broadcastText(){
+  broadcastPayload({
+    theme:   S.theme,
+    bgBase:  S.bgUrls[S.theme],
+    main:    v('txt-main'),
+    sub:     v('txt-brand'),   /* 開播字卡等版位的副標 = 直播主名 */
+    date:    v('txt-date'),
+    time:    v('txt-time'),
+    brand:   v('txt-brand'),
+    cSub:    v('cSub'),
+    cMain:   v('cMain'),
+    cDate:   v('cDate'),
+    sepColor: (typeof BN_THEME_MAP!=='undefined' && BN_THEME_MAP[S.theme]) ? BN_THEME_MAP[S.theme].sepColor : '#EE4D2D',
+    barColor: (typeof BN_THEME_MAP!=='undefined' && BN_THEME_MAP[S.theme]) ? BN_THEME_MAP[S.theme].barColor : '#2a6485',
+  });
+}
+
+function broadcastFull(){
+  broadcastPayload({
+    theme:   S.theme,
+    bgBase:  S.bgUrls[S.theme],
+    main:    v('txt-main'),
+    sub:     v('txt-brand'),   /* 開播字卡等版位的副標 = 直播主名 */
+    date:    v('txt-date'),
+    time:    v('txt-time'),
+    brand:   v('txt-brand'),
+    cSub:    v('cSub'),
+    cMain:   v('cMain'),
+    cDate:   v('cDate'),
+    host:    S.imgs.host,
+    logo1:   S.imgs.logo1,
+    logo2:   S.imgs.logo2,
+  });
+}
+
+/* 向下相容：broadcast() 不含圖片（防止位置被重設） */
+function broadcast(){ broadcastText(); }
+
+/* ── 接收 layout iframe 發回來的訊息 ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || !msg.type) return;
+
+  if(msg.type === 'BN_REPLACE_IMG' && msg.key === 'host'){
+    /* 取代主持人：直接開啟右側圖庫 popup */
+    openPopup('host');
+  }
+  else if(msg.type === 'BN_DELETE_IMG' && msg.key === 'host'){
+    /* 刪除主持人 */
+    S.imgs.host = null;
+    var imgEl = document.getElementById('host-img');
+    if(imgEl){ imgEl.src=''; imgEl.dataset.baseSrc=''; }
+    var item = document.getElementById('host-item');
+    if(item) item.style.display = 'none';
+    var row = document.getElementById('host-row');
+    if(row) row.classList.remove('done');
+    broadcastFull();
+    toast('主持人已移除','ok');
+  }
+  else if(msg.type === 'BN_OPEN_EDITOR' && msg.key === 'host'){
+    /* 開啟去背/影子編輯器 */
+    var hostImg = document.getElementById('host-img');
+    var hostItem = document.getElementById('host-item');
+    if(!hostImg || !hostImg.src || hostImg.src === window.location.href){
+      toast('請先載入主持人圖片','err'); return;
+    }
+    /* 確保 host-item 可見（editor-plugin 需要讀取它的尺寸） */
+    hostItem.style.display = 'block';
+
+    /* 攔截 imgRef.src 寫入：編輯完成時同步回 S.imgs.host 並 broadcast */
+    var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    var _patched = false;
+    function patchOnce(){
+      if(_patched) return; _patched = true;
+      var origSetter = origDescriptor.set;
+      Object.defineProperty(hostImg, 'src', {
+        set: function(val){
+          origSetter.call(this, val);
+          /* 只攔截 data: URL（編輯後的結果） */
+          if(val && val.startsWith('data:')){
+            S.imgs.host = val;
+            /* 同步 sidebar 顯示 */
+            var item = document.getElementById('host-item');
+            if(item) item.style.display = 'block';
+            var row = document.getElementById('host-row');
+            if(row) row.classList.add('done');
+            /* 還原 descriptor 避免重複攔截 */
+            delete hostImg.src;
+            broadcastFull();
+            toast('主持人圖片已更新','ok');
+          }
+        },
+        get: function(){ return origDescriptor.get.call(this); },
+        configurable: true
+      });
+    }
+    patchOnce();
+
+    if(typeof window.openEraseEditor === 'function'){
+      window.openEraseEditor(hostImg);
+    } else {
+      toast('編輯器尚未載入，請稍後再試','err');
+    }
+  }
+  /* ── Logo2 懸浮 bar 事件 ── */
+  else if(msg.type === 'BN_REPLACE_IMG' && msg.key === 'logo2'){
+    document.getElementById('logo2Up').click();
+  }
+  else if(msg.type === 'BN_DELETE_IMG' && msg.key === 'logo2'){
+    clearLogo2();
+  }
+  else if(msg.type === 'BN_OPEN_EDITOR' && msg.key === 'logo2'){
+    /* iframe 傳來的 src = D._logo2DataUrl（base64），優先使用 */
+    var logo2Src = (msg.src && msg.src.startsWith('data:')) ? msg.src : (S.imgs.logo2||'');
+    if(!logo2Src){ toast('請先載入贊助商 Logo','err'); return; }
+    if(!window.BNLogoMenu){ toast('裁切編輯器載入中，請稍後再試','err'); return; }
+    /* BNLogoMenu 已 inline 在 head，直接呼叫 */
+    window.BNLogoMenu.openCropEditor(logo2Src, function(newSrc){
+      if(newSrc) applyLogo2(newSrc);
+    });
+  }
+});
+
+/* ── Popup ── */
+var BG_OPTIONS = [
+  { key:'A', label:'款式 A（黃色）', color:'#F5C842', url:'backgrounds/A/02_lpbn.jpg' },
+  { key:'B', label:'款式 B（粉色）', color:'#F5A0C5', url:'backgrounds/B/02_lpbn.jpg' },
+  { key:'C', label:'款式 C（藍色）', color:'#bee1f2', url:'backgrounds/C/02_lpbn.jpg' },
+];
+
+function openPopup(type){
+  if(type==='bg'){
+    buildBgPopup();
+    document.getElementById('popup-bg').classList.add('open');
+  } else if(type==='host'){
+    buildHostPopup();
+    document.getElementById('popup-host').classList.add('open');
+  }
+}
+
+function closePopup(type){
+  document.getElementById('popup-'+type).classList.remove('open');
+}
+
+// 點 overlay 關閉
+['bg','host'].forEach(function(type){
+  document.getElementById('popup-'+type).addEventListener('click', function(e){
+    if(e.target === this) closePopup(type);
+  });
+});
+
+function buildBgPopup(){
+  var body = document.getElementById('popup-bg-body');
+  body.innerHTML = '';
+  BG_OPTIONS.forEach(function(opt){
+    var card = document.createElement('div');
+    card.className = 'popup-card' + (S.theme===opt.key ? ' selected' : '');
+    card.innerHTML =
+      '<div style="height:60px;background:'+opt.color+';border-radius:4px 4px 0 0;overflow:hidden;">'
+      +(opt.url ? '<img src="'+opt.url+'" style="width:100%;height:100%;object-fit:cover;">' : '')
+      +'</div>'
+      +'<div class="popup-card-label">'+opt.label+'</div>';
+    card.onclick = function(){
+      setTheme(opt.key);
+      closePopup('bg');
+    };
+    body.appendChild(card);
+  });
+}
+
+function buildHostPopup(){
+  var body = document.getElementById('popup-host-body');
+  body.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center;">掃描圖庫中...</div>';
+  body.style.display = 'block';
+
+  /* 先取得 brandName */
+  var brandName = '';
+  var activeTab = TABS[ACTIVE_TAB];
+  if(activeTab && activeTab.data && activeTab.data.brand){
+    brandName = activeTab.data.brand.trim();
+  }
+  if(!brandName || brandName === 'XXX'){
+    brandName = ((document.getElementById('txt-brand')||{}).value || '').trim();
+  }
+  if(brandName === 'XXX') brandName = '';
+
+  function renderHosts(hosts){
+    /* 合併 localStorage 的圖（如有）*/
+    var libStored = [];
+    try{ libStored = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]'); }catch(e){}
+    var allHosts = hosts.slice();
+    libStored.forEach(function(h){
+      var hname = h.name.replace(/\.[^.]+$/,'');
+      /* 有 brandName 時只納入同名的 */
+      if(brandName && hname.replace(/[-_]\d+$/,'') !== brandName) return;
+      var exists = allHosts.find(function(fh){ return fh.name === hname; });
+      if(!exists) allHosts.push({ name: hname, src: h.src });
+    });
+
+    /* 合併本次匯入上傳的直播主圖片（優先順序：上傳 > 後台資料夾）*/
+    var uploadedHosts = findHostSrcsByName(brandName || '');
+    if(!brandName){
+      /* 無 brandName 時納入全部上傳的（排除 __dir 輔助 key）*/
+      Object.keys(_importPending.hostMap).forEach(function(k){
+        if(k.indexOf('__dir')!==-1) return;
+        var exists = allHosts.find(function(h){ return h.name===k; });
+        if(!exists) allHosts.push({name:k, src:_importPending.hostMap[k], uploaded:true});
+      });
+    } else {
+      uploadedHosts.forEach(function(uh){
+        var exists = allHosts.find(function(h){ return h.name===uh.name; });
+        if(!exists) allHosts.push({name:uh.name, src:uh.src, uploaded:true});
+      });
+    }
+
+    body.innerHTML = '';
+    if(!allHosts.length){
+      var hint2 = _importPending.hostCount
+        ? '找不到「'+brandName+'」的符合圖片<br><small>已上傳 '+_importPending.hostCount+' 張，但無符合「'+brandName+'」的檔名</small>'
+        : '找不到「'+brandName+'」的圖片<br><small>請確認 hosts/'+brandName+'/ 資料夾已放入去背圖，<br>或在匯入時上傳直播主圖片資料夾</small>';
+      body.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center;">'+hint2+'</div>';
+      return;
+    }
+    body.style.display = 'grid';
+    allHosts.forEach(function(host){
+      var card = document.createElement('div');
+      card.className = 'popup-card';
+      var badge = host.uploaded
+        ? '<div style="position:absolute;top:4px;left:4px;background:#5b8dee;color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;line-height:1.6;">上傳</div>'
+        : '';
+      card.style.position = 'relative';
+      card.innerHTML =
+        '<div style="position:relative;">'
+        +'<img src="'+host.src+'" style="height:100px;object-fit:cover;width:100%;">'
+        +badge
+        +'</div>'
+        +'<div class="popup-card-label">'+host.name+'</div>';
+      card.onclick = function(){
+        var hsrc = host.src;
+        var hname = host.name;
+        closePopup('host');
+        loadSrcAsBase64(hsrc, function(b64){
+          if(b64){
+            /* 標記此圖片來自上傳（非 hosts/ 路徑），暫存時需保留 base64 */
+            if(host.uploaded) TABS[ACTIVE_TAB].data.hostImgUploaded = true;
+            applyHost(b64, hname);
+          }
+          else { toast('圖片載入失敗','err'); }
+        });
+      };
+      body.appendChild(card);
+    });
+  }
+
+  if(brandName){
+    /* 直接掃該主持人的資料夾 */
+    scanHostByName(brandName, function(found){
+      if(found.length){
+        renderHosts(found);
+      } else {
+        /* 資料夾找不到：fallback 掃全部 */
+        scanHostLibrary(function(all){ renderHosts(all); });
+      }
+    });
+  } else {
+    /* 沒有主持人名稱：掃全部 */
+    scanHostLibrary(function(all){ renderHosts(all); });
+  }
+}
+
+function applyHost(src, name){
+  S.imgs.host = src;
+  var imgEl = document.getElementById('host-img');
+  if(imgEl){ imgEl.src=src; imgEl.dataset.baseSrc=src; }
+  var item = document.getElementById('host-item');
+  if(item) item.style.display='block';
+  /* 更新 sidebar 顯示 */
+  var thumb = document.getElementById('host-preview-thumb');
+  var label = document.getElementById('host-preview-label');
+  if(thumb) thumb.innerHTML = '<img src="'+src+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+  if(label){ label.textContent = name; label.style.color = 'var(--success)'; }
+  broadcastFull();
+}
+
+/* ── Theme ── */
+function buildThemeSelect(){
+  var sel = document.getElementById('theme-select');
+  if(!sel) return;
+  sel.innerHTML = BG_THEMES.map(function(t){
+    var selected = (S.theme===t.key) ? ' selected' : '';
+    return '<option value="'+t.key+'"'+selected+'>'+t.label+'</option>';
+  }).join('');
+}
+
+function setTheme(t){
+  S.theme = t;
+  /* 從 themes.js 取得完整公版設定 */
+  var thm = (typeof BN_THEME_MAP !== 'undefined') ? BN_THEME_MAP[t] : null;
+  if(thm){
+    var cs = document.getElementById('cSub');
+    var cm = document.getElementById('cMain');
+    var cd = document.getElementById('cDate');
+    if(cs) cs.value = thm.cSub;
+    if(cm) cm.value = thm.cMain;
+    if(cd) cd.value = thm.cDate;
+  }
+  /* 更新下拉選單選中項 */
+  var sel = document.getElementById('theme-select');
+  if(sel && sel.value !== t) sel.value = t;
+  /* bgUrls 動態補充 */
+  if(!S.bgUrls[t]) S.bgUrls[t] = '../backgrounds/'+t+'/';
+  broadcast();
+}
+
+/* ── Upload ── */
+function handleUpload(e,key){
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var src=ev.target.result;
+    S.imgs[key]=src;
+    var imgEl=document.getElementById(key+'-img');
+    if(imgEl){ imgEl.src=src; imgEl.dataset.baseSrc=src; }
+    var item=document.getElementById(key+'-item');
+    if(item) item.style.display='block';
+    var labels={host:'主持人已載入',logo1:'蝦皮直播 Logo 已載入',logo2:'明星直播間 Logo 已載入'};
+    markUpload(key,labels[key]);
+    broadcastFull(); // 上傳時才傳圖片
+  };
+  reader.readAsDataURL(file);
+  e.target.value='';
+}
+
+function markUpload(key,label){
+  var row=document.getElementById(key+'-row'); if(!row) return;
+  row.classList.add('done');
+  var lbl=row.querySelector('.upload-label'); if(lbl) lbl.textContent=label;
+}
+
+/* openEditor 已移至畫布內懸浮 bar 處理 */
+
+/* ── Logo2 上傳 + 套用 ── */
+function handleLogo2Upload(e){
+  var file = e.target.files[0]; if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){ applyLogo2(ev.target.result); };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+
+/* ── editor sidebar 裁切 logo2 ──
+   直接呼叫 BNLogoMenu.openCropEditor（已 inline 在本頁 head）
+   完成後 applyLogo2 更新並廣播給所有 iframe ── */
+function editorLogo2Crop(){
+  var src = S.imgs.logo2;
+  if(!src){ toast('請先上傳贊助商 Logo','err'); return; }
+  if(!window.BNLogoMenu){ toast('裁切編輯器載入中...',''); return; }
+  window.BNLogoMenu.openCropEditor(src, function(newSrc){
+    if(!newSrc) return;
+    applyLogo2(newSrc);
+    toast('Logo 裁切完成','ok');
+  });
+}
+function applyLogo2(src){
+  S.imgs.logo2 = src;
+  updateLogo2UI(src);
+  /* 同步到當前分頁暫存 */
+  if(TABS[ACTIVE_TAB]) TABS[ACTIVE_TAB].data.logo2Img = src;
+  /* 隱藏提示列 */
+  var hint = document.getElementById('logo2-hint');
+  if(hint) hint.style.display = 'none';
+  broadcastFull();
+  toast('贊助商 Logo 已載入','ok');
+}
+
+/* ── Helpers ── */
+function v(id){ return (document.getElementById(id)||{}).value||''; }
+function cc(inputId,countId,max){
+  var val = v(inputId);
+  var len = 0;
+  for(var i=0; i<val.length; i++){
+    var code = val.codePointAt(i);
+    /* 中文、全形、CJK：算 1 */
+    if(
+      (code >= 0x4E00 && code <= 0x9FFF) ||  // CJK 統一漢字
+      (code >= 0x3400 && code <= 0x4DBF) ||  // CJK 擴展A
+      (code >= 0xF900 && code <= 0xFAFF) ||  // CJK 相容
+      (code >= 0x3000 && code <= 0x303F) ||  // CJK 符號
+      (code >= 0xFF00 && code <= 0xFF60) ||  // 全形英數
+      (code >= 0xAC00 && code <= 0xD7AF)     // 韓文
+    ){
+      len += 1;
+    } else if(code > 0xFFFF){
+      len += 1; i++; // surrogate pair
+    } else {
+      len += 0.5; // 英數、半形符號
+    }
+  }
+  len = Math.ceil(len * 2) / 2;
+  var el=document.getElementById(countId); if(!el) return;
+  el.textContent=len+' / '+max;
+  el.classList.toggle('over', len > max);
+}
+function setPill(rowId,el){
+  document.querySelectorAll('#'+rowId+' .pill').forEach(function(p){p.classList.remove('active');});
+  el.classList.add('active');
+}
+
+/* ── Save / Load ── */
+/* 壓縮 base64 圖片到指定大小（bytes），回傳壓縮後 base64 */
+function compressBase64(b64, maxBytes, cb){
+  if(!b64){ cb(b64); return; }
+  var img = new Image();
+  img.onload = function(){
+    var cv = document.createElement('canvas');
+    var q  = 0.85;
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    cv.getContext('2d').drawImage(img, 0, 0);
+    function tryEncode(){
+      var data = cv.toDataURL('image/jpeg', q);
+      /* base64 字元數 * 0.75 ≈ bytes */
+      if((data.length * 0.75) <= maxBytes || q <= 0.1){
+        cb(data); return;
+      }
+      q = Math.max(0.1, q - 0.1);
+      tryEncode();
+    }
+    tryEncode();
+  };
+  img.onerror = function(){ cb(b64); };
+  img.src = b64;
+}
+
+function collectState(){
+  /* 單分頁快照（相容舊格式，給 applyState 用）*/
+  return {
+    version:1, ts:Date.now(), theme:S.theme,
+    texts:{brand:v('txt-brand'),main:v('txt-main'),sub:v('txt-sub'),date:v('txt-date'),time:v('txt-time')},
+    colors:{cSub:v('cSub'),cMain:v('cMain'),cDate:v('cDate')},
+    fmt:'jpeg',
+    imgs:{ host:S.imgs.host, logo1:S.imgs.logo1, logo2:S.imgs.logo2 }
+  };
+}
+
+/* 全分頁暫存：先把目前分頁狀態存好，再把所有 TABS 直接輸出（不壓縮，避免黑底問題）*/
+function saveAllTabsState(cb){
+  saveCurrentTabState(function(){
+    doSave();
+  });
+  function doSave(){
+    var snapshot = {
+      version: 2,
+      ts:      Date.now(),
+      theme:   S.theme,
+      logo1:   S.imgs.logo1 || null,
+      subLpbn: S.subLpbn || '',
+      colors:  { cSub:v('cSub'), cMain:v('cMain'), cDate:v('cDate') },
+      activeTab: ACTIVE_TAB,
+      tabs: TABS.map(function(tab){
+        var d = tab.data || {};
+        return {
+          id:    tab.id,
+          label: tab.label,
+          data:  Object.assign({}, d, {
+            /* 上傳來源的圖存原始 base64；路徑來源的圖清空，載入時依 brand 重抓 */
+            hostImg:  d.hostImgUploaded ? (d.hostImg || null) : null,
+            logo2Img: d.logo2Img || null
+          })
+        };
+      })
+    };
+    cb(snapshot);
+  }
+}
+
+function applyState(data){
+  if(!data) return;
+  /* version:2 = 全分頁格式 */
+  if(data.version === 2){
+    if(data.theme) setTheme(data.theme);
+    if(data.colors){ setColorField('cSub',data.colors.cSub);setColorField('cMain',data.colors.cMain);setColorField('cDate',data.colors.cDate); }
+    if(data.logo1){ S.imgs.logo1=data.logo1; markUpload('logo1','蝦皮直播 Logo 已載入'); }
+    if(data.subLpbn !== undefined) S.subLpbn = data.subLpbn;
+    if(data.tabs && data.tabs.length){
+      buildTabs(data.tabs.map(function(t){ return {id:t.id, label:t.label, data:t.data}; }));
+      /* 跳到當時的分頁 */
+      if(typeof data.activeTab === 'number' && TABS[data.activeTab]){
+        ACTIVE_TAB = data.activeTab;
+        renderTabBar();
+        applyTabData(TABS[ACTIVE_TAB], true);
+      }
+    }
+    toast('全分頁暫存已載入（共'+((data.tabs||[]).length)+'頁）','ok',3000);
+    return;
+  }
+  /* version:1 舊格式 */
+  if(data.version!==1) return;
+  setTheme(data.theme||'A');
+  function set(id,val){ var el=document.getElementById(id); if(el&&val!==undefined){el.value=val;} }
+  if(data.texts){ set('txt-brand',data.texts.brand);set('txt-sub',data.texts.sub);set('txt-date',data.texts.date);set('txt-time',data.texts.time); }
+  /* txt-main 固定值，不從暫存覆蓋 */
+  if(data.colors){ set('cSub',data.colors.cSub);set('cMain',data.colors.cMain);set('cDate',data.colors.cDate); }
+  if(data.imgs){
+    Object.keys(data.imgs).forEach(function(key){
+      var src=data.imgs[key]; if(!src) return;
+      S.imgs[key]=src;
+      var imgEl=document.getElementById(key+'-img');
+      if(imgEl){ imgEl.src=src; imgEl.dataset.baseSrc=src; }
+      var item=document.getElementById(key+'-item');
+      if(item) item.style.display='block';
+      var labels={host:'主持人已載入',logo1:'蝦皮直播 Logo 已載入',logo2:'明星直播間 Logo 已載入'};
+      markUpload(key,labels[key]);
+    });
+  }
+  broadcastFull();
+}
+function setColorField(id,val){
+  var el=document.getElementById(id);
+  if(el&&val) el.value=val;
+}
+
+document.getElementById('btn-save').addEventListener('click',function(){
+  toast('正在壓縮並打包...','ok',1500);
+  saveAllTabsState(function(snapshot){
+    var blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    /* 用相同的日期範圍格式命名 */
+    var dates = TABS.map(function(t){ return (t.data&&t.data.date)||''; }).filter(Boolean);
+    function fmtD(s){ return s.replace(/\//g,'').replace(/^(\d)(\d\d)$/,'0$1$2').replace(/^(\d)(\d)$/,'0$10$2'); }
+    var dateRange = dates.length
+      ? (dates.length > 1 ? fmtD(dates[0])+'-'+fmtD(dates[dates.length-1]) : fmtD(dates[0]))
+      : v('txt-date').replace(/\//g,'-') || 'draft';
+    a.download = dateRange+'_KOL代播.json';
+    a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    toast('全分頁暫存已下載','ok');
+  });
+});
+
+function setRefLayer(id, input){
+  var file = input.files[0];
+  if(!file) return;
+  var img = document.getElementById('ref-'+id);
+  if(!img) return;
+  var url = URL.createObjectURL(file);
+  img.src = url;
+  img.style.display = 'block';
+  /* 按鈕文字改為可點擊移除 */
+  var btn = input.closest('.canvas-ref-btn');
+  if(btn) btn.title = '點擊更換參考圖（不輸出）';
+  toast('參考層已載入（不影響輸出）','ok');
+}
+
+/* openImportModal: 由上方新版處理 */
+
+/* handleImportExcel: 由上方新版處理 */
+
+
+/* ── 匯入工單系統 ── */
+var _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0};
+
+function handleImportLogoFolder(e){
+  var files=Array.from(e.target.files||[]);
+  var imgs=files.filter(function(f){return /\.(png|jpg|jpeg|svg|gif|webp)$/i.test(f.name);});
+  if(!imgs.length){toast('找不到圖片','err');return;}
+  _importPending.logoMap={};_importPending.logoCount=0;
+  var done=0;
+  imgs.forEach(function(f){
+    var k=f.name.replace(/\.[^.]+$/,'').trim().toLowerCase();
+    var fk='';
+    if(f.webkitRelativePath){var p=f.webkitRelativePath.split('/');if(p.length>=2)fk=p[p.length-2].trim().toLowerCase();}
+    var r=new FileReader();
+    r.onload=function(ev){
+      _importPending.logoMap[k]=ev.target.result;
+      if(fk&&fk!==k)_importPending.logoMap[fk]=ev.target.result;
+      if(++done>=imgs.length){
+        _importPending.logoCount=imgs.length;
+        var z=document.getElementById('import-logo-zone'),l=document.getElementById('import-logo-label');
+        if(z){z.style.borderColor='#3d9970';z.style.background='rgba(61,153,112,.06)';}
+        if(l){l.textContent='✓ 已載入 '+imgs.length+' 個 Logo';l.style.color='#3d9970';}
+        _updateImportStatus();
+      }
+    };r.readAsDataURL(f);
+  });e.target.value='';
+}
+function _updateImportStatus(){
+  var el=document.getElementById('import-status');if(!el)return;
+  var lines=[];
+  if(_importPending.excelFile)lines.push('📄 '+_importPending.excelFile.name);
+  if(_importPending.logoCount)lines.push('🖼 Logo：'+_importPending.logoCount+' 個');
+  if(_importPending.hostCount)lines.push('👤 直播主圖片：'+_importPending.hostCount+' 個');
+  el.style.display=lines.length?'block':'none';el.innerHTML=lines.join('<br>');
+}
+/* ── 直播主圖片資料夾上傳處理 ── */
+function handleImportHostFolder(e){
+  var files=Array.from(e.target.files||[]);
+  var imgs=files.filter(function(f){return /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name);});
+  if(!imgs.length){toast('找不到圖片','err');return;}
+  _importPending.hostMap={};_importPending.hostCount=0;
+  var done=0;
+  imgs.forEach(function(f){
+    /* key = 檔名（去副檔名），並加入資料夾名稱作為 fallback key */
+    var k=f.name.replace(/\.[^.]+$/,'').trim();
+    var folderKey='';
+    if(f.webkitRelativePath){var p=f.webkitRelativePath.split('/');if(p.length>=2)folderKey=p[p.length-2].trim();}
+    var r=new FileReader();
+    r.onload=function(ev){
+      _importPending.hostMap[k]=ev.target.result;
+      /* 也用 baseName（去掉 -數字 後綴）做 key，方便 brand name 比對 */
+      var baseName=k.replace(/[-_]\d+$/,'');
+      if(baseName!==k && !_importPending.hostMap[baseName]) _importPending.hostMap[baseName+'__dir']=ev.target.result;
+      if(folderKey && folderKey!==k && !_importPending.hostMap[folderKey]) _importPending.hostMap[folderKey+'__dir']=ev.target.result;
+      if(++done>=imgs.length){
+        _importPending.hostCount=imgs.length;
+        var z=document.getElementById('import-host-zone'),l=document.getElementById('import-host-label');
+        if(z){z.style.borderColor='#5b8dee';z.style.background='rgba(91,141,238,.06)';}
+        if(l){l.textContent='✓ 已載入 '+imgs.length+' 張直播主圖片';l.style.color='#5b8dee';}
+        _updateImportStatus();
+      }
+    };r.readAsDataURL(f);
+  });e.target.value='';
+}
+
+/* 依名稱在 hostMap 中搜尋所有符合的圖（支援多張） */
+function findHostSrcsByName(brandName){
+  if(!brandName||!Object.keys(_importPending.hostMap).length)return [];
+  var lc = brandName.trim().toLowerCase();
+  var results = [];
+  Object.keys(_importPending.hostMap).forEach(function(k){
+    /* 跳過 __dir 輔助 key */
+    if(k.indexOf('__dir')!==-1) return;
+    var klc = k.toLowerCase();
+    /* baseName：去掉 -數字 / _數字 後綴 */
+    var baseKey = klc.replace(/[-_]\d+$/, '');
+    /* 比對條件：
+       1. 完全相同（凱特 vs 凱特）
+       2. 檔名的 baseName = brandName（凱特-1 的 base = 凱特）
+       3. 檔名包含 brandName（凱特_特別版 vs 凱特）
+    */
+    if(klc === lc || baseKey === lc || klc.startsWith(lc+'-') || klc.startsWith(lc+'_')){
+      results.push({name:k, src:_importPending.hostMap[k]});
+    }
+  });
+  /* 依名稱排序（凱特-1 < 凱特-2）*/
+  results.sort(function(a,b){ return a.name.localeCompare(b.name, 'zh-Hant'); });
+  return results;
+}
+
+function findLogoSrcByName(n){
+  if(!n||!Object.keys(_importPending.logoMap).length)return null;
+  var k=n.trim().toLowerCase();
+  if(_importPending.logoMap[k])return _importPending.logoMap[k];
+  var ks=Object.keys(_importPending.logoMap);
+  for(var i=0;i<ks.length;i++){if(ks[i].includes(k)||k.includes(ks[i]))return _importPending.logoMap[ks[i]];}
+  return null;
+}
+function doImport(){
+  if(!_importPending.excelFile){toast('請先選擇 Excel 工單','err');return;}
+  closePopup('import');
+  var r=new FileReader();
+  r.onload=function(ev){
+    try{
+      var wb=XLSX.read(ev.target.result,{type:'binary',cellDates:false});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true});
+      var groups=parseWorkorderGroups(rows);
+      if(!groups.length){toast('找不到分頁資料','err');return;}
+      groups.forEach(function(g){
+        /* Logo 自動對應 */
+        if(g.logoName&&!g.logo2Img){var s=findLogoSrcByName(g.logoName);if(s)g.logo2Img=s;}
+        /* Host 自動對應：依 brand（直播主名）從 hostMap 找第一張符合的圖 */
+        if(g.brand&&!g.hostImg&&_importPending.hostCount){
+          var matched=findHostSrcsByName(g.brand);
+          if(matched.length){
+            /* 存第一張為 hostImg（base64），其餘可從圖庫 popup 選 */
+            g.hostImg=matched[0].src;
+            g.hostImgUploaded=true;
+          }
+        }
+      });
+      var tabs=groups.map(function(g,i){return{id:'tab-'+(i+1),label:getTabLabel(g,i),data:g};});
+      buildTabs(tabs);
+      toast('匯入完成，共 '+tabs.length+' 個分頁'+(_importPending.logoCount?' + Logo':''),'ok',3000);
+    }catch(err){toast('匯入失敗：'+err.message,'err');}
+  };r.readAsBinaryString(_importPending.excelFile);
+}
+function openImportModal(){
+  _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0};
+  ['import-excel-zone','import-logo-zone','import-host-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.style.borderColor='';el.style.background='';}});
+  var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊上傳 Excel 工單';el.style.color='';}
+  var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='上傳 Logo 素材資料夾（可選）';ll.style.color='';}
+  var hl=document.getElementById('import-host-label');if(hl){hl.textContent='上傳直播主圖片資料夾（可選）';hl.style.color='';}
+  var st=document.getElementById('import-status');if(st)st.style.display='none';
+  document.getElementById('popup-import').classList.add('open');
+}
+function handleImportExcel(e){
+  var file=e.target.files[0];if(!file)return;
+  _importPending.excelFile=file;
+  var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
+  if(z){z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+  if(l){l.textContent='✓ '+file.name;l.style.color='var(--accent)';}
+  _updateImportStatus();e.target.value='';
+}
+function parseWorkorderGroups(rows){
+  /* ── 新格式工單（第一單型）：
+     A欄(0)=勾選(TRUE/FALSE), B欄(1)=版位名稱
+     E欄(4)=欄位名, F欄(5)=欄位值
+     從 row 13 起，每個 A欄=TRUE 的行代表新的「製作物組」開始
+     同一組用 B欄版位名稱的前綴數字分組（01_xxx 是縮圖，02_xxx 是LPBN）
+     相同品牌（LOGO欄位相同）= 同一個分頁
+
+     全域資訊：
+       A2=活動時間（日期）
+       A10=LOGO路徑（Google Drive 連結）
+  ── */
+
+  var groups = [];
+
+  /* 先抓全域資訊 */
+  var globalDate  = null;
+  var globalLogoPath = '';
+  if(rows[1]) {
+    var dateVal = rows[1][1]; // B2
+    if(dateVal instanceof Date && !isNaN(dateVal)){
+      globalDate = (dateVal.getMonth()+1)+'/'+(dateVal.getDate());
+    } else if(typeof dateVal === 'number' && dateVal > 40000){
+      var dt = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+      globalDate = (dt.getUTCMonth()+1)+'/'+(dt.getUTCDate());
+    }
+  }
+  if(rows[9]) globalLogoPath = String(rows[9][1]||'').trim(); // B10
+
+  /* 判斷是新格式（有 A/B/E/F 欄結構）或舊格式（E欄大段文字） */
+  var isNewFormat = false;
+  for(var ri = 12; ri < Math.min(rows.length, 20); ri++){
+    var r = rows[ri];
+    if(r && (r[0]===true || r[0]===false) && r[1] && typeof r[1]==='string'){
+      isNewFormat = true; break;
+    }
+  }
+
+  if(isNewFormat){
+    /* ── 新格式解析 ── */
+    /* 用 Map 收集：key = logoName（品牌）, value = group data */
+    var brandMap = {}; // logoName -> group
+    var brandOrder = []; // 保留順序
+
+    /* 時間處理 helper */
+    /* 從 Excel 序列數（含日期+時分）解析時間字串 "H:MM" */
+    function parseTimeVal(val){
+      if(typeof val === 'number'){
+        var totalMin = Math.round(val*24*60);
+        var hh = Math.floor(totalMin/60) % 24;
+        var mm = totalMin%60;
+        return hh+':'+(mm<10?'0':'')+mm;
+      }
+      /* Date 物件（部分讀取方式會產生）*/
+      if(val && typeof val === 'object' && val.getHours){
+        return val.getHours()+':'+(val.getMinutes()<10?'0':'')+val.getMinutes();
+      }
+      return String(val).trim();
+    }
+    /* 從 Excel 序列數（含日期+時分）解析日期字串 "M/D" */
+    function parseDateVal(val){
+      if(typeof val === 'number' && val > 1){
+        /* Excel 序列數：1900-01-01 = 1，但有 1900-02-29 bug offset */
+        var d = new Date(Math.round((val - 25569) * 86400 * 1000));
+        return (d.getUTCMonth()+1)+'/'+(d.getUTCDate());
+      }
+      if(val && typeof val === 'object' && val.getMonth){
+        return (val.getMonth()+1)+'/'+val.getDate();
+      }
+      return '';
+    }
+
+    /* ──────────────────────────────────────────────────────
+       解析邏輯（v3）：
+         每遇到 01_thumbnail（TRUE）→ 開新分頁
+         緊接的 02_lpbn → 歸屬同一分頁
+         不再用品牌名當 key，改用遞增序號，支援同品牌多次出現
+    ────────────────────────────────────────────────────── */
+    /* 動態找資料起始行（找第一個 A欄=bool、B欄=版位名稱的行，不寫死 row index）*/
+    var ri2 = 0;
+    for(var _rs=0; _rs<rows.length; _rs++){
+      var _r=rows[_rs];
+      if(!_r) continue;
+      var _a=_r[0], _b=_r[1];
+      var _isT=(_a===true||_a===false||String(_a).toUpperCase()==='TRUE'||String(_a).toUpperCase()==='FALSE');
+      if(_isT && _b && typeof _b==='string' && /^\d+_/.test(_b.trim())){ ri2=_rs; break; }
+    }
+    var currentGroup = null; /* 目前正在收集的分頁 */
+
+    function flushGroup(){
+      if(currentGroup){
+        /* 若 LPBN 沒有提供日期，fallback 到全域日期 */
+        if(!currentGroup.date && globalDate) currentGroup.date = globalDate;
+        groups.push(currentGroup);
+      }
+      currentGroup = null;
+    }
+
+    while(ri2 < rows.length){
+      var row2 = rows[ri2];
+      if(!row2){ ri2++; continue; }
+
+      var aVal2 = row2[0];
+      var bVal2 = row2[1];
+      var eVal2 = row2[4];
+      var fVal2 = row2[5];
+      var hVal2 = row2[7];
+
+      /* bool 值可能是 true/false 或字串 'TRUE'/'FALSE'（不同讀取方式）*/
+      var isBoolTrue  = (aVal2===true  || String(aVal2).toUpperCase()==='TRUE');
+      var isBoolFalse = (aVal2===false || String(aVal2).toUpperCase()==='FALSE');
+      var isMain = (isBoolTrue||isBoolFalse) &&
+                   bVal2 && typeof bVal2==='string' &&
+                   /^\d+_/.test(bVal2.trim());
+
+      if(isMain){
+        var checked2   = isBoolTrue;
+        var layoutName = bVal2.trim();
+        var layoutType = (hVal2 && typeof hVal2==='string') ? hVal2.trim() : '';
+        var fields2    = {};
+
+        /* 同行的 E/F */
+        if(eVal2 && fVal2!==undefined && fVal2!==null && String(fVal2).trim()!==''){
+          fields2[String(eVal2).trim()] = fVal2;
+        }
+        /* 往下收續行 */
+        var rj = ri2 + 1;
+        while(rj < rows.length){
+          var nrow = rows[rj];
+          if(!nrow){ rj++; continue; }
+          var na2 = nrow[0];
+          var nb2 = nrow[1];
+          var isBoolNA = (na2===true||na2===false||String(na2).toUpperCase()==='TRUE'||String(na2).toUpperCase()==='FALSE');
+          if(isBoolNA && nb2 && /^\d+_/.test(String(nb2).trim())) break;
+          var ne2 = nrow[4]; var nf2 = nrow[5];
+          if(ne2 && nf2!==undefined && nf2!==null && String(nf2).trim()!==''){
+            fields2[String(ne2).trim()] = nf2;
+          }
+          rj++;
+        }
+        ri2 = rj;
+
+        var isThumbnail = /^01_/.test(layoutName);
+        var isLpbn      = /^02_/.test(layoutName);
+
+        if(isThumbnail){
+          /* 每個 thumbnail 主行開一個新分頁（不管是否 checked）*/
+          flushGroup(); /* 先把上一個 flush */
+          if(checked2){
+            var logo2 = String(fields2['LOGO']||'').trim();
+            var host2 = String(fields2['直播主']||'').trim();
+            currentGroup = {
+              date:            '',        /* 留空，優先用 LPBN 的 F欄日期，找不到才 fallback globalDate */
+              logoName:        logo2,
+              logoPath:        globalLogoPath,
+              brand:           host2,
+              layout:          layoutType,
+              time:            '',
+              sub:             host2, /* thumbnail 大字 = 直播主名 */
+              subLpbn:         '',
+              layouts:         [layoutName],
+              excludedLayouts: []
+            };
+          }
+          /* checked===false 的 thumbnail：不建 group（不需要製作任何東西）*/
+        } else if(isLpbn && currentGroup){
+          /* LPBN 歸屬到目前的 group */
+          var sub2  = String(fields2['副標']||'').trim();
+          var time2 = fields2['時間'];
+          if(sub2 && sub2!=='(無LPBN不填)' && !currentGroup.subLpbn){
+            currentGroup.subLpbn = sub2;
+          }
+          if(time2){
+            var parsedTime = parseTimeVal(time2);
+            var parsedDate = parseDateVal(time2);
+            if(!currentGroup.time && parsedTime) currentGroup.time = parsedTime;
+            if(!currentGroup.date && parsedDate) currentGroup.date = parsedDate;
+          }
+          if(checked2){
+            if(currentGroup.layouts.indexOf(layoutName)===-1) currentGroup.layouts.push(layoutName);
+          } else {
+            if(currentGroup.excludedLayouts.indexOf(layoutName)===-1) currentGroup.excludedLayouts.push(layoutName);
+          }
+          /* LPBN 收完，flush 這個 group */
+          flushGroup();
+        }
+      } else {
+        ri2++;
+      }
+    }
+    flushGroup(); /* 最後一個 group */
+
+    /* brandOrder/brandMap 不再需要，groups 已直接收集完畢 */
+
+
+  } else {
+    /* ── 舊格式解析（M/N欄）── */
+    var fieldMap = {'款式':'theme','主標':'main','副標':'sub','日期':'date','時間':'time','主持人':'brand','素材路徑':'hostPath'};
+    var current = null;
+    rows.forEach(function(row){
+      var mVal = row[12];
+      var nVal = row[13];
+      if(mVal === '款式'){ current = {}; groups.push(current); }
+      if(current && mVal && nVal !== undefined && nVal !== null && nVal !== ''){
+        var key = fieldMap[String(mVal).trim()];
+        if(key){
+          var val = nVal;
+          if(key === 'date'){
+            var parsed = null;
+            if(val instanceof Date && !isNaN(val)){
+              parsed = { m: val.getMonth()+1, d: val.getDate() };
+            } else if(typeof val === 'number' && val > 40000){
+              var dt3 = new Date(Math.round((val - 25569) * 86400 * 1000));
+              parsed = { m: dt3.getUTCMonth()+1, d: dt3.getUTCDate() };
+            } else {
+              var s = String(val).trim();
+              var numVal = parseFloat(s);
+              if(!isNaN(numVal) && numVal > 40000){
+                var dt4 = new Date(Math.round((numVal - 25569) * 86400 * 1000));
+                parsed = { m: dt4.getUTCMonth()+1, d: dt4.getUTCDate() };
+              } else {
+                var parts = s.replace(/-/g,'/').split('/');
+                if(parts.length >= 2){
+                  var mm2 = parseInt(parts[parts.length-2]);
+                  var dd = parseInt(parts[parts.length-1]);
+                  if(mm2>=1&&mm2<=12&&dd>=1&&dd<=31) parsed = {m:mm2, d:dd};
+                }
+              }
+            }
+            if(parsed) val = parsed.m+'/'+parsed.d;
+          }
+          if(key === 'time'){
+            if(typeof val === 'number'){
+              var totalMin2 = Math.round(val*24*60);
+              var hh2 = Math.floor(totalMin2/60);
+              var mm3 = totalMin2%60;
+              val = hh2+':'+(mm3<10?'0':'')+mm3;
+            }
+          }
+          current[key] = String(val).trim();
+        }
+      }
+    });
+  }
+
+  return groups.filter(function(g){ return Object.keys(g).length > 0; });
+}
+
+function clearAllStorage(){
+  if(!confirm('確定清除所有暫存？\n（版位清單、主持人圖庫將重設）')) return;
+  localStorage.removeItem('bn_admin_star_studio_v1');
+  localStorage.removeItem('bn_hosts_star_studio_v1');
+  toast('暫存已清除，重新整理中...','ok',2000);
+  setTimeout(function(){ location.reload(); }, 1200);
+}
+
+document.getElementById('loadFile').addEventListener('change',function(e){
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{ applyState(JSON.parse(ev.target.result)); toast('暫存已載入','ok'); }
+    catch(_){ toast('暫存格式錯誤','err'); }
+  };
+  reader.readAsText(file); this.value='';
+});
+
+/* ── Download ── */
+function getFmt(id){
+  /* 優先讀版位自己的 spec.fmt，沒有就預設 jpeg */
+  try{
+    var ifr = iframes[id];
+    if(ifr && ifr.contentWindow && ifr.contentWindow.BNExport && ifr.contentWindow.BNExport.spec.fmt){
+      return ifr.contentWindow.BNExport.spec.fmt;
+    }
+  }catch(e){}
+  return 'jpeg';
+}
+
+/* ── 取得當前分頁日期（用於資料夾命名）── */
+function getTabDate(){
+  var tab = TABS[ACTIVE_TAB];
+  if(!tab) return '';
+  var d = tab.data && tab.data.date;
+  if(!d) return '';
+  /* 補零：5/6 → 0506 */
+  var parts = d.split('/');
+  if(parts.length >= 2){
+    return (parts[0].length<2?'0':'')+parts[0]+(parts[1].length<2?'0':'')+parts[1];
+  }
+  return d.replace(/\//g,'');
+}
+
+/* ── 取得整頁下載的 ZIP 檔名（日期補零_廠商_直播主）── */
+function getPageZipName(){
+  var tab = TABS[ACTIVE_TAB];
+  if(!tab) return '分頁'+(ACTIVE_TAB+1);
+  var d = tab.data || {};
+  var dateStr = getTabDate();
+  return [dateStr, d.logoName||'', d.brand||''].filter(Boolean).join('_') || ('分頁'+(ACTIVE_TAB+1));
+}
+
+/* ── 單張下載：日期前綴_製作物名稱 ── */
+function downloadSingle(id){
+  var ifr=iframes[id]; if(!ifr||!ifr.contentWindow) return;
+  var api=ifr.contentWindow.BNExport;
+  if(!api){ toast('畫布尚未就緒','err'); return; }
+  var fmt=getFmt(id), ext=fmt==='png'?'png':'jpg';
+  var datePrefix = getTabDate();
+  var spec = api.spec || {};
+  var name = spec.name || id;
+
+  if(api.getBothBlobs && spec.hasCTAVariant){
+    api.getBothBlobs(fmt, fmt==='png'?1:0.95, function(blobWith, blobWithout){
+      function dl(blob, suffix){
+        var a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);
+        a.download=(datePrefix?datePrefix+'_':'')+name+'_'+suffix+'.'+ext;
+        a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+      }
+      dl(blobWith, '有CTA');
+      setTimeout(function(){ dl(blobWithout, '無CTA'); }, 300);
+      toast('已下載兩張（有CTA + 無CTA）','ok');
+    });
+  } else {
+    api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
+      var a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=(datePrefix?datePrefix+'_':'')+name+'.'+ext;
+      a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+      toast('已下載：'+name,'ok');
+    });
+  }
+}
+
+/* ── 整頁下載：當前分頁所有製作物打包 ZIP ── */
+function downloadPage(){
+  var zipName = getPageZipName();
+  var layouts = LAYOUTS;
+  var zip = new JSZip();
+
+  toast('整頁打包中...','ok',3000);
+
+  function collect(i){
+    if(i >= layouts.length){
+      /* 全部收集完，打包下載 */
+      zip.generateAsync({type:'blob'}).then(function(blob){
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = zipName+'.zip';
+        a.click();
+        setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+        toast('整頁下載完成：'+zipName+'.zip','ok',3000);
+      });
+      return;
+    }
+    var layout = layouts[i];
+    var ifr = iframes[layout.id];
+    if(!ifr||!ifr.contentWindow){ collect(i+1); return; }
+    var api = ifr.contentWindow.BNExport;
+    if(!api){ collect(i+1); return; }
+    var fmt = getFmt(layout.id), ext = fmt==='png'?'png':'jpg';
+    var name = (api.spec && api.spec.name) || layout.id;
+
+    function addAndNext(blob, suffix){
+      zip.file(name+(suffix?'_'+suffix:'')+'.'+ext, blob);
+      collect(i+1);
+    }
+
+    if(api.getBothBlobs && api.spec && api.spec.hasCTAVariant){
+      api.getBothBlobs(fmt, fmt==='png'?1:0.95, function(bWith, bWithout){
+        zip.file(name+'_有CTA.'+ext, bWith);
+        zip.file(name+'_無CTA.'+ext, bWithout);
+        collect(i+1);
+      });
+    } else {
+      api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
+        addAndNext(blob, '');
+      });
+    }
+  }
+  collect(0);
+}
+
+/* ── 整包下載：所有分頁所有製作物 ──
+   策略：先把所有分頁的圖片渲染成 blob 存在記憶體，全部完成後再打包下載
+   每頁流程：applyTabData → BN_RENDERED（圖+背景全載完）
+             → BN_RESTORE_STATE → 短暫等待 render → snapBlob → 下一頁
+*/
+function downloadAll(){
+  saveCurrentTabState(function(){
+    var total = TABS.length;
+    /* collectedPages[ti] = [ {folder, name, blob}, ... ] */
+    var collectedPages = [];
+
+    pm.show('匯出製作物');
+    pm.update(0, '準備中…');
+
+    function processTab(ti){
+      if(ti >= TABS.length){
+        /* 所有頁面截圖完畢，還原當前分頁，再打包 */
+        applyTabData(TABS[ACTIVE_TAB], true);
+        pm.update(95, '壓縮 ZIP 中…');
+
+        var zip = new JSZip();
+        collectedPages.forEach(function(page){
+          var folder = zip.folder(page.folderName);
+          page.files.forEach(function(f){ folder.file(f.name, f.blob); });
+        });
+        zip.generateAsync({type:'blob'}).then(function(blob){
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          /* 外層 ZIP 命名：起始日-結束日_KOL代播，例如 0506-0610_KOL代播 */
+          var dates = TABS.map(function(t){ return (t.data&&t.data.date)||''; }).filter(Boolean);
+          function fmtDate(s){ return s.replace(/\//g,'').replace(/^(\d)(\d\d)$/,'0$1$2').replace(/^(\d)(\d)$/,'0$10$2'); }
+          var dateRange = dates.length
+            ? (dates.length > 1 ? fmtDate(dates[0])+'-'+fmtDate(dates[dates.length-1]) : fmtDate(dates[0]))
+            : (new Date().getMonth()+1)+''+(new Date().getDate());
+          a.download = dateRange+'_KOL代播.zip';
+          a.click();
+          setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
+          pm.done('完成！共 '+total+' 個分頁');
+          pm.hide();
+        });
+        return;
+      }
+
+      var tab = TABS[ti];
+      var d   = tab.data || {};
+      var folderName = [
+        (function(s){ var p=s.split('/'); return p.length===2 ? (p[0].padStart(2,'0')+p[1].padStart(2,'0')) : s.replace(/\//g,''); })(d.date||''),
+        d.logoName||'',
+        d.brand||''
+      ].filter(Boolean).join('_') || ('tab'+(ti+1));
+
+      var pct = Math.round((ti / total) * 92);
+      pm.update(pct, '渲染第 '+(ti+1)+'/'+total+' 頁　'+folderName+'…');
+
+      var tabExcluded = d.excludedLayouts || [];
+      var activeLayouts = LAYOUTS.filter(function(l){
+        return tabExcluded.every(function(name){
+          return !(l.id===name||name.indexOf(l.id)===0||l.id.indexOf(name.split('_')[0]+'_')===0);
+        });
+      });
+
+      if(!activeLayouts.length){
+        collectedPages.push({folderName:folderName, files:[]});
+        processTab(ti+1);
+        return;
+      }
+
+      /* ── Step3：截圖並存入 collectedPages ── */
+      function doSnapshot(){
+        var pageFiles = [];
+        function collectLayout(i){
+          if(i >= activeLayouts.length){
+            collectedPages.push({folderName:folderName, files:pageFiles});
+            processTab(ti+1);
+            return;
+          }
+          var layout = activeLayouts[i];
+          var ifr    = iframes[layout.id];
+          if(!ifr||!ifr.contentWindow){ collectLayout(i+1); return; }
+          var api    = ifr.contentWindow.BNExport;
+          if(!api){ collectLayout(i+1); return; }
+          var fmt    = getFmt(layout.id);
+          var ext    = fmt==='png' ? 'png' : 'jpg';
+          var fname  = (api.spec && api.spec.name) || layout.id;
+
+          var subPct = Math.round((ti/total)*92 + ((i+0.5)/activeLayouts.length)*(92/total));
+          pm.update(subPct, '截圖 '+fname+'…');
+
+          if(api.getBothBlobs && api.spec && api.spec.hasCTAVariant){
+            api.getBothBlobs(fmt, 1, function(bWith, bWithout){
+              pageFiles.push({name:fname+'_有CTA.'+ext, blob:bWith});
+              pageFiles.push({name:fname+'_無CTA.'+ext, blob:bWithout});
+              collectLayout(i+1);
+            });
+          } else {
+            api.getBlob(fmt, 1, function(blob){
+              pageFiles.push({name:fname+'.'+ext, blob:blob});
+              collectLayout(i+1);
+            });
+          }
+        }
+        collectLayout(0);
+      }
+
+      /* ── 截圖 ── */
+      function captureLayouts(){
+        var pageFiles = [];
+        function collectLayout(i){
+          if(i >= activeLayouts.length){
+            collectedPages.push({folderName:folderName, files:pageFiles});
+            processTab(ti+1);
+            return;
+          }
+          var layout = activeLayouts[i];
+          var ifr    = iframes[layout.id];
+          if(!ifr||!ifr.contentWindow){ collectLayout(i+1); return; }
+          var api    = ifr.contentWindow.BNExport;
+          if(!api){ collectLayout(i+1); return; }
+          var fmt    = getFmt(layout.id);
+          var ext    = fmt==='png' ? 'png' : 'jpg';
+          var fname  = (api.spec && api.spec.name) || layout.id;
+
+          var subPct = Math.round((ti/total)*92 + ((i+0.5)/activeLayouts.length)*(92/total));
+          pm.update(subPct, '截圖 '+fname+'…');
+
+          if(api.getBothBlobs && api.spec && api.spec.hasCTAVariant){
+            api.getBothBlobs(fmt, fmt==='png'?1:0.95, function(bWith, bWithout){
+              pageFiles.push({name:fname+'_有CTA.'+ext, blob:bWith});
+              pageFiles.push({name:fname+'_無CTA.'+ext, blob:bWithout});
+              collectLayout(i+1);
+            });
+          } else {
+            api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
+              pageFiles.push({name:fname+'.'+ext, blob:blob});
+              collectLayout(i+1);
+            });
+          }
+        }
+        collectLayout(0);
+      }
+
+      /* ── 套文字 + 圖片 → broadcastFull → 等 render → BN_RESTORE_STATE → 截圖 ── */
+      var themeKey = d.layout || d.theme;
+      if(themeKey) setTheme(themeKey);
+      S.subLpbn = d.subLpbn || '';
+
+      /* txt-main 固定值，確保每頁廣播時都在 */
+      var mainEl = document.getElementById('txt-main');
+      if(mainEl){ mainEl.disabled = false; mainEl.value = '直播灑50%蝦幣回饋'; }
+
+      var fields = {'txt-sub':d.subLpbn||'','txt-date':d.date||'','txt-time':d.time||'','txt-brand':d.brand||''};
+      Object.keys(fields).forEach(function(id){ var el=document.getElementById(id); if(el) el.value=fields[id]; });
+
+      if(d.logo2Img){ S.imgs.logo2 = d.logo2Img; } else { S.imgs.logo2 = null; }
+      if(d.hostImg) { S.imgs.host  = d.hostImg;  } else { S.imgs.host  = null; }
+
+      broadcastFull();
+
+      /* 等 400ms 讓 iframe render 完（背景 + 圖片 base64 幾乎即時），再送 canvasState */
+      setTimeout(function(){
+        if(d.canvasState && Object.keys(d.canvasState).length){
+          Object.keys(d.canvasState).forEach(function(csId){
+            var cw = iframes[csId]&&iframes[csId].contentWindow;
+            if(cw) cw.postMessage({type:'BN_RESTORE_STATE', state:d.canvasState[csId]}, '*');
+          });
+        }
+        /* 再等 300ms 讓 BN_RESTORE_STATE 的 render() 完成，才截圖 */
+        setTimeout(captureLayouts, 300);
+      }, 400);
+    }
+
+    processTab(0);
+  });
+}
+
+
+function importExcel(file){
+  toast('解析 Excel 中...', '', 3000);
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {type:'binary', cellDates:true});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1});
+      var fieldMap = {};
+      rows.forEach(function(row){
+        if(!Array.isArray(row)) return;
+        var key = row[12] !== undefined && row[12] !== null ? row[12].toString().trim() : '';
+        var val = row[13];
+        if(key && key !== '製作內容' && val !== undefined && val !== null && val !== ''){
+          fieldMap[key] = val;
+        }
+      });
+      console.log('[Excel] keys found:', Object.keys(fieldMap));
+      if(Object.keys(fieldMap).length === 0){
+        toast('找不到 M/N 欄資料，請確認工單格式', 'err'); return;
+      }
+      applyFieldMap(fieldMap);
+    } catch(err){
+      console.error('[Excel] error:', err);
+      toast('Excel 解析失敗：'+err.message, 'err');
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function applyFieldMap(fm){
+  function fs(v){ return v ? v.toString().trim() : ''; }
+  function fd(v){
+    if(!v) return '';
+    if(v instanceof Date) return String(v.getMonth()+1)+'/'+String(v.getDate());
+    return v.toString().trim();
+  }
+  function ft(v){
+    if(!v) return '';
+    if(v instanceof Date) return String(v.getHours()).padStart(2,'0')+':'+String(v.getMinutes()).padStart(2,'0');
+    return v.toString().trim();
+  }
+
+  var filled = 0;
+  var t = fs(fm['款式']).toUpperCase();
+  if('ABC'.indexOf(t)>=0){ setTheme(t); filled++; }
+
+  var pairs = [['副標','txt-sub'],['主持人','txt-brand']]; /* 主標固定值，不從工單覆蓋 */
+  pairs.forEach(function(p){
+    var val = fs(fm[p[0]]);
+    if(val){ var el=document.getElementById(p[1]); if(el){el.value=val; filled++;} }
+  });
+
+  var ds = fd(fm['日期']); if(ds){ var el=document.getElementById('txt-date'); if(el){el.value=ds; filled++;} }
+  var ts = ft(fm['時間']); if(ts){ var el=document.getElementById('txt-time'); if(el){el.value=ts; filled++;} }
+
+  /* 素材路徑沒填就直接用主持人名字 */
+  var hostKey = (fs(fm['素材路徑']) || fs(fm['主持人'])).replace(/\.(png|jpg|jpeg)$/i,'');
+  console.log('[Excel] hostKey:', hostKey);
+
+  if(hostKey){
+    console.log('[hosts] trying to find:', hostKey);
+    loadHostByName(hostKey, function(src){
+      console.log('[hosts] result src:', src ? src.slice(0,40) : 'NOT FOUND');
+      if(src){
+        loadSrcAsBase64(src, function(b64){
+          if(b64){ applyHost(b64, hostKey); }
+          broadcastFull();
+          toast('匯入完成！'+filled+' 個欄位 + 主持人圖', 'ok', 3000);
+        });
+      } else {
+        broadcastFull();
+        toast('匯入完成，找不到主持人圖：'+hostKey, 'err', 5000);
+      }
+    });
+  } else {
+    broadcastFull();
+    toast('匯入完成！'+filled+' 個欄位', 'ok', 3000);
+  }
+}
+
+function applyExcelData(rows){
+  /* SheetJS header:1 回傳二維陣列
+     重點：不用 row index，改掃描全部列找 M欄有值的格子
+     M欄 = index 12, N欄 = index 13
+     這樣不受合併列、空列影響 */
+
+  function getVal(v){
+    if(v === undefined || v === null || v === '') return '';
+    if(v instanceof Date){
+      var mo = String(v.getMonth()+1);
+      var d  = String(v.getDate());
+      var hh = String(v.getHours()).padStart(2,'0');
+      var mm = String(v.getMinutes()).padStart(2,'0');
+      return mo+'/'+d+' '+hh+':'+mm;
+    }
+    return v.toString().trim();
+  }
+
+  /* 掃描所有列，M有值就記錄 */
+  var fieldMap = {};
+  rows.forEach(function(row, ri){
+    if(!row) return;
+    var field = getVal(row[12]);
+    var rawN  = row[13];
+    if(field && field !== '製作內容' && rawN !== undefined && rawN !== null && rawN !== ''){
+      fieldMap[field] = rawN; /* 保留原始值（Date物件等），getVal 在使用時才轉 */
+    }
+    /* C欄(index 2) = 款式，Row 9 = index 8 */
+    if(ri === 8 && row[2]){
+      var t = getVal(row[2]).toUpperCase();
+      if('ABC'.indexOf(t) >= 0) setTheme(t);
+    }
+  });
+
+  console.log('[Excel] fieldMap:', JSON.stringify(fieldMap));
+
+  /* 款式 */
+  if(fieldMap['款式']){
+    var t = getVal(fieldMap['款式']).toUpperCase().trim();
+    if('ABC'.indexOf(t) >= 0) setTheme(t);
+  }
+
+  /* 文案填入（主標固定值，不從工單覆蓋） */
+  var textMap = {'副標':'txt-sub','主持人':'txt-brand'};
+  var filled = 0;
+  Object.keys(textMap).forEach(function(key){
+    var val = fieldMap[key];
+    if(val !== undefined && val !== null && val !== ''){
+      var el = document.getElementById(textMap[key]);
+      if(el){ el.value = getVal(val); filled++; }
+    }
+  });
+
+  /* 日期 + 時間組合 */
+  var rawDate = fieldMap['日期'];
+  var rawTime = fieldMap['時間'];
+  var dateStr = '', timeStr = '';
+  if(rawDate instanceof Date){
+    dateStr = String(rawDate.getMonth()+1)+'/'+String(rawDate.getDate());
+  } else if(rawDate){ dateStr = getVal(rawDate); }
+  if(rawTime instanceof Date){
+    timeStr = String(rawTime.getHours()).padStart(2,'0')+':'+String(rawTime.getMinutes()).padStart(2,'0');
+  } else if(rawTime){ timeStr = getVal(rawTime); }
+
+  var elDate = document.getElementById('txt-date');
+  var elTime = document.getElementById('txt-time');
+  if(elDate && dateStr){ elDate.value = dateStr; filled++; }
+  if(elTime && timeStr){ elTime.value = timeStr; filled++; }
+
+  /* 素材路徑：去掉副檔名再比對 */
+  var rawHost = fieldMap['素材路徑'] || fieldMap['主持人'] || '';
+  var hostName = getVal(rawHost).replace(/\.(png|jpg|jpeg)$/i, '');
+  console.log('[Excel] fieldMap keys:', Object.keys(fieldMap));
+  console.log('[Excel] hostName:', hostName);
+
+  if(hostName){
+    loadHostByName(hostName, function(src){
+      if(src){
+        applyHost(src, hostName);
+        broadcastFull();
+        toast('匯入完成！填入 '+filled+' 個欄位 + 主持人圖', 'ok', 3000);
+      } else {
+        broadcastFull();
+        toast('匯入完成，找不到主持人圖：'+hostName+'（請確認 hosts/ 資料夾）', 'err', 5000);
+      }
+    });
+    return;
+  }
+
+  broadcastFull();
+  toast('匯入完成！填入 '+filled+' 個欄位', 'ok', 3000);
+}
+
+function importZip(file){
+  toast('解析 ZIP 中...', '', 3000);
+  JSZip.loadAsync(file).then(function(zip){
+    /* 找 Excel 檔 */
+    var xlsxFile = null;
+    zip.forEach(function(path, f){
+      if(!f.dir && /\.xlsx$/i.test(path) && xlsxFile === null) xlsxFile = f;
+    });
+    if(!xlsxFile){ toast('找不到 .xlsx 檔案', 'err'); return; }
+
+    return xlsxFile.async('arraybuffer').then(function(buf){
+      /* 解析 Excel */
+      var wb  = XLSX.read(buf, {type:'array', cellDates:true, cellNF:false});
+      var ws  = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1});
+
+      /* 套用 Excel 資料 */
+      var zipFieldMap = {};
+      rows.forEach(function(row){
+        if(!row || !row[12]) return;
+        var key = (row[12]||'').toString().trim();
+        var val = row[13];
+        if(key && key !== '製作內容' && val !== null && val !== undefined && val !== ''){
+          zipFieldMap[key] = val;
+        }
+      });
+      applyFieldMap(zipFieldMap);
+      var hostName = '';  // applyFieldMap 已處理
+
+      /* 主持人名稱：先找圖庫，再找 images/ 資料夾 */
+      /* hostName 已在上方宣告 */
+      var hostSrc  = null;
+
+      /* 1. 比對圖庫 */
+      if(hostName){
+        try{
+          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]');
+          var nameNoExt = hostName.replace(/\.[^.]+$/,'');
+          var match = hostLib.find(function(h){
+            var hn = h.name.replace(/\.[^.]+$/,'');
+            return hn === nameNoExt || hn === nameNoExt+'-1' || hn.startsWith(nameNoExt+'-');
+          });
+          if(match) hostSrc = match.src;
+        }catch(e){}
+      }
+
+      /* 2. 找 images/ 資料夾 */
+      var imgPromises = [];
+      if(!hostSrc){
+        zip.forEach(function(path, f){
+          if(!f.dir && /images\//i.test(path) && /\.(png|jpg|jpeg)$/i.test(path)){
+            imgPromises.push(
+              f.async('base64').then(function(b64){
+                var ext  = path.split('.').pop().toLowerCase();
+                var mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+                return 'data:'+mime+';base64,'+b64;
+              })
+            );
+          }
+        });
+      }
+
+      return Promise.all(imgPromises).then(function(srcs){
+        var finalSrc = hostSrc || (srcs.length > 0 ? srcs[0] : null);
+        if(finalSrc){
+          applyHost(finalSrc, hostName || '主持人');
+        }
+        broadcastFull();
+        toast('ZIP 匯入完成！填入 '+filled+' 個欄位'+(finalSrc?' + 主持人圖':''), 'ok', 3000);
+      });
+    });
+  }).catch(function(err){
+    toast('ZIP 解析失敗：'+err.message, 'err');
+  });
+}
+
+/* ── 主持人圖庫：直接從 hosts/ 資料夾路徑載入，不存 localStorage ── */
+var KNOWN_HOST_NAMES = [
+  '凱特','何偉綸','周庭安','瑞瑞','甜蜜蜜','Melody','Alren','亞莎'
+];
+/* 每位主持人自動產生 1~5 張編號 */
+var KNOWN_HOSTS = [];
+KNOWN_HOST_NAMES.forEach(function(name){
+  for(var i=1;i<=10;i++) KNOWN_HOSTS.push(name+'-'+i);
+});
+
+/* 用路徑方式比對，不存 base64 */
+function findHostSrc(name){
+  var clean = name.trim().replace(/\.(png|jpg|jpeg)$/i,'').trim();
+  /* 取出主持人姓名（去掉編號）*/
+  var baseName = clean.replace(/[-_]\d+$/, '');
+  var candidates = [];
+  /* 優先找子資料夾版本 */
+  candidates.push('hosts/'+baseName+'/'+clean+'.png');
+  candidates.push('hosts/'+baseName+'/'+clean+'.jpg');
+  if(!/[-_]\d+$/.test(clean)){
+    candidates.push('hosts/'+baseName+'/'+baseName+'-1.png');
+    candidates.push('hosts/'+baseName+'/'+baseName+'-1.jpg');
+  }
+  /* 備用：舊版根目錄 */
+  candidates.push('hosts/'+clean+'.png');
+  candidates.push('hosts/'+clean+'.jpg');
+  if(!/[-_]\d+$/.test(clean)){
+    candidates.push('hosts/'+clean+'-1.png');
+    candidates.push('hosts/'+clean+'-1.jpg');
+  }
+  console.log('[hosts] candidates:', candidates);
+  return candidates;
+}
+
+/* 把任何圖片 src（路徑或 base64）轉成 base64 */
+function loadSrcAsBase64(src, cb){
+  if(src && src.startsWith('data:')){
+    cb(src); return; // 已經是 base64
+  }
+  var img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = function(){
+    var cv2 = document.createElement('canvas');
+    cv2.width = img.naturalWidth; cv2.height = img.naturalHeight;
+    cv2.getContext('2d').drawImage(img, 0, 0);
+    try{ cb(cv2.toDataURL('image/png')); }
+    catch(e){ cb(src); } // CORS 問題時直接用原路徑
+  };
+  img.onerror = function(){ cb(null); };
+  img.src = src;
+}
+
+function loadHostByName(name, cb){
+  var candidates = findHostSrc(name);
+  var i = 0;
+  function tryNext(){
+    if(i >= candidates.length){ console.log('[hosts] all failed'); cb(null); return; }
+    var src = candidates[i++];
+    console.log('[hosts] trying:', src);
+    var img = new Image();
+    img.onload = function(){ console.log('[hosts] found:', src); cb(src, img); };
+    img.onerror = function(){ console.log('[hosts] not found:', src); tryNext(); };
+    img.src = src;
+  }
+  tryNext();
+}
+
+/* 給 popup 用：只掃指定主持人的資料夾（1~10張），不依賴 KNOWN_HOST_NAMES */
+function scanHostByName(name, cb){
+  var found = [];
+  var total = 10;
+  var remaining = total;
+  for(var i = 1; i <= total; i++){
+    (function(idx){
+      var candidates = [
+        'hosts/'+name+'/'+name+'-'+idx+'.png',
+        'hosts/'+name+'/'+name+'-'+idx+'.jpg',
+        'hosts/'+name+'-'+idx+'.png',
+        'hosts/'+name+'-'+idx+'.jpg'
+      ];
+      var j = 0;
+      function tryOne(){
+        if(j >= candidates.length){ if(--remaining === 0) cb(found); return; }
+        var src = candidates[j++];
+        var img = new Image();
+        img.onload = function(){ found.push({name:name+'-'+idx, src:src}); if(--remaining===0) cb(found); };
+        img.onerror = tryOne;
+        img.src = src;
+      }
+      tryOne();
+    })(i);
+  }
+}
+
+/* 給 popup 用：掃描已知清單，回傳存在的檔案 */
+function scanHostLibrary(cb){
+  var found = [];
+  var remaining = KNOWN_HOSTS.length;
+  KNOWN_HOSTS.forEach(function(name){
+    var baseName = name.replace(/[-_]\d+$/,'');
+    var candidates = [
+      'hosts/'+baseName+'/'+name+'.png',
+      'hosts/'+baseName+'/'+name+'.jpg',
+      'hosts/'+name+'.png',
+      'hosts/'+name+'.jpg'
+    ];
+    var j = 0;
+    function tryOne(){
+      if(j >= candidates.length){ if(--remaining === 0) cb(found); return; }
+      var src = candidates[j++];
+      var img = new Image();
+      img.onload = function(){ found.push({name:name, src:src}); if(--remaining===0) cb(found); };
+      img.onerror = tryOne;
+      img.src = src;
+    }
+    tryOne();
+  });
+  if(KNOWN_HOSTS.length === 0) cb([]);
+}
+
+function autoLoadHosts(){ /* no-op，改用 scanHostLibrary */ }
+
+/* ── Init ── */
+function initWhenReady(){
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      /* 從 js/index.js 讀版位清單，讓前後台只需改一個地方 */
+      window._bn_scan_cb = function(fileList){
+        var stored = null;
+        try{ stored = JSON.parse(localStorage.getItem(STORE_KEY)||'null'); }catch(e){}
+        var existingMap = {};
+        if(stored && stored.layouts) stored.layouts.forEach(function(l){ existingMap[l.file]=l; });
+
+        /* 優先用 DEFAULT_LAYOUTS 的尺寸，不依賴 iframe */
+        var defaultMap = {};
+        DEFAULT_LAYOUTS.forEach(function(d){ defaultMap[d.file] = d; });
+
+        var layouts = fileList.map(function(file){
+          if(existingMap[file]) return existingMap[file];
+          var d = defaultMap[file];
+          if(d) return { id:d.id, name:d.name, file:file, w:d.w, h:d.h, enabled:true, note:'' };
+          return { id:file.replace('.html',''), name:file.replace('.html',''), file:file, w:1200, h:630, enabled:true, note:'' };
+        });
+        localStorage.setItem(STORE_KEY, JSON.stringify({ layouts:layouts, version:99 }));
+        delete window._bn_scan_cb;
+        buildCanvasArea();
+        autoLoadHosts();
+      };
+
+      var old = document.getElementById('_idx_script');
+      if(old) old.remove();
+      var s = document.createElement('script');
+      s.id = '_idx_script';
+      s.src = 'js/index.js?t='+Date.now();
+      s.onerror = function(){
+        /* index.js 讀不到，用 DEFAULT_LAYOUTS */
+        delete window._bn_scan_cb;
+        buildCanvasArea();
+        autoLoadHosts();
+      };
+      document.head.appendChild(s);
+    });
+  });
+}
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", initWhenReady);
+} else {
+  initWhenReady();
+}
+buildThemeSelect();
+cc('txt-main','cc-sub',9);
+cc('txt-sub','cc-main',8);
+setTimeout(broadcast, 800); // 等 iframe 載入
+setTimeout(openImportModal, 400); // 自動開啟匯入視窗
+</script>
+
+<!-- ── ProgressModal ── -->
+<div id="pm-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.5);
+  display:none;align-items:center;justify-content:center;z-index:9999;
+  animation:pm-fadein .15s ease;">
+  <div style="background:var(--color-background-primary,#fff);border-radius:14px;
+    padding:1.75rem 2rem;width:360px;display:flex;flex-direction:column;gap:14px;
+    border:.5px solid var(--color-border-tertiary,#ddd);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg id="pm-spinner" width="18" height="18" viewBox="0 0 18 18" fill="none"
+        style="flex-shrink:0;animation:pm-spin .8s linear infinite;">
+        <circle cx="9" cy="9" r="7" stroke="#e5e5e5" stroke-width="2.5"/>
+        <path d="M9 2 A7 7 0 0 1 16 9" stroke="#F07020" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span id="pm-title" style="font-size:14px;font-weight:500;
+        color:var(--color-text-primary,#111);">匯出製作物</span>
+    </div>
+    <div id="pm-sub" style="font-size:12px;color:var(--color-text-secondary,#888);
+      min-height:16px;line-height:1.5;"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;height:6px;background:var(--color-border-tertiary,#eee);
+        border-radius:999px;overflow:hidden;">
+        <div id="pm-bar" style="height:100%;border-radius:999px;background:#F07020;
+          width:0%;transition:width .25s ease;"></div>
+      </div>
+      <span id="pm-pct" style="font-size:12px;font-weight:500;color:#F07020;
+        min-width:34px;text-align:right;font-variant-numeric:tabular-nums;">0%</span>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes pm-fadein{from{opacity:0}to{opacity:1}}
+@keyframes pm-spin{to{transform:rotate(360deg)}}
+</style>
+<script>
+/* ── ProgressModal API（可複用）──
+   pm.show(title?)   顯示彈窗
+   pm.update(pct, label)  更新進度 0-100
+   pm.done(label?)   跳到 100% 並停止旋轉
+   pm.hide()         200ms 後淡出隱藏
+*/
+var pm = (function(){
+  var bg    = document.getElementById('pm-bg');
+  var bar   = document.getElementById('pm-bar');
+  var pctEl = document.getElementById('pm-pct');
+  var subEl = document.getElementById('pm-sub');
+  var titleEl = document.getElementById('pm-title');
+  var spinner = document.getElementById('pm-spinner');
+  return {
+    show: function(title){
+      if(title) titleEl.textContent = title;
+      bar.style.width = '0%';
+      pctEl.textContent = '0%';
+      subEl.textContent = '';
+      spinner.style.animation = 'pm-spin .8s linear infinite';
+      bg.style.display = 'flex';
+    },
+    update: function(pct, label){
+      var p = Math.min(100, Math.max(0, Math.round(pct)));
+      bar.style.width = p + '%';
+      pctEl.textContent = p + '%';
+      if(label !== undefined) subEl.textContent = label;
+    },
+    done: function(label){
+      this.update(100, label || '完成！');
+      spinner.style.animation = 'none';
+    },
+    hide: function(){
+      setTimeout(function(){
+        bg.style.display = 'none';
+        bar.style.width = '0%';
+        pctEl.textContent = '0%';
+      }, 800);
+    }
+  };
+})();
+</script>
+</body>
+</html>

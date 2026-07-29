@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>04 IG</title>
+<style>:root{ --cw:900px; --ch:1600px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="900" height="1600"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/shadow-plugin.js"></script>
+<script src="../js/shadow-layout-defaults.js"></script>
+<script src="../js/shadow-scene-scale.js"></script>
+<script src="../js/shadow-layout-receiver.js"></script>
+
+<script src="../js/logo-row-defaults.js"></script>
+<script src="../js/host-scene-scale.js"></script>
+<script src="../js/mask-defaults.js"></script>
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 900, H = 1600;
+
+/* ── PSD 規格 ── */
+var ZONE = { x:0, y:712, w:900, h:888 }; // 作圖區
+var LOGO = { x:165, y: 273.5-7, w:570, h:105  }; // 高度原本 82.5，改成 105；y 再往上 7px
+var BAR  = { x:0,   y:1600-84, w:900, h:84  }; // 主持人色塊：改成貼底滿版、純色（不再是漸層淡出）
+var GAP  = 15; // logo 分隔線兩側間距
+var LOGO_RATIOS = getLogoRowRatios(); // logo1 高度 / 分隔線長度比例，來自 logo-row-defaults.js
+
+var cv      = document.getElementById('cv');
+var lcReceiver = ShadowLayoutReceiver.create(cv); // 陰影套件 receiver
+window.addEventListener('message', function(e){ lcReceiver.handleMessage(e.data, render); });
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* ── 高 DPR（Retina 畫質） ── */
+var DPR = 1;
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ── */
+var D = {
+  theme:'A', bg:null, bgUrl:null,
+  host:null, hostBounds:null, logo1:null, logo2:null, logo2Shape:null, ctaBtn:null, dateBadge:null,
+  main:'主標文案$9字內', sub:'副標文案$8字內',
+  date:'XX/XX', time:'19:00', brand:'XXX', guest:'', combo:null,
+  // 主標/副標/日期顏色唯一資料來源是 editor-state.js 的 BG_TEXT_DEF，這裡不重複寫死初始值，
+  // 一律等 editor 廣播進來；欄位命名跟顯示標籤是反的：cSub=主標/cMain=副標/cDate=日期
+  showCTA: false,  // IG 無 CTA
+  imgX: ZONE.x + ZONE.w/2,
+  imgY: ZONE.y + ZONE.h/2,
+  imgW: 0, imgH: 0,
+  imgScale: 1,
+  selected: false,
+  dragging: false, dragStartX:0, dragStartY:0, imgStartX:0, imgStartY:0,
+  resizing: false,
+  _lastHostSrc: null,
+  maskOn: false, // 底部遮罩總開關，由editor廣播控制，預設關閉
+};
+
+var BG_FALLBACK = { A:'#F5C842', B:'#F5A0C5', C:'#bee1f2' };
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  // 背景（先填白色防止透明 PNG 合成時殘留前一張顏色）
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,W,H);
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else { ctx.fillStyle=BG_FALLBACK[D.theme]||'#F5C842'; ctx.fillRect(0,0,W,H); }
+
+
+  // 作圖區：clip 讓圖不超出（但選取框在 overlay 上，不受影響）
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ZONE.x,ZONE.y,ZONE.w,ZONE.h);
+  ctx.clip();
+  if(D.host){
+    var dw=D.host.naturalWidth*D.imgScale;
+    var dh=D.host.naturalHeight*D.imgScale;
+    D.imgW=dw; D.imgH=dh;
+    ctx.drawImage(D.host, D.imgX-dw/2, D.imgY-dh/2, dw, dh);
+  }
+  ctx.restore();
+
+  lcReceiver.drawItems(ctx); // 商品/主持人 陰影套件疊層
+
+  drawMaskLayer(ctx); // 主持人身體太短時，補在最底部的裝飾色塊（蓋在主持人/商品圖層上面）
+
+  drawLogos();
+  drawText();
+  drawHostBar();
+  if(D.showCTA) drawCTA();
+
+  updateOverlay();
+}
+
+function drawLogos(){
+  var a = LOGO;
+
+  var lh1=0, lw1=0, lh2=0, lw2=0;
+  if(D.logo1 && D.logo1.naturalWidth){
+    lh1 = a.h * LOGO_RATIOS.logo1HeightRatio;
+    lw1 = D.logo1.naturalWidth * (lh1 / D.logo1.naturalHeight);
+  }
+  if(D.logo2 && D.logo2.naturalWidth){
+    lh2 = a.h * logo2HeightRatioFor(D.logo2Shape, LOGO_RATIOS);
+    lw2 = D.logo2.naturalWidth * (lh2 / D.logo2.naturalHeight);
+  }
+  // 沒有 logo2 時，不能把分隔線／logo2 預留的間距也算進去置中，不然 logo1 會偏移中心
+  var hasLogo2 = !!(D.logo2 && D.logo2.naturalWidth);
+  var totalW = hasLogo2 ? (lw1 + LOGO_RATIOS.gapBeforeDividerPx + LOGO_RATIOS.dividerLineWidthPx + LOGO_RATIOS.gapAfterDividerPx + lw2) : lw1;
+  var x = W/2 - totalW/2; // 畫布水平置中
+
+  if(D.logo1 && D.logo1.naturalWidth){
+    ctx.drawImage(D.logo1, x, a.y, lw1, lh1);
+    x += lw1;
+  }
+
+  if(!hasLogo2) return;
+
+  // 分隔線前後間距
+  x += LOGO_RATIOS.gapBeforeDividerPx;
+  var lineH = a.h * LOGO_RATIOS.dividerHeightRatio;
+  ctx.strokeStyle = '#b36e57'; ctx.lineWidth = LOGO_RATIOS.dividerLineWidthPx;
+  ctx.beginPath();
+  ctx.moveTo(x, a.y + (a.h - lineH)/2);
+  ctx.lineTo(x, a.y + (a.h + lineH)/2);
+  ctx.stroke();
+  x += LOGO_RATIOS.gapAfterDividerPx;
+
+  /* logo2：editor 的 Logo2 編輯面板已經把圓角/底色/位置合成好了，
+     這裡拿到的是現成的一張圖，跟 logo1 一樣直接畫，固定高度、寬度依比例算 */
+  ctx.drawImage(D.logo2, x, a.y + (a.h - lh2)/2, lw2, lh2); // 高度比 logo1 矮，垂直置中對齊
+}
+
+function drawText(){
+  var CX = W / 2;
+
+  /* ── 主標：53px Medium，置中，往下5px（原本382，+5＝387）── */
+  ctx.font = font(53, 500);
+  var mainAscent   = ctx.measureText('測').actualBoundingBoxAscent || 53 * 0.88;
+  var mainBaseline = 387 + mainAscent;
+
+  ctx.font = font(53, 500);
+  if(D.main){
+    ctx.fillStyle = D.cSub;
+    ctx.textAlign = 'center';
+    ctx.fillText(D.main, CX, mainBaseline);
+  }
+
+  /* ── 日期：改成獨立定位，不再接在主標後面 ──
+     設計稿原始位置：left:753.176, top:1070.69, font-size:50.673, textAlign:left；
+     後續調整：整組（日期文字＋date-badge裝飾圖）往上300px，再往上300px，再往下105px
+     （累計往上495px），靠近副標下方；date-badge 改成整體水平置中，跟著左移了多少，
+     日期文字的 left 也跟著位移一樣的量，維持兩者原本的相對位置關係。
+     顏色沿用 D.cDate（跟其他版位共用同一個色票來源），沒有照CSS那組數字硬套顏色。 */
+  var dateStr = D.date + ' ' + D.time;
+  var dateFs  = 50.673;
+  ctx.font = font(dateFs, 400);
+  var dateAscent = ctx.measureText('測').actualBoundingBoxAscent || dateFs * 0.88;
+
+  var badgeW = 464, badgeH = 60;
+  var badgeLeftOrig = 554, badgeTopOrig = 1071;
+  var badgeLeft = (W - badgeW) / 2; // 置中
+  var badgeTop  = badgeTopOrig - 495;
+  var shiftX    = badgeLeft - badgeLeftOrig; // badge 置中後左移/右移的量，日期文字同步位移
+
+  var dateLeft     = 753.176 + shiftX - 3 - 5 - 3; // 再往左3px（累計11px，跟date-badge脫鉤）
+  var dateTop      = 1070.69 - 495 + 2 + 2 + 5 - 2 + 1 - 1 - 1; // 再往上1px（累計往下6px，跟date-badge脫鉤）
+  var dateBaseline = dateTop + dateAscent;
+
+  /* 日期下面的裝飾圖（時間樣式），跟日期文字幾乎同一個位置，所以先畫在日期文字底下 */
+  if(D.dateBadge && D.dateBadge.naturalWidth){
+    ctx.drawImage(D.dateBadge, badgeLeft, badgeTop, badgeW, badgeH);
+  }
+
+  ctx.fillStyle = D.cDate;
+  ctx.textAlign = 'left';
+  ctx.fillText(dateStr, dateLeft, dateBaseline);
+
+  /* ── 副標：99px Bold，置中，往下5px（原本454，+5＝459），letterSpacing -20px ── */
+  ctx.font = font(99, 700);
+  var subAscent   = ctx.measureText('測').actualBoundingBoxAscent || 99 * 0.88;
+  var subBaseline = 459 + subAscent;
+  if(D.sub){
+    ctx.fillStyle = D.cMain;
+    ctx.textAlign = 'center';
+    ctx.letterSpacing = '-2px';
+    ctx.fillText(D.sub, CX, subBaseline);
+    ctx.letterSpacing = '0px';
+  }
+
+  ctx.textAlign = 'left';
+}
+
+function drawHostBar(){
+  var b=BAR;
+  var barColor = '#dd447d';
+
+  ctx.fillStyle = barColor;
+  ctx.fillRect(b.x, b.y, b.w, b.h);
+
+  // 文字：主持人 | 人名，整體置中，白色（原本深藍 #1f305d）
+  // 有來賓時：來賓 | 來賓名稱 [兩個空格寬] 主持人 | 主持人名稱
+  var fs = 40; // 原本38，+2pt
+  ctx.font = font(fs, 500);
+  ctx.fillStyle = '#FFFFFF';
+
+  var wLine  = 1;
+  var GAP15  = 8;
+  var GAPGRP = ctx.measureText('  ').width; // 群組之間的間距＝兩個全形空白寬
+
+  function measureGroup(label, name){
+    return ctx.measureText(label).width + GAP15 + wLine + GAP15 + ctx.measureText(name).width;
+  }
+
+  var groups = [];
+  groups.push({ label:'主持人', name: D.brand || 'XXX' });
+  if(D.guest){ groups.push({ label:'來賓', name: D.guest }); }
+
+  var totalW = 0;
+  groups.forEach(function(g, i){
+    totalW += measureGroup(g.label, g.name);
+    if(i < groups.length-1) totalW += GAPGRP;
+  });
+
+  var startX  = b.x + b.w/2 - totalW/2;
+  var baseline = b.y + b.h/2 + fs * 0.35;
+
+  ctx.textAlign = 'left';
+  var cx = startX;
+  groups.forEach(function(g, i){
+    var wLabel = ctx.measureText(g.label).width;
+    var wName  = ctx.measureText(g.name).width;
+    ctx.fillText(g.label, cx, baseline);
+    cx += wLabel + GAP15;
+
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, b.y + 12);
+    ctx.lineTo(cx, b.y + b.h - 12);
+    ctx.stroke();
+    cx += wLine + GAP15;
+
+    ctx.fillText(g.name, cx, baseline);
+    cx += wName;
+    if(i < groups.length-1) cx += GAPGRP;
+  });
+  ctx.textAlign = 'left';
+}
+
+function drawCTA(){
+  // CTA 規格：x=54, y=253, w=217, h=67
+  var bx=54, by=253, bw=217, bh=67;
+  if(D.ctaBtn && D.ctaBtn.naturalWidth){
+    ctx.drawImage(D.ctaBtn, bx, by, bw, bh);
+  } else {
+    // fallback：手動繪製
+    var r=bh/2;
+    ctx.beginPath();
+    ctx.moveTo(bx+r,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,r);
+    ctx.arcTo(bx+bw,by+bh,bx,by+bh,r); ctx.arcTo(bx,by+bh,bx,by,r);
+    ctx.arcTo(bx,by,bx+bw,by,r); ctx.closePath();
+    ctx.fillStyle='#EE4D2D'; ctx.fill();
+    ctx.font=font(22,700); ctx.fillStyle='white'; ctx.textAlign='center';
+    ctx.fillText('⊙ 立即看', bx+bw/2, by+bh/2+8);
+    ctx.textAlign='left';
+  }
+}
+
+/* ── Overlay：選取框 + handles + 懸浮 bar ── */
+function initHostPos(){
+  D.hostBounds = calcTightBounds(D.host);
+  if(D.hostBounds){
+    /* 有色部分填滿作圖區，再放大 20% */
+    var scH = ZONE.h / D.hostBounds.h;
+    var scW = ZONE.w / D.hostBounds.w;
+    D.imgScale = Math.min(scH, scW) * 1.2;
+    D.imgScale *= getHostSceneScale(D.combo); // 這個版位「主持人圖層」預設縮放（host-scene-scale.js），不影響使用者後續手動調整
+    var dw = D.host.naturalWidth  * D.imgScale;
+    var dh = D.host.naturalHeight * D.imgScale;
+    /* 水平：有色中心對齊作圖區水平中心 */
+    var bcX = D.hostBounds.x * D.imgScale + D.hostBounds.w * D.imgScale / 2;
+    D.imgX = ZONE.x + ZONE.w/2 - bcX + dw/2;
+    /* 垂直：有色頂部對齊作圖區頂部（頭部不被遮擋） */
+    var boundsTop = D.hostBounds.y * D.imgScale;
+    D.imgY = ZONE.y - boundsTop + dh/2;
+    D.imgY += getHostSceneOffsetY(D.combo); // 這個版位「主持人圖層」預設Y偏移（host-scene-scale.js），不影響使用者後續手動調整
+  } else {
+    /* 無 bounds 退回 cover */
+    D.imgX = ZONE.x + ZONE.w/2;
+    D.imgY = ZONE.y + ZONE.h/2;
+    D.imgY += getHostSceneOffsetY(D.combo); // 這個版位「主持人圖層」預設Y偏移（host-scene-scale.js），不影響使用者後續手動調整
+    D.imgScale = Math.max(ZONE.w/D.host.naturalWidth, ZONE.h/D.host.naturalHeight);
+    D.imgScale *= getHostSceneScale(D.combo); // 這個版位「主持人圖層」預設縮放（host-scene-scale.js），不影響使用者後續手動調整
+  }
+}
+
+/* ── postMessage ── */
+window.addEventListener('message',function(e){
+  var msg=e.data;
+  
+  /* 狀態儲存/恢復 */
+  if(msg && msg.type==='BN_RESTORE_STATE'){
+    var st = msg.state || {};
+    if(st.imgX!==undefined) D.imgX = st.imgX;
+    if(st.imgY!==undefined) D.imgY = st.imgY;
+    if(st.imgScale!==undefined) D.imgScale = st.imgScale;
+    render(); updateOverlay();
+    return;
+  }
+
+if(!msg||msg.type!=='BN_UPDATE') return;
+  var p=msg.payload;
+
+  if(p.theme!==undefined) D.theme=p.theme;
+  if(p.main!==undefined)  D.main=p.main;
+  if(p.sub!==undefined)   D.sub=p.sub;
+  if(p.date!==undefined)  D.date=p.date;
+  if(p.time!==undefined)  D.time=p.time;
+  if(p.brand!==undefined) D.brand=p.brand;
+  if(p.combo!==undefined) D.combo=p.combo;
+  if(p.guest!==undefined) D.guest=p.guest;
+  if(p.cSub!==undefined)  D.cSub=p.cSub;
+  if(p.cMain!==undefined) D.cMain=p.cMain;
+  if(p.cDate!==undefined) D.cDate=p.cDate;
+  if(p.showCTA!==undefined) D.showCTA=p.showCTA;
+  if(p.maskOn!==undefined) D.maskOn=p.maskOn;
+  /* bgBase 是資料夾路徑，自己補上版位檔名 */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '04_ig.jpg' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null); /* 向下相容 */
+  }
+
+  var pending=0;
+  function dec(){ if(--pending<=0) render(); }
+
+  if(p.host!==undefined){ pending++;
+    var isNew=!D.host||(p.host!==D._lastHostSrc&&!p.keepPos);
+    loadImg(p.host,function(img){
+      D.host=img;
+      if(img&&isNew){
+        D._lastHostSrc=p.host;
+        initHostPos(); D.selected=false; // initHostPos 內已呼叫 calcTightBounds
+      }
+      else if(img){ D._lastHostSrc=p.host; }
+      dec();
+    });
+  }
+  /* logo1 目前仍維持預設內建、忽略外部傳入；
+     logo2 改為可被 editor 上傳的圖覆蓋（沒有上傳時維持預設圖）——
+     editor 的 Logo2 面板已經把圓角/底色/位置都合成好了，這裡收到的是
+     一張現成的圖，當一般圖片載入即可，不用再呼叫 Logo2Plugin */
+  if(p.logo2Shape!==undefined) D.logo2Shape = p.logo2Shape; // 'square' 或 'wide'，決定 logo2 高度比例
+  if(p.logo2!==undefined && p.logo2){ pending++;
+    loadImg(p.logo2, function(img){ D.logo2=img; dec(); });
+  }
+  if(pending===0) render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+function snapBlob(fmt, q, cb){
+  var ws = D.selected; D.selected = false; render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+}
+
+window.BNExport = {
+  /* 單張輸出（目前狀態） */
+  getBlob: function(fmt, q, cb){ snapBlob(fmt, q, cb); },
+
+  /* 輸出兩張：有CTA + 無CTA */
+  getBothBlobs: function(fmt, q, cb){
+    var origCTA = D.showCTA;
+    /* 第一張：有CTA */
+    D.showCTA = true; render();
+    exportBlob(fmt, q, function(blobWith){
+      D.showCTA = false; render();
+      exportBlob(fmt, q, function(blobWithout){
+        D.showCTA = origCTA; render();
+        cb(blobWith, blobWithout);
+      });
+    });
+  },
+
+  spec:{id:'04_ig', name:'IG', width:W, height:H, hasCTAVariant:false}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done=0;
+  function tick(){ if(++done>=3) cb(); }
+  var i1=new Image();
+  i1.onload=function(){ D.logo1=i1; tick(); };
+  i1.onerror=tick;
+  i1.src='../logos/logo_shopee_live.png';
+  var i2=new Image();
+  i2.onload=function(){ D.logo2=i2; tick(); };
+  i2.onerror=tick;
+  i2.src='../logos/logo_star_studio.png';
+  var i3=new Image();
+  i3.onload=function(){ D.dateBadge=i3; tick(); };
+  i3.onerror=tick;
+  i3.src='../logos/ig-date-badge.png'; // 日期旁的新裝飾圖（原本這個位置是IG無CTA的空佔位，改成載入這張）
+}
+
+/* 明確等待三個字重都載入 */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  loadDefaultLogos(function(){
+    render();
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_READY',id:'04_ig'},'*');
+      window.parent.postMessage({type:'LC_READY'},'*');
+    }
+  });
+});
+</script>
+</body>
+</html>

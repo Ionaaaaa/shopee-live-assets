@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ENG LIVE BAU &amp; 快閃日 編輯器</title>
+<style>
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+
+*,*::before,*::after { box-sizing:border-box;margin:0;padding:0; }
+:root {
+  --bg:#1a1a1a; --sidebar:#242424; --surface:#383838; --border:#383838;
+  --border2:#444; --text:#f0f0f0; --text-muted:#999; --text-dim:#666;
+  --accent:#EE4D2D; --accent-dim:rgba(238,77,45,0.12); --success:#3d9970;
+  --bau:#EDA500; --bau-dim:rgba(237,165,0,0.12);
+  --flash:#E6402A; --flash-dim:rgba(230,64,42,0.12);
+  --radius:15px; --panel:#303030;
+}
+html,body { height:100%;overflow:hidden; }
+body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);font-size:13px; }
+
+/* Topbar */
+.topbar {
+  height:44px;background:var(--sidebar);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px 0 20px;position:fixed;top:0;left:0;right:0;z-index:200;
+}
+.topbar-left { display:flex;align-items:center;gap:10px; }
+.topbar-logo { width:20px;height:20px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center; }
+.topbar-logo svg { width:12px;height:12px;fill:white; }
+.topbar-title { font-size:13px;font-weight:600; }
+.topbar-badge { font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:3px;letter-spacing:.5px; }
+.topbar-right { display:flex;align-items:center;gap:8px; }
+.tbtn {
+  height:28px;padding:0 12px;border-radius:var(--radius);border:1px solid var(--border2);
+  background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;text-decoration:none;
+}
+.tbtn:hover { color:var(--text);background:#2e2e2e; }
+.tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
+.tbtn.primary:hover { background:#d4442a; }
+.tbtn svg { width:13px;height:13px;flex-shrink:0; }
+input[type="file"] { display:none; }
+
+/* Layout */
+.layout { display:grid;grid-template-columns:220px 1fr 300px;height:calc(100vh - 44px);margin-top:44px; }
+
+/* Sidebar */
+.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
+.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
+
+/* Section group */
+.sg { margin-bottom:0;border-bottom:1px solid var(--border); }
+.sg:last-child { border-bottom:none; }
+.sg-label { font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;padding:14px 16px 6px; }
+.sg-body { padding:0 12px 12px; }
+
+/* Tab type indicator */
+.tab-type-badge {
+  display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;
+  font-size:11px;font-weight:700;letter-spacing:.5px;margin:10px 12px 0;
+}
+.tab-type-badge.bau { background:var(--bau-dim);color:var(--bau);border:1px solid rgba(237,165,0,.3); }
+.tab-type-badge.flash { background:var(--flash-dim);color:var(--flash);border:1px solid rgba(230,64,42,.3); }
+
+/* Fields */
+.field { margin-bottom:10px; }
+.field-label { display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:4px; }
+.cc { font-size:10px;color:var(--text-dim);font-variant-numeric:tabular-nums; }
+.cc.over { color:var(--accent); }
+.fi { width:100%;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;font-family:inherit;transition:border-color .15s;-webkit-appearance:none; }
+.fi::placeholder { color:var(--text-dim); }
+.fi:focus { outline:none;border-color:#555;box-shadow:0 0 0 3px rgba(255,255,255,.04); }
+.fi-row { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
+
+/* Coupon field — highlighted */
+.coupon-field .fi {
+  border-color:rgba(238,77,45,.35);background:rgba(238,77,45,.06);
+  font-size:14px;font-weight:700;text-align:center;letter-spacing:.5px;
+}
+.coupon-field .fi:focus { border-color:var(--accent); }
+.coupon-label-tag {
+  display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;
+  background:rgba(238,77,45,.15);color:var(--accent);margin-left:4px;
+}
+
+/* Skin sub section */
+.skin-section {
+  border-top:1px solid var(--border);margin-top:4px;
+}
+.skin-section-header {
+  padding:12px 16px 6px;display:flex;align-items:center;gap:8px;
+}
+.skin-section-title { font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase; }
+.skin-badge {
+  padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;
+  background:rgba(100,160,255,.15);color:#7ab0ff;border:1px solid rgba(100,160,255,.25);
+}
+.skin-desc { font-size:10px;color:var(--text-dim);padding:0 16px 8px;line-height:1.5; }
+
+/* Download bar */
+#bn-download-bar { padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0; }
+.dl-btn { width:100%;padding:9px;background:var(--accent);border:none;border-radius:var(--radius);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;font-family:inherit; }
+.dl-btn:hover { background:#d4442a; }
+
+/* Canvas area */
+.canvas-area { background:var(--bg);overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:28px 36px;gap:28px;scrollbar-width:none; }
+.canvas-area::-webkit-scrollbar { display:none; }
+.canvas-wrapper { display:flex;flex-direction:column;flex:1;overflow:hidden; }
+
+/* Nav bar */
+.canvas-nav {
+  height:48px;background:var(--panel);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:4px;padding:0 16px;flex-shrink:0;
+  overflow-x:auto;scrollbar-width:none;
+}
+.canvas-nav::-webkit-scrollbar { display:none; }
+.nav-btn {
+  height:32px;padding:0 16px;border-radius:var(--radius);
+  border:1.5px solid transparent;background:transparent;
+  color:var(--text-muted);font-size:12px;font-weight:500;
+  cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;
+}
+.nav-btn:hover { color:var(--text);background:var(--surface); }
+.nav-btn.active.bau { border-color:var(--bau);color:var(--bau);background:var(--bau-dim);font-weight:700; }
+.nav-btn.active.flash { border-color:var(--flash);color:var(--flash);background:var(--flash-dim);font-weight:700; }
+.nav-btn.active { border-color:var(--accent);color:var(--accent);background:var(--accent-dim);font-weight:600; }
+
+.canvas-block { width:100%;max-width:1200px; }
+.canvas-meta { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
+.canvas-name { font-size:12px;font-weight:600;color:var(--text); }
+.canvas-size { font-size:11px;color:var(--text-dim); }
+.canvas-dl-btn { margin-left:auto;height:22px;padding:0 10px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all .15s; }
+.canvas-dl-btn:hover { color:var(--accent);border-color:var(--accent); }
+.canvas-ref-btn { font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);cursor:pointer;color:var(--text-muted);background:var(--surface);transition:all .15s;white-space:nowrap; }
+.canvas-ref-btn:hover { border-color:#888;color:var(--text); }
+
+/* iframe wrapper */
+.iframe-wrap {
+  position:relative;border-radius:0;overflow:hidden;
+  box-shadow:0 0 0 1px var(--border),0 8px 32px rgba(0,0,0,.5);
+  background:#fff;
+}
+.iframe-wrap iframe { display:block;border:none;transform-origin:top left; }
+
+/* Asset list */
+.asset-list { padding:8px 0; }
+.asset-item { display:flex;align-items:center;gap:10px;padding:8px 16px;transition:background .12s;cursor:pointer; }
+.asset-item:hover { background:var(--surface); }
+.asset-item.active { background:var(--surface);border-left:2px solid var(--accent); }
+.asset-icon { width:32px;height:32px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.asset-icon svg { width:14px;height:14px;stroke:var(--text-muted);fill:none;stroke-width:1.5; }
+.asset-info { flex:1;min-width:0; }
+.asset-name { font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.asset-meta { font-size:10px;color:var(--text-dim);margin-top:1px; }
+.asset-dl { height:22px;padding:0 8px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);font-size:11px;cursor:pointer;transition:all .15s;flex-shrink:0; }
+.asset-dl:hover { color:var(--accent);border-color:var(--accent); }
+.panel-section { padding:12px 16px 6px;font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border); }
+
+/* Popup */
+.popup-overlay { position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:300; }
+.popup-overlay.open { display:flex; }
+.popup-panel { width:min(90vw,480px);background:var(--sidebar);border:1px solid var(--border2);border-radius:15px;box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;max-height:80vh;display:flex;flex-direction:column; }
+.popup-header { padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0; }
+.popup-title { font-size:13px;font-weight:600;color:var(--text); }
+.popup-close { background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:20px;line-height:1;padding:0; }
+.popup-close:hover { color:var(--text); }
+
+/* Toast */
+.toast { position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 16px;font-size:12px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:9999;opacity:0;transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none; }
+.toast.show { opacity:1;transform:translateY(0); }
+.toast.ok { border-left:3px solid var(--success); }
+.toast.err { border-left:3px solid var(--accent); }
+
+/* Divider */
+.field-divider { height:1px;background:var(--border);margin:8px 0 12px; }
+
+/* Overimit popup */
+.popup-box { width:380px;max-width:90vw;background:var(--sidebar);border:1px solid var(--border2);border-radius:15px;overflow:hidden; }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo"><svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg></div>
+    <span class="topbar-title">ENG LIVE</span>
+    <span class="topbar-badge">BAU &amp; 快閃日 v1</span>
+  </div>
+  <div class="topbar-right">
+    <input type="file" id="importExcelFile" accept=".xlsx">
+    <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
+    </button>
+    <input type="file" id="loadFile" accept=".json">
+    <button class="tbtn" onclick="document.getElementById('loadFile').click()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+    </button>
+    <button class="tbtn" id="btn-save">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
+    </button>
+    <button class="tbtn primary" onclick="downloadAll()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>整包下載
+    </button>
+    <button class="tbtn" onclick="resetLayouts()" style="border-color:#e74c3c;color:#e74c3c;" title="清除版位快取並重新載入">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8a6 6 0 1 0 1.5-4M2 4v4h4"/></svg>重設版位
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- 左側：素材清單 -->
+  <div class="sidebar" id="sidebar">
+    <div class="panel-section">素材清單</div>
+    <div id="asset-list-body" style="flex:1;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;">
+      <div style="padding:20px 16px;font-size:12px;color:var(--text-dim);text-align:center;">載入中...</div>
+    </div>
+  </div>
+
+  <!-- 中央：分頁 bar + 畫布區 -->
+  <div class="canvas-wrapper">
+    <div class="canvas-nav" id="canvas-nav">
+      <div id="nav-placeholder" style="display:flex;align-items:center;gap:8px;width:100%;">
+        <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;height:28px;padding:0 12px;">＋ 匯入工單</button>
+        <span style="font-size:12px;color:var(--text-dim);">匯入 Excel 工單，自動建立 BAU / 快閃日分頁</span>
+      </div>
+    </div>
+    <div class="canvas-area" id="canvas-area"></div>
+  </div>
+
+  <!-- 右側：控制面板 -->
+  <div class="right-panel" id="right-panel">
+    <div id="sidebar-scroll" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent;">
+
+      <!-- 分頁類型標記 -->
+      <div id="tab-type-wrap" style="padding:8px 12px 0;">
+        <div id="tab-type-badge" class="tab-type-badge bau" style="display:none;"></div>
+      </div>
+
+      <!-- ── 一般文案 ── -->
+      <div class="sg">
+        <div class="sg-label">一般文案</div>
+        <div class="sg-body">
+          <div class="field">
+            <div class="field-label"><span>主標</span><span class="cc" id="cc-main">0 / 9</span></div>
+            <input class="fi" id="txt-main" type="text" placeholder="主標文案" oninput="ccAuto('txt-main','cc-main',9);broadcast()">
+          </div>
+          <div class="field">
+            <div class="field-label"><span>副標</span><span class="cc" id="cc-sub">0 / 8</span></div>
+            <input class="fi" id="txt-sub" type="text" placeholder="副標文案" oninput="ccAuto('txt-sub','cc-sub',8);broadcast()">
+          </div>
+          <div class="field">
+            <div class="field-label"><span>日期</span></div>
+            <input class="fi" id="txt-date" type="text" placeholder="今日限定 / 6/24…" oninput="broadcast()">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 券樣 ── -->
+      <div class="sg">
+        <div class="sg-label">券樣文案</div>
+        <div class="sg-body">
+          <!-- 券樣 1（BAU & 快閃日 都有） -->
+          <div class="field coupon-field" id="coupon1-wrap">
+            <div class="field-label"><span>券樣 1</span></div>
+            <input class="fi" id="txt-coupon1" type="text" placeholder="例：$500、5折券" oninput="broadcast()">
+          </div>
+          <!-- 券樣 2（快閃日才顯示） -->
+          <div class="field coupon-field" id="coupon2-wrap" style="display:none;">
+            <div class="field-label"><span>券樣 2</span></div>
+            <input class="fi" id="txt-coupon2" type="text" placeholder="例：$40、8折券" oninput="broadcast()">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Skin 副標（特殊版位）── -->
+      <div class="skin-section">
+        <div class="skin-section-header">
+          <span class="skin-section-title">Skin 副標</span>
+          <span class="skin-badge">No.01 &amp; No.02</span>
+        </div>
+        <div class="skin-desc">僅 Skinny_PC / Skinny_APP 使用，<br>只顯示 Logo + 此文案。</div>
+        <div class="sg-body">
+          <div class="field">
+            <div class="field-label"><span>Skin 副標文案</span><span class="cc" id="cc-skin">0 / 6</span></div>
+            <input class="fi" id="txt-skin-sub" type="text" placeholder="例：領5%蝦幣回饋" oninput="ccAuto('txt-skin-sub','cc-skin',6);broadcast()">
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+
+    <!-- 下載按鈕 -->
+    <div id="bn-download-bar">
+      <button class="dl-btn" onclick="downloadPage()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px;"><path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+        整頁下載
+      </button>
+    </div>
+  </div><!-- /right-panel -->
+</div><!-- /layout -->
+
+<!-- 匯入工單 Popup -->
+<div class="popup-overlay" id="popup-import">
+  <div class="popup-panel">
+    <div class="popup-header">
+      <span class="popup-title">匯入 Excel 工單</span>
+      <button class="popup-close" onclick="closePopup('import')">×</button>
+    </div>
+    <div style="padding:24px;display:flex;flex-direction:column;gap:12px;">
+      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;"
+        onclick="document.getElementById('importExcelFile').click()"
+        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+        <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:10px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式 ・ 自動建立 BAU / 快閃日兩個分頁</div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.7;padding:0 4px;">
+        工單格式說明：<br>
+        ・使用 <b style="color:var(--text-muted);">BAU + 快閃日 KV</b> 分頁<br>
+        ・從表格的版位欄位中讀取 BAU 和快閃日的各版文案<br>
+        ・券樣數字會自動填入券樣1／券樣2
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 字數超限警告 popup -->
+<div class="popup-overlay" id="popup-overlimit">
+  <div class="popup-box">
+    <div class="popup-header" style="background:rgba(255,255,255,0.07);">
+      <span style="color:var(--accent);">⚠ 文案提醒</span>
+      <button class="popup-close" onclick="document.getElementById('popup-overlimit').classList.remove('open')">✕</button>
+    </div>
+    <div style="padding:20px 16px;background:rgba(0,0,0,0.45);">
+      <div id="overlimit-msg" style="font-size:13px;color:#fff;line-height:1.8;margin-bottom:20px;"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="dl-btn" onclick="document.getElementById('popup-overlimit').classList.remove('open')" style="font-size:13px;">✏ 返回編輯</button>
+        <button onclick="_overlimitContinue()" style="background:none;border:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:6px;text-decoration:underline;font-family:inherit;">忽略，繼續下載</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast-el"></div>
+
+<!-- JSZip + SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<script>
+'use strict';
+
+/* ── 重設版位快取 ── */
+function resetLayouts(){
+  if(!confirm('清除版位快取並重新載入？\n（版位啟用設定會回復為程式預設值）')) return;
+  localStorage.removeItem('bn_admin_eng_live_v1');
+  location.reload();
+}
+
+/* ── Toast ── */
+function toast(msg,type,duration){
+  var el=document.getElementById('toast-el');
+  el.textContent=msg; el.className='toast '+(type||'')+' show';
+  clearTimeout(el._t); el._t=setTimeout(function(){el.classList.remove('show');},duration||2500);
+}
+window.showToast=toast;
+
+/* ── State ── */
+// tabType: 'bau' | 'flash'
+var S = {
+  tabType: 'bau', // 目前分頁類型
+  bgUrls: {
+    bau:   '../backgrounds/bau/',
+    flash: '../backgrounds/flash-sale/'
+  }
+};
+
+/* ── 版位清單 ── */
+var STORE_KEY = 'bn_admin_eng_live_v1';
+var DEFAULT_LAYOUTS = [
+  { id:'01_skinny_pc',    name:'Skinny_PC',   file:'01_skinny_pc.html',    w:400,  h:110,  enabled:true },
+  { id:'02_skinny_app',   name:'Skinny_APP',  file:'02_skinny_app.html',   w:358,  h:360,  enabled:true },
+  { id:'03_c2c_bn',       name:'C2C BN_360',  file:'03_c2c_bn.html',       w:1200, h:360,  enabled:true  },
+  { id:'04_c2c_popup',    name:'C2C Popup',   file:'04_c2c_popup.html',    w:580,  h:720,  enabled:true  },
+  { id:'05_c2c_dd',       name:'C2C DD Card', file:'05_c2c_dd_card.html',  w:531,  h:792,  enabled:true  },
+  { id:'06_live_hall_bn', name:'直播大廳 BN', file:'06_live_hall_bn.html', w:1125, h:360,  enabled:true  },
+  { id:'07_live_popup',   name:'直播 Popup',  file:'07_live_popup.html',   w:870,  h:1160, enabled:true  },
+  { id:'08_coin_bn',      name:'Coin BN',     file:'08_coin_bn.html',      w:1200, h:391,  enabled:true },
+  { id:'09_game_header',  name:'Game 頭巾',   file:'09_game_header.html',  w:1200, h:140,  enabled:true },
+  { id:'10_game_bn',      name:'Game BN',     file:'10_game_bn.html',      w:1200, h:380,  enabled:true },
+  { id:'11_lpbn_app',     name:'LPBN_APP',    file:'11_lpbn_app.html',     w:1200, h:550,  enabled:true },
+  { id:'12_lpbn_pc',      name:'LPBN_PC',     file:'12_lpbn_pc.html',      w:1200, h:400,  enabled:true },
+];
+var DEFAULT_LAYOUTS_VERSION = 10;
+
+function getLayouts(){
+  try{
+    var stored = JSON.parse(localStorage.getItem(STORE_KEY)||'null');
+    if(stored && stored.layouts && stored.layouts.length){
+      if(stored.version !== DEFAULT_LAYOUTS_VERSION){
+        var existingMap = {};
+        stored.layouts.forEach(function(l){ existingMap[l.id]=l; });
+        var merged = DEFAULT_LAYOUTS.map(function(d){ return existingMap[d.id]||d; });
+        localStorage.setItem(STORE_KEY, JSON.stringify({layouts:merged,version:DEFAULT_LAYOUTS_VERSION}));
+        return merged.filter(function(l){ return l.enabled; });
+      }
+      return stored.layouts.filter(function(l){ return l.enabled; });
+    }
+  }catch(e){}
+  localStorage.setItem(STORE_KEY, JSON.stringify({layouts:DEFAULT_LAYOUTS,version:DEFAULT_LAYOUTS_VERSION}));
+  return DEFAULT_LAYOUTS.filter(function(l){ return l.enabled; });
+}
+
+var LAYOUTS = getLayouts();
+
+/* ── 分頁系統 ── */
+// 每個 tab: { id, label, type:'bau'|'flash', data:{} }
+var TABS = [{ id:'tab-bau', label:'BAU', type:'bau', data:{} }];
+var ACTIVE_TAB = 0;
+var IMPORTED_MONTH = ''; // 從工單 H19 擷取的月份字串，如「5月」
+
+function buildTabs(tabs){
+  TABS = tabs;
+  ACTIVE_TAB = 0;
+  renderTabBar();
+  setTimeout(function(){ applyTabData(TABS[0], false); }, 600);
+}
+
+function renderTabBar(){
+  var nav = document.getElementById('canvas-nav');
+  if(!nav) return;
+  var placeholder = document.getElementById('nav-placeholder');
+  if(placeholder) placeholder.style.display = 'none';
+  nav.innerHTML = TABS.map(function(tab,i){
+    var cls = 'nav-btn' + (i===ACTIVE_TAB?' active ':' ') + (tab.type||'bau');
+    return '<button class="'+cls+'" onclick="switchTab('+i+')">'+tab.label+'</button>';
+  }).join('');
+}
+
+function switchTab(i){
+  saveCurrentTabState(function(){
+    ACTIVE_TAB = i;
+    renderTabBar();
+    applyTabData(TABS[i], false);
+  });
+}
+
+function saveCurrentTabState(cb){
+  var tab = TABS[ACTIVE_TAB];
+  if(!tab){ if(cb) cb(); return; }
+  tab.data = tab.data || {};
+  tab.data.main     = v('txt-main');
+  tab.data.sub      = v('txt-sub');
+  tab.data.date     = v('txt-date');
+  tab.data.coupon1  = v('txt-coupon1');
+  tab.data.coupon2  = v('txt-coupon2');
+  tab.data.skinSub  = v('txt-skin-sub');
+  if(cb) cb();
+}
+
+function applyTabData(tab, _unused){
+  var d = tab.data || {};
+  var type = tab.type || 'bau';
+  S.tabType = type;
+
+  // 更新分頁類型標記
+  var badge = document.getElementById('tab-type-badge');
+  if(badge){
+    badge.style.display = '';
+    if(type === 'bau'){
+      badge.className = 'tab-type-badge bau';
+      badge.textContent = '● BAU 常態版';
+    } else {
+      badge.className = 'tab-type-badge flash';
+      badge.textContent = '● 快閃日';
+    }
+  }
+
+  // 券樣2只在快閃日顯示
+  var c2wrap = document.getElementById('coupon2-wrap');
+  if(c2wrap) c2wrap.style.display = (type === 'flash') ? '' : 'none';
+
+  // 填入欄位
+  function set(id,val){ var el=document.getElementById(id); if(el) el.value=(val||''); }
+  set('txt-main',    d.main);
+  set('txt-sub',     d.sub);
+  set('txt-date',    d.date);
+  set('txt-coupon1', d.coupon1);
+  set('txt-coupon2', d.coupon2);
+  set('txt-skin-sub',d.skinSub);
+
+  broadcast();
+}
+
+var iframes = {};
+
+/* ── 建立畫布 ── */
+function buildCanvasArea(){
+  var area = document.getElementById('canvas-area');
+  area.innerHTML = '';
+  iframes = {};
+  LAYOUTS.forEach(function(layout){
+    var block = document.createElement('div');
+    block.className = 'canvas-block';
+    block.id = 'canvas-block-'+layout.id;
+
+    var areaW = area.getBoundingClientRect().width || (window.innerWidth - 520);
+    var padding = 72;
+    var scaleByW = Math.min(1, (areaW - padding) / layout.w);
+    var availH = window.innerHeight - 44 - 48 - 36 - 56;
+    var scaleByH = Math.min(1, availH / layout.h);
+    var scale = Math.min(scaleByW, scaleByH);
+
+    block.innerHTML =
+      '<div class="canvas-meta">'+
+        '<span class="canvas-name">'+layout.name+'</span>'+
+        '<span class="canvas-size">'+layout.w+' × '+layout.h+' px</span>'+
+        '<label class="canvas-ref-btn" title="上傳參考圖（不輸出）">🖼 參考層'+
+          '<input type="file" accept="image/*" style="display:none" onchange="setRefLayer(\''+layout.id+'\',this)">'+
+        '</label>'+
+        '<button class="canvas-dl-btn" onclick="downloadSingle(\''+layout.id+'\')">⬇ 下載</button>'+
+      '</div>'+
+      '<div class="iframe-wrap" id="wrap-'+layout.id+'" style="position:relative;">'+
+        '<img id="ref-'+layout.id+'" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none;z-index:999;" />'+
+      '</div>';
+
+    area.appendChild(block);
+
+    var wrap = block.querySelector('#wrap-'+layout.id);
+    var iframe = document.createElement('iframe');
+    iframe.src = 'layouts/'+layout.file;
+    iframe.style.width  = layout.w+'px';
+    iframe.style.height = layout.h+'px';
+    iframe.style.transform = 'scale('+scale+')';
+    iframe.style.transformOrigin = 'top left';
+    wrap.style.width  = (layout.w*scale)+'px';
+    wrap.style.height = (layout.h*scale)+'px';
+    iframe.setAttribute('scrolling','no');
+    wrap.appendChild(iframe);
+    iframes[layout.id] = iframe;
+  });
+  updateAssetList();
+  renderTabBar();
+}
+
+function updateAssetList(){
+  var body = document.getElementById('asset-list-body');
+  if(!body) return;
+  var layouts = getLayouts();
+  if(!layouts.length){ body.innerHTML='<div style="padding:20px 16px;font-size:12px;color:var(--text-dim);text-align:center;">無素材</div>'; return; }
+  body.innerHTML = layouts.map(function(l){
+    return '<div class="asset-item" id="asset-item-'+l.id+'" onclick="scrollToCanvas(\''+l.id+'\')">'+
+      '<div class="asset-icon"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 10l3-3 3 3 2-2 4 4"/></svg></div>'+
+      '<div class="asset-info"><div class="asset-name">'+l.name+'</div><div class="asset-meta">'+l.w+' × '+l.h+' px</div></div>'+
+      '<button class="asset-dl" onclick="event.stopPropagation();downloadSingle(\''+l.id+'\')">↓</button>'+
+    '</div>';
+  }).join('');
+
+  var area = document.getElementById('canvas-area');
+  if(area && !area._assetScrollBound){
+    area._assetScrollBound = true;
+    area.addEventListener('scroll', updateActiveAsset);
+  }
+  updateActiveAsset();
+}
+
+function scrollToCanvas(id){
+  var block = document.getElementById('canvas-block-'+id);
+  if(block) block.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function updateActiveAsset(){
+  var area = document.getElementById('canvas-area');
+  if(!area) return;
+  var areaTop = area.getBoundingClientRect().top;
+  var closest = null, closestDist = Infinity;
+  Object.keys(iframes).forEach(function(id){
+    var block = document.getElementById('canvas-block-'+id);
+    if(!block) return;
+    var dist = Math.abs(block.getBoundingClientRect().top - areaTop - 60);
+    if(dist < closestDist){ closestDist=dist; closest=id; }
+  });
+  document.querySelectorAll('.asset-item').forEach(function(el){ el.classList.remove('active'); });
+  if(closest){
+    var active = document.getElementById('asset-item-'+closest);
+    if(active) active.classList.add('active');
+  }
+}
+
+/* ── Broadcast ── */
+function broadcastPayload(payload){
+  Object.keys(iframes).forEach(function(id){
+    var ifr = iframes[id];
+    if(ifr && ifr.contentWindow)
+      ifr.contentWindow.postMessage({type:'BN_UPDATE',payload:payload},'*');
+  });
+}
+
+var COLORS = {
+  bau:   { cMain:'#902500', cSub:'#ca1007', cDate:'#902500' },
+  flash: { cMain:'#fff9b3', cSub:'#fdfd00', cDate:'#fff9b3' },
+};
+
+function broadcast(){
+  var type = S.tabType || 'bau';
+  var clr  = COLORS[type] || COLORS.bau;
+  broadcastPayload({
+    bgBase:   S.bgUrls[type],
+    main:     v('txt-main'),
+    sub:      v('txt-sub'),
+    date:     v('txt-date'),
+    coupon1:  v('txt-coupon1'),
+    coupon2:  v('txt-coupon2'),
+    skinSub:  v('txt-skin-sub'),
+    tabType:  type,
+    cMain:    clr.cMain,
+    cSub:     clr.cSub,
+    cDate:    clr.cDate,
+  });
+}
+
+/* ── Helpers ── */
+function v(id){ return (document.getElementById(id)||{}).value||''; }
+
+function countChars(val){
+  var len = 0;
+  for(var i=0;i<val.length;i++){
+    var code = val.codePointAt(i);
+    if((code>=0x4E00&&code<=0x9FFF)||(code>=0x3400&&code<=0x4DBF)||
+       (code>=0xF900&&code<=0xFAFF)||(code>=0x3000&&code<=0x303F)||
+       (code>=0xFF00&&code<=0xFF60)||(code>=0xAC00&&code<=0xD7AF)){
+      len+=1;
+    } else if(code>0xFFFF){ len+=1; i++; }
+    else { len+=0.5; }
+  }
+  return Math.ceil(len*2)/2;
+}
+
+function ccAuto(inputId, countId, max){
+  var val = v(inputId);
+  var len = countChars(val);
+  var el = document.getElementById(countId);
+  if(!el) return;
+  if(max){
+    el.textContent = len+' / '+max;
+    el.classList.toggle('over', len > max);
+  } else {
+    el.textContent = len+' 字';
+    el.classList.remove('over');
+  }
+}
+
+/* ── 超限警告 ── */
+var _overlimitContinue = null;
+function checkOverLimit(proceedFn){ proceedFn(); } // 這個專案無字數硬限制，直接執行
+
+function setRefLayer(id, input){
+  var file = input.files[0]; if(!file) return;
+  var img = document.getElementById('ref-'+id); if(!img) return;
+  var url = URL.createObjectURL(file);
+  img.src = url; img.style.display = 'block';
+  toast('參考層已載入（不影響輸出）','ok');
+}
+
+/* ── Popup ── */
+function openImportModal(){ document.getElementById('popup-import').classList.add('open'); }
+function closePopup(type){ document.getElementById('popup-'+type).classList.remove('open'); }
+
+document.getElementById('popup-import').addEventListener('click', function(e){
+  if(e.target===this) closePopup('import');
+});
+
+/* ── Excel 匯入 ── */
+document.getElementById('importExcelFile').addEventListener('change', function(e){
+  var file = e.target.files[0]; if(!file) return;
+  handleImportExcel(file);
+  this.value = '';
+});
+
+function handleImportExcel(file){
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var wb = XLSX.read(ev.target.result, {type:'binary', cellDates:false});
+      // 找 BAU + 快閃日 KV 分頁
+      var sheetName = wb.SheetNames.find(function(n){ return /BAU.*快閃日|快閃日.*BAU/i.test(n); }) || wb.SheetNames[0];
+      var ws = wb.Sheets[sheetName];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+
+      var bauData   = parseTypeData(rows, 'bau');
+      var flashData = parseTypeData(rows, 'flash');
+
+      // 擷取資料夾名稱用月份：H19（rows 為 0-based，第19列 H欄 = rows[18][7]）
+      var h19 = (rows[18] && rows[18][7]) ? String(rows[18][7]) : '';
+      var monthMatch = h19.match(/\d+月/);
+      IMPORTED_MONTH = monthMatch ? monthMatch[0] : '';
+
+      var tabs = [
+        { id:'tab-bau',   label:'BAU',  type:'bau',   data: bauData },
+        { id:'tab-flash', label:'快閃日', type:'flash', data: flashData }
+      ];
+
+      closePopup('import');
+      buildTabs(tabs);
+      toast('匯入完成！BAU + 快閃日 已建立','ok',3000);
+    } catch(err){
+      console.error('[Excel]', err);
+      toast('匯入失敗：'+err.message,'err');
+    }
+  };
+  reader.readAsBinaryString(file);
+}
+
+/*
+  Excel 版位表格結構（BAU + 快閃日 KV 分頁）：
+  No. | 版位 | 位置 | K數 | 尺寸 | CTA | BAU主標 | BAU副標 | BAU日期? | 快閃日主標 | 快閃日副標 | ... | 券樣1 | 券樣2
+
+  從 Excel 工單分析：
+  - 列標題行：包含 "No." 的行
+  - BAU 欄位：col 6(G) = BAU 主標、col 7(H) = BAU 副標（Skin副標）、col 8(I) = BAU 日期
+  - 快閃日欄位：col 9(J) = 快閃日主標、col 10(K) = 快閃日副標（Skin副標）
+  - 券樣從 popup(07) 行讀取：券樣1 = BAU col G/快閃日 col J, 券樣2 = 快閃日 col K
+  
+  實際上根據工單內容：
+  G=BAU主標/副標文案、J=快閃日主標/副標文案
+  券樣在 07(直播Popup) 和 08(Coin BN) 行
+*/
+function parseTypeData(rows, type){
+  /*
+    工單欄位結構（BAU + 快閃日 KV 分頁）：
+    Col A(0)=No., B(1)=版位, C(2)=位置, D(3)=K數, E(4)=尺寸, F(5)=CTA
+    Col G(6)=欄位名稱（「主標」「副標」「Skin副標」「日期」「券樣1」...）
+    Col H(7)=BAU 實際文案
+    Col I(8)=欄位名稱（重複，給快閃日用）
+    Col J(9)=快閃日 實際文案
+
+    各 row 對應：
+    Row 22(No.01) Skinny_PC  → BAU:H=LOGO名稱(忽略), 快閃日:J=主標
+    Row 23(No.02) Skinny_APP → BAU:H=Skin副標文案,  快閃日:J=Skin副標
+    Row 25(No.04) C2C Popup  → BAU:H=主標,          快閃日:J=主標
+    Row 26(No.05) C2C DD Card→ BAU:H=副標,          快閃日:J=副標
+    Row 27(No.06) 直播大廳BN → BAU:H=日期("-"),     快閃日:J=日期
+    Row 28(No.07) 直播Popup  → BAU:H=券樣1,         快閃日:J=券樣1
+    Row 29(No.08) Coin BN    → 快閃日:J=券樣2
+  */
+  var data = {};
+  var headerRowIdx = -1;
+
+  // 找標題行（含 "No."）
+  for(var i=0;i<rows.length;i++){
+    var r = rows[i];
+    for(var c=0;c<r.length;c++){
+      if(r[c] && String(r[c]).trim().match(/^No\.?$/i)){
+        headerRowIdx = i; break;
+      }
+    }
+    if(headerRowIdx >= 0) break;
+  }
+  if(headerRowIdx < 0) return data;
+
+  // BAU文案欄 = H(7)，快閃日文案欄 = J(9)
+  // 從 header row 動態確認（找 BAU 和 快閃日 標題所在欄，往右一格就是文案欄）
+  var headerRow = rows[headerRowIdx];
+  var bauValCol = 7, flashValCol = 9; // 預設 H/J
+  for(var c=0;c<headerRow.length;c++){
+    var hv = String(headerRow[c]||'').trim();
+    if(hv === 'BAU')   bauValCol   = c + 1; // BAU標題右一欄才是文案
+    if(hv === '快閃日') flashValCol = c;     // 快閃日標題本身就是文案欄（J）
+  }
+
+  var valCol = (type==='bau') ? bauValCol : flashValCol;
+
+  /* Excel serial date → "M/D"（不補零） */
+  function excelDateToMD(serial){
+    if(!serial || typeof serial !== 'number') return '';
+    // Excel epoch: 1900-01-01 = day 1（含1900年2月29日bug，需+1）
+    var d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+    if(isNaN(d.getTime())) return '';
+    var m = d.getUTCMonth() + 1;
+    var day = d.getUTCDate();
+    return m + '/' + day;
+  }
+
+  /* 百分比小數轉字串，如 0.05 → "5%" */
+  function pctOrStr(v){
+    if(v === null || v === undefined) return '';
+    if(typeof v === 'number'){
+      // 判斷是否是百分比格式小數（0~1 之間）
+      // 若整數部分為0且確實是小數，視為百分比
+      if(v > 0 && v < 1){
+        var pct = Math.round(v * 1000) / 10; // 支援小數百分比
+        return (pct % 1 === 0 ? Math.round(pct) : pct) + '%';
+      }
+      // 大於或等於1的數字直接轉字串
+      return String(v);
+    }
+    return String(v).trim();
+  }
+
+  function cellStr(row, col){
+    var v = row[col];
+    if(v === null || v === undefined) return '';
+    return String(v).trim();
+  }
+
+  /* 讀日期欄：空白→空字串；Excel serial date→M/D；字串→原樣 */
+  function cellDate(row, col){
+    var v = row[col];
+    if(v === null || v === undefined || v === '') return '';
+    if(typeof v === 'number' && v > 40000){
+      // Excel serial date（大於40000約為2009年以後）
+      return excelDateToMD(v);
+    }
+    var s = String(v).trim();
+    if(s === '' || s === '-') return '';
+    return s;
+  }
+
+  for(var i=headerRowIdx+1;i<rows.length;i++){
+    var row = rows[i];
+    var noVal  = cellStr(row, 0);
+    var posVal = cellStr(row, 1);
+    if(!noVal && !posVal) continue;
+
+    var val = cellStr(row, valCol);
+
+    // No.02 Skinny_APP → Skin副標
+    if(/^02_/i.test(noVal) || /Skinny.APP/i.test(posVal)){
+      if(val) data.skinSub = val;
+    }
+
+    // No.04 C2C Popup → 主標
+    if(/^04_/i.test(noVal) || /C2C Popup/i.test(posVal)){
+      if(val) data.main = val;
+    }
+
+    // No.05 C2C DD Card → 副標
+    if(/^05_/i.test(noVal) || /C2C DD Card/i.test(posVal)){
+      if(val) data.sub = val;
+    }
+
+    // No.06 直播大廳BN → 日期（空白→留空；Excel serial date→M/D格式，不補零）
+    if(/^06_/i.test(noVal) || /直播大廳BN/i.test(posVal)){
+      data.date = cellDate(row, valCol);
+    }
+
+    // No.07 直播Popup → 券樣1（百分比小數自動轉換，如 0.05→5%）
+    if(/^07_/i.test(noVal) || /直播Popup/i.test(posVal)){
+      var cpVal = row[valCol];
+      if(cpVal !== null && cpVal !== undefined && cpVal !== '') data.coupon1 = pctOrStr(cpVal);
+    }
+
+    // No.08 Coin BN → 快閃日=券樣2，BAU=若無券樣1則填入
+    if(/^08_/i.test(noVal) || /Coin BN/i.test(posVal)){
+      if(type === 'flash' && val) data.coupon2 = val;
+    }
+  }
+
+  return data;
+}
+
+/* ── Save / Load ── */
+function collectState(){
+  return {
+    version:1, ts:Date.now(),
+    tabType: S.tabType,
+    texts:{
+      main:v('txt-main'), sub:v('txt-sub'), date:v('txt-date'),
+      coupon1:v('txt-coupon1'), coupon2:v('txt-coupon2'), skinSub:v('txt-skin-sub')
+    }
+  };
+}
+
+function applyState(data){
+  if(!data||data.version!==1) return;
+  function set(id,val){ var el=document.getElementById(id); if(el&&val!==undefined) el.value=val; }
+  if(data.texts){
+    set('txt-main',    data.texts.main);
+    set('txt-sub',     data.texts.sub);
+    set('txt-date',    data.texts.date);
+    set('txt-coupon1', data.texts.coupon1);
+    set('txt-coupon2', data.texts.coupon2);
+    set('txt-skin-sub',data.texts.skinSub);
+  }
+  if(data.tabs && data.tabs.length){
+    buildTabs(data.tabs);
+    var restoreTab = (typeof data.activeTab==='number') ? data.activeTab : 0;
+    if(restoreTab > 0 && TABS[restoreTab]){
+      setTimeout(function(){
+        ACTIVE_TAB = restoreTab;
+        renderTabBar();
+        applyTabData(TABS[ACTIVE_TAB], false);
+      }, 800);
+    }
+  } else {
+    broadcast();
+  }
+  /* 還原各版位 canvas state（含券樣位置） */
+  if(data.canvasStates){
+    setTimeout(function(){
+      Object.keys(data.canvasStates).forEach(function(id){
+        var ifr = iframes[id];
+        if(ifr && ifr.contentWindow){
+          ifr.contentWindow.postMessage({
+            type: 'BN_RESTORE_STATE',
+            state: data.canvasStates[id]
+          }, '*');
+        }
+      });
+    }, 1000);
+  }
+}
+
+/* ── 向各 iframe 收集 canvas state（含券樣位置）後統一存檔 ── */
+var _pendingStates = {};
+var _saveCallback  = null;
+
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_CANVAS_STATE') return;
+  if(_pendingStates && msg.msgId !== undefined){
+    _pendingStates[msg.msgId] = msg.state;
+    _checkAllStatesCollected();
+  }
+});
+
+function _checkAllStatesCollected(){
+  var keys = Object.keys(_pendingStates);
+  if(keys.some(function(k){ return _pendingStates[k] === null; })) return; // 還有未回應的
+  if(_saveCallback){ _saveCallback(_pendingStates); _saveCallback = null; }
+}
+
+function collectCanvasStates(cb){
+  _pendingStates = {};
+  var layoutIds = Object.keys(iframes);
+  if(!layoutIds.length){ cb({}); return; }
+  layoutIds.forEach(function(id){
+    _pendingStates[id] = null; // null = 等待中
+    var ifr = iframes[id];
+    if(ifr && ifr.contentWindow){
+      ifr.contentWindow.postMessage({ type:'BN_GET_STATE', msgId: id }, '*');
+    } else {
+      _pendingStates[id] = {}; // iframe 不存在，給空物件
+    }
+  });
+  _saveCallback = cb;
+  /* 1.5 秒 timeout，避免 iframe 沒回應而卡住 */
+  setTimeout(function(){
+    if(_saveCallback){
+      Object.keys(_pendingStates).forEach(function(k){
+        if(_pendingStates[k] === null) _pendingStates[k] = {};
+      });
+      _saveCallback(_pendingStates); _saveCallback = null;
+    }
+  }, 1500);
+}
+
+document.getElementById('btn-save').addEventListener('click', function(){
+  saveCurrentTabState(function(){
+    collectCanvasStates(function(canvasStates){
+      var state = collectState();
+      state.tabs = TABS;
+      state.activeTab = ACTIVE_TAB;
+      state.canvasStates = canvasStates; // 各版位的 canvas state（含券樣位置）
+      var blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'ENG_LIVE_暫存.json';
+      a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+      toast('暫存已下載','ok');
+    });
+  });
+});
+
+document.getElementById('loadFile').addEventListener('change',function(e){
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try{ applyState(JSON.parse(ev.target.result)); toast('暫存已載入','ok'); }
+    catch(_){ toast('暫存格式錯誤','err'); }
+  };
+  reader.readAsText(file); this.value='';
+});
+
+/* ── Download ── */
+function getFmt(id){
+  try{
+    var ifr=iframes[id];
+    if(ifr&&ifr.contentWindow&&ifr.contentWindow.BNExport&&ifr.contentWindow.BNExport.spec) return ifr.contentWindow.BNExport.spec.fmt||'jpeg';
+  }catch(e){}
+  return 'jpeg';
+}
+
+function getTabLabel(){
+  var tab = TABS[ACTIVE_TAB];
+  return tab ? tab.label.replace(/\s/g,'') : '';
+}
+
+function downloadSingle(id){
+  checkOverLimit(function(){ _downloadSingle(id); });
+}
+
+function _downloadSingle(id){
+  var ifr=iframes[id]; if(!ifr||!ifr.contentWindow) return;
+  var api=ifr.contentWindow.BNExport;
+  if(!api){ toast('畫布尚未就緒','err'); return; }
+  var fmt=getFmt(id), ext=fmt==='png'?'png':'jpg';
+  var prefix = getTabLabel();
+  var spec = api.spec || {};
+  var name = spec.name || id;
+
+  if(api.getBothBlobs && spec.hasCTAVariant){
+    api.getBothBlobs(fmt, fmt==='png'?1:0.95, function(bWith,bWithout){
+      compressToLimit(bWith,id,fmt,function(b1){
+        compressToLimit(bWithout,id,fmt,function(b2){
+          dl(b1, name+'_有CTA.'+ext);
+          setTimeout(function(){ dl(b2, name+'_無CTA.'+ext); },300);
+          toast('已下載兩張','ok');
+        });
+      });
+    });
+  } else {
+    api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
+      compressToLimit(blob,id,fmt,function(blob2){
+        dl(blob2, (prefix?prefix+'_':'')+name+'.'+ext);
+        toast('已下載：'+name,'ok');
+      });
+    });
+  }
+}
+
+function dl(blob, filename){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+}
+
+function downloadPage(){
+  checkOverLimit(_downloadPage);
+}
+
+function _downloadPage(){
+  var prefix = getTabLabel() || 'export';
+  var zip = new JSZip();
+  toast('打包中...','ok',4000);
+
+  function collect(i){
+    if(i >= LAYOUTS.length){
+      zip.generateAsync({type:'blob'}).then(function(blob){
+        dl(blob, prefix+'.zip');
+        toast('整頁下載完成','ok',3000);
+      });
+      return;
+    }
+    var layout = LAYOUTS[i];
+    var ifr = iframes[layout.id];
+    if(!ifr||!ifr.contentWindow){ collect(i+1); return; }
+    var api = ifr.contentWindow.BNExport;
+    if(!api){ collect(i+1); return; }
+    var fmt=getFmt(layout.id), ext=fmt==='png'?'png':'jpg';
+    var name=(api.spec&&api.spec.name)||layout.id;
+    if(api.getBothBlobs&&api.spec&&api.spec.hasCTAVariant){
+      api.getBothBlobs(fmt,fmt==='png'?1:0.95,function(bWith,bWithout){
+        compressToLimit(bWith,layout.id,fmt,function(b1){
+          compressToLimit(bWithout,layout.id,fmt,function(b2){
+            zip.file(name+'_有CTA.'+ext,b1);
+            zip.file(name+'_無CTA.'+ext,b2);
+            collect(i+1);
+          });
+        });
+      });
+    } else {
+      api.getBlob(fmt,fmt==='png'?1:0.95,function(blob){
+        compressToLimit(blob,layout.id,fmt,function(blob2){
+          zip.file(name+'.'+ext,blob2);
+          collect(i+1);
+        });
+      });
+    }
+  }
+  collect(0);
+}
+
+function downloadAll(){
+  checkOverLimit(_downloadAll);
+}
+
+function _downloadAll(){
+  var zip = new JSZip();
+  toast('整包打包中，請稍候...','ok',10000);
+  var zipName = (IMPORTED_MONTH ? IMPORTED_MONTH+'_' : '') + 'ENG_LIVE_BAU&快閃日.zip';
+
+  function processTab(ti){
+    if(ti >= TABS.length){
+      zip.generateAsync({type:'blob'}).then(function(blob){
+        dl(blob,zipName);
+        applyTabData(TABS[ACTIVE_TAB], false);
+        toast('整包下載完成！','ok',3000);
+      });
+      return;
+    }
+    var tab = TABS[ti];
+    var folder = zip.folder(tab.label);
+    applyTabData(tab, false);
+
+    setTimeout(function(){
+      function collectLayout(i){
+        if(i >= LAYOUTS.length){ processTab(ti+1); return; }
+        var layout = LAYOUTS[i];
+        var ifr = iframes[layout.id];
+        if(!ifr||!ifr.contentWindow){ collectLayout(i+1); return; }
+        var api = ifr.contentWindow.BNExport;
+        if(!api){ collectLayout(i+1); return; }
+        var fmt=getFmt(layout.id), ext=fmt==='png'?'png':'jpg';
+        var name=(api.spec&&api.spec.name)||layout.id;
+        if(api.getBothBlobs&&api.spec&&api.spec.hasCTAVariant){
+          api.getBothBlobs(fmt,fmt==='png'?1:0.95,function(bWith,bWithout){
+            compressToLimit(bWith,layout.id,fmt,function(b1){
+              compressToLimit(bWithout,layout.id,fmt,function(b2){
+                folder.file(name+'_有CTA.'+ext,b1);
+                folder.file(name+'_無CTA.'+ext,b2);
+                collectLayout(i+1);
+              });
+            });
+          });
+        } else {
+          api.getBlob(fmt,fmt==='png'?1:0.95,function(blob){
+            compressToLimit(blob,layout.id,fmt,function(blob2){
+              folder.file(name+'.'+ext,blob2);
+              collectLayout(i+1);
+            });
+          });
+        }
+      }
+      collectLayout(0);
+    }, 600);
+  }
+  processTab(0);
+}
+
+/* ── 壓縮 ── */
+var SIZE_LIMIT_KB = {
+  '01_skinny_pc':145, '02_skinny_app':145, '03_c2c_bn':145,
+  '04_c2c_popup':145, '05_c2c_dd':245, '06_live_hall_bn':100,
+  '07_live_popup':300, '08_coin_bn':250
+};
+
+function compressToLimit(blob,layoutId,fmt,cb){
+  var limitKB = SIZE_LIMIT_KB[layoutId];
+  if(!limitKB||blob.size<=limitKB*1024){ cb(blob); return; }
+  if(fmt==='png'){ compressPngToLimit(blob,limitKB,cb); return; }
+  var url=URL.createObjectURL(blob);
+  var img=new Image();
+  img.onload=function(){
+    URL.revokeObjectURL(url);
+    var cv=document.createElement('canvas');
+    cv.width=img.naturalWidth; cv.height=img.naturalHeight;
+    var ctx=cv.getContext('2d');
+    var q=0.90;
+    function tryNext(){
+      ctx.clearRect(0,0,cv.width,cv.height); ctx.drawImage(img,0,0);
+      cv.toBlob(function(b){
+        if(!b){ cb(blob); return; }
+        if(b.size<=limitKB*1024||q<=0.1){ cb(b); return; }
+        q=Math.max(0.1,Math.round((q-0.05)*100)/100); tryNext();
+      },'image/jpeg',q);
+    }
+    tryNext();
+  };
+  img.onerror=function(){ cb(blob); };
+  img.src=url;
+}
+
+/* PNG 超過上限時：尺寸不變，僅透過降低色彩階數（量化）縮小檔案 */
+function compressPngToLimit(blob,limitKB,cb){
+  var url=URL.createObjectURL(blob);
+  var img=new Image();
+  img.onload=function(){
+    URL.revokeObjectURL(url);
+    var cv=document.createElement('canvas');
+    cv.width=img.naturalWidth; cv.height=img.naturalHeight;
+    var ctx=cv.getContext('2d');
+    ctx.drawImage(img,0,0);
+    var baseData;
+    try{ baseData=ctx.getImageData(0,0,cv.width,cv.height); }
+    catch(e){ cb(blob); return; }
+
+    var levels=[64,32,16,12,8,6,5,4]; // 每色階數，由細到粗
+    var i=0;
+    function tryNext(){
+      if(i>=levels.length){ cb(lastBlob||blob); return; }
+      var step = 255/(levels[i]-1);
+      var id = ctx.createImageData(cv.width, cv.height);
+      var src = baseData.data, dst = id.data;
+      for(var p=0;p<src.length;p+=4){
+        dst[p]   = Math.round(Math.round(src[p]/step)*step);
+        dst[p+1] = Math.round(Math.round(src[p+1]/step)*step);
+        dst[p+2] = Math.round(Math.round(src[p+2]/step)*step);
+        dst[p+3] = src[p+3]; // 保留原本透明度，不量化 alpha
+      }
+      ctx.putImageData(id,0,0);
+      cv.toBlob(function(b){
+        if(!b){ cb(blob); return; }
+        lastBlob=b;
+        if(b.size<=limitKB*1024||i>=levels.length-1){ cb(b); return; }
+        i++; tryNext();
+      },'image/png');
+    }
+    var lastBlob=null;
+    tryNext();
+  };
+  img.onerror=function(){ cb(blob); };
+  img.src=url;
+}
+
+/* ── Init ── */
+function initWhenReady(){
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      buildCanvasArea();
+      setTimeout(broadcast, 800);
+      setTimeout(openImportModal, 400);
+    });
+  });
+}
+
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', initWhenReady);
+} else {
+  initWhenReady();
+}
+</script>
+
+<!-- Progress Modal -->
+<div id="pm-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:9999;">
+  <div style="background:var(--surface,#2a2a2a);border-radius:14px;padding:1.75rem 2rem;width:340px;display:flex;flex-direction:column;gap:14px;border:.5px solid var(--border2,#444);">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg id="pm-spinner" width="18" height="18" viewBox="0 0 18 18" fill="none" style="flex-shrink:0;animation:pm-spin .8s linear infinite;">
+        <circle cx="9" cy="9" r="7" stroke="#444" stroke-width="2.5"/>
+        <path d="M9 2 A7 7 0 0 1 16 9" stroke="var(--accent,#EE4D2D)" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span id="pm-title" style="font-size:14px;font-weight:500;color:var(--text,#f0f0f0);">處理中</span>
+    </div>
+    <div id="pm-sub" style="font-size:12px;color:var(--text2,#999);min-height:16px;"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;height:6px;background:var(--border2,#383838);border-radius:999px;overflow:hidden;">
+        <div id="pm-bar" style="height:100%;border-radius:999px;background:var(--accent,#EE4D2D);width:0%;transition:width .3s ease;"></div>
+      </div>
+      <span id="pm-pct" style="font-size:12px;font-weight:500;color:var(--accent,#EE4D2D);min-width:34px;text-align:right;">0%</span>
+    </div>
+  </div>
+</div>
+<style>@keyframes pm-spin{to{transform:rotate(360deg)}}</style>
+<script>
+var pm=(function(){
+  var bg=document.getElementById('pm-bg'),bar=document.getElementById('pm-bar'),
+      pctEl=document.getElementById('pm-pct'),subEl=document.getElementById('pm-sub'),
+      titleEl=document.getElementById('pm-title'),spinner=document.getElementById('pm-spinner');
+  return{
+    show:function(t){if(t)titleEl.textContent=t;bar.style.width='0%';pctEl.textContent='0%';subEl.textContent='';spinner.style.animation='pm-spin .8s linear infinite';bg.style.display='flex';},
+    update:function(p,l){var pn=Math.min(100,Math.max(0,Math.round(p)));bar.style.width=pn+'%';pctEl.textContent=pn+'%';if(l!==undefined)subEl.textContent=l;},
+    done:function(l){this.update(100,l||'完成！');spinner.style.animation='none';},
+    hide:function(){setTimeout(function(){bg.style.display='none';},800);}
+  };
+})();
+</script>
+</body>
+</html>

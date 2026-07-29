@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>11 LPBN_APP</title>
+<style>
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('../fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('../fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('../fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { background:transparent; overflow:hidden; }
+
+#stage {
+  position: relative;
+  width: 1200px;
+  height: 550px;
+}
+canvas {
+  position: absolute;
+  top: 0; left: 0;
+  display: block;
+}
+
+/* overlay — 完全蓋住 canvas，不 clip */
+#overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 1200px;
+  height: 550px;
+  pointer-events: none;
+  overflow: visible; /* 讓超出的控制項可見 */
+}
+
+/* 選取框 */
+.sel-box {
+  position: absolute;
+  border: 2px solid #2563EB;
+  box-shadow: 0 0 0 1px rgba(37,99,235,0.25);
+  pointer-events: none;
+}
+
+/* 變形 handle */
+.sel-handle {
+  position: absolute;
+  width: 10px; height: 10px;
+  background: white;
+  border: 2px solid #2563EB;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 10;
+}
+.sel-handle[data-h="n"],  .sel-handle[data-h="s"]  { cursor: ns-resize; }
+.sel-handle[data-h="e"],  .sel-handle[data-h="w"]  { cursor: ew-resize; }
+.sel-handle[data-h="nw"], .sel-handle[data-h="se"] { cursor: nwse-resize; }
+.sel-handle[data-h="ne"], .sel-handle[data-h="sw"] { cursor: nesw-resize; }
+
+/* 懸浮 action bar */
+.sel-bar {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 4px;
+  pointer-events: auto;
+  transform: translateY(-100%) translateY(-8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 20;
+}
+.sel-bar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+.sel-bar-btn:hover { background: #334155; color: white; }
+.sel-bar-btn.danger:hover { background: rgba(239,68,68,0.2); color: #f87171; }
+.sel-bar-btn svg {
+  width: 13px; height: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.sel-bar-sep {
+  width: 1px;
+  background: #334155;
+  margin: 2px 0;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1125" height="360"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script>
+'use strict';
+
+var W = 1200, H = 550;
+
+/* ── PSD 規格 ── */
+var ZONE = { x:0, y:0, w:1200, h:550 }; // 作圖區（clip 用，不顯示）
+var LOGO = { x:57, y:171, w:263, h:37 };
+var BAR  = { x:696, y:309, w:434, h:51  };
+var GAP  = 15; // logo 分隔線兩側間距
+
+var cv      = document.getElementById('cv');
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* ── Canvas 固定輸出尺寸，不跟隨螢幕 DPR 縮放 ── */
+var DPR = 1;
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ── */
+var D = {
+  theme:'A', bg:null, bgUrl:null,
+  host:null, hostBounds:null, logo1:null, logo2:null, ctaBtn:null,
+  main:'主標文案$9字內', sub:'副標文案$8字內',
+  coupon1:'', coupon2:'',
+  date:'XX/XX', time:'19:00', brand:'XXX',
+  cSub:'#902500', cMain:'#ca1007', cDate:'#902500',
+  showCTA: false,  // 預設顯示 CTA
+  imgX: ZONE.x + ZONE.w/2,
+  imgY: ZONE.y + ZONE.h/2,
+  imgW: 0, imgH: 0,
+  imgScale: 1,
+  selected: false,
+  dragging: false, dragStartX:0, dragStartY:0, imgStartX:0, imgStartY:0,
+  resizing: false,
+  _lastHostSrc: null,
+};
+
+var BG_FALLBACK = { A:'#F5C842', B:'#F5A0C5', C:'#bee1f2' };
+function font(size, w){ return w+' '+size+'px "ShopeeNoto","Noto Sans TC",sans-serif'; }
+
+/* ── 券樣文案規格 ─────────────────────────────────────────
+   角度與 popup 相同（背景按比例縮放，傾斜一致）
+   位置依 hall bn canvas 1125×360 估算，截圖後微調
+──────────────────────────────────────────────────────── */
+var COUPON_SPEC = {
+  bau: {
+    coupon1: {
+      cx: 815, cy: 360,
+      maxSize: 90, subRatio: 0.81, minSize: 30, maxWidth: 200,
+      weight: 700, color: '#EE4D2D', angle: -0.043
+    }
+  },
+  flash: {
+    coupon2: {
+      cx: 793, cy: 217,
+      maxSize: 70, subRatio: 0.81, minSize: 23, maxWidth: 165,
+      weight: 700, color: '#EE4D2D', angle: 0.064
+    },
+    coupon1: {
+      cx: 799, cy: 340,
+      maxSize: 90, subRatio: 0.81, minSize: 30, maxWidth: 210,
+      weight: 700, color: '#EE4D2D', angle: -0.053
+    }
+  }
+};
+var COUPON_SPEC_DEFAULT = JSON.parse(JSON.stringify(COUPON_SPEC));
+var COUPON_SELECTED = null;
+
+/* ── BG ── */
+function loadBg(url){
+  if(!url){ D.bg=null; D.bgUrl=null; render(); return; }
+  if(url===D.bgUrl && D.bg){ render(); return; }
+  D.bgUrl=url;
+  var img=new Image();
+  img.onload=function(){ D.bg=img; render(); };
+  img.onerror=function(){ D.bg=null; render(); };
+  img.src=url;
+}
+function loadImg(src, cb){
+  if(!src){ cb(null); return; }
+  var img=new Image();
+  img.onload=function(){ cb(img); };
+  img.onerror=function(){ cb(null); };
+  img.src=src;
+}
+
+/* ── Render ── */
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  // 背景（先填白色防止透明 PNG 合成時殘留前一張顏色）
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,W,H);
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else { ctx.fillStyle=BG_FALLBACK[D.theme]||'#F5C842'; ctx.fillRect(0,0,W,H); }
+
+  // 作圖區：clip 讓圖不超出（但選取框在 overlay 上，不受影響）
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ZONE.x,ZONE.y,ZONE.w,ZONE.h);
+  ctx.clip();
+  if(D.host){
+    var dw=D.host.naturalWidth*D.imgScale;
+    var dh=D.host.naturalHeight*D.imgScale;
+    D.imgW=dw; D.imgH=dh;
+    ctx.drawImage(D.host, D.imgX-dw/2, D.imgY-dh/2, dw, dh);
+  }
+  ctx.restore();
+
+  drawLogos();
+  drawText();
+  if(D.showCTA) drawCTA();
+
+  updateOverlay();
+  updateCouponOverlay();
+}
+
+function drawLogos(){
+  var a = LOGO;
+  if(D.logo1 && D.logo1.naturalWidth){
+    var scale = (D.tabType === 'flash') ? 1 : 0.81;
+    var lh = a.h * scale;
+    var lw = D.logo1.naturalWidth * (lh / D.logo1.naturalHeight);
+    var ly = a.y + (a.h - lh) / 2 + 2;
+    ctx.drawImage(D.logo1, a.x, ly, lw, lh);
+  }
+}
+
+function drawText(){
+  ctx.textAlign = 'left';
+
+  ctx.font = font(48, 500);
+  var mainAscent = ctx.measureText('測').actualBoundingBoxAscent || 48 * 0.88;
+  var mainBaseline = 221 + mainAscent;
+  if(D.main){ ctx.fillStyle = D.cMain; ctx.fillText(D.main, 55, mainBaseline); }
+
+  ctx.font = font(66, 700);
+  var subAscent = ctx.measureText('測').actualBoundingBoxAscent || 66 * 0.88;
+  var subBaseline = 280 + subAscent;
+  if(D.sub){ ctx.fillStyle = D.cSub; ctx.fillText(D.sub, 54, subBaseline); }
+
+  ctx.font = font(26, 400);
+  var dateAscent = ctx.measureText('測').actualBoundingBoxAscent || 26 * 0.88;
+  var dateBaseline = 355 + dateAscent;
+  if(D.date){ ctx.fillStyle = D.cDate; ctx.fillText(D.date, 57, dateBaseline); }
+
+  drawCoupon();
+}
+
+
+
+/* ── drawCoupon（共用邏輯，與 popup 相同） ── */
+function splitCouponSegments(text){
+  var segs = [], cur = '', isNum = false;
+  for(var i = 0; i < text.length; i++){
+    var ch = text[i], num = /[0-9]/.test(ch);
+    if(i === 0){ isNum = num; cur = ch; }
+    else if(num === isNum){ cur += ch; }
+    else { segs.push({ text: cur, isNum: isNum }); cur = ch; isNum = num; }
+  }
+  if(cur) segs.push({ text: cur, isNum: isNum });
+  return segs;
+}
+
+function calcCouponLine(text, s){
+  if(!text || !s) return null;
+  var segs = splitCouponSegments(text);
+  var bigSize = s.maxSize;
+  for(var iter = 0; iter < 200; iter++){
+    var totalW = 0;
+    segs.forEach(function(seg){
+      var sz = seg.isNum ? bigSize : Math.round(bigSize * s.subRatio);
+      ctx.font = font(sz, s.weight);
+      totalW += ctx.measureText(seg.text).width;
+    });
+    if(totalW <= s.maxWidth || bigSize <= s.minSize) break;
+    bigSize -= 1;
+  }
+  var parts = [], totalW = 0;
+  segs.forEach(function(seg){
+    var sz = seg.isNum ? bigSize : Math.round(bigSize * s.subRatio);
+    ctx.font = font(sz, s.weight);
+    var w = ctx.measureText(seg.text).width;
+    parts.push({ text: seg.text, sz: sz, w: w });
+    totalW += w;
+  });
+  return { parts: parts, totalW: totalW, bigSize: bigSize };
+}
+
+function drawCouponLine(text, s, key){
+  if(!text || !s) return;
+  var info = calcCouponLine(text, s);
+  if(!info) return;
+  ctx.font = font(info.bigSize, s.weight);
+  var refAsc = ctx.measureText('0').actualBoundingBoxAscent || info.bigSize * 0.72;
+  var baseY  = refAsc / 2;
+  var PAD = 6;
+  var boxL = -info.totalW / 2 - PAD + 11;
+  var boxT = -refAsc - PAD + 5;
+  var boxW = info.totalW - 4;
+  var boxH = refAsc + refAsc * 0.25 + PAD * 2;
+  ctx.save();
+  ctx.translate(s.cx, s.cy);
+  ctx.rotate(s.angle || 0);
+  ctx.fillStyle = s.color;
+  ctx.textBaseline = 'alphabetic';
+  var LETTER_SPACING = -2;
+  var totalWS = 0;
+  info.parts.forEach(function(p){
+    for(var ci = 0; ci < p.text.length; ci++){
+      ctx.font = font(p.sz, s.weight);
+      totalWS += ctx.measureText(p.text[ci]).width + LETTER_SPACING;
+    }
+  });
+  var x = -totalWS / 2;
+  info.parts.forEach(function(p){
+    ctx.font = font(p.sz, s.weight);
+    for(var ci = 0; ci < p.text.length; ci++){
+      var ch = p.text[ci];
+      ctx.fillText(ch, x, baseY);
+      x += ctx.measureText(ch).width + LETTER_SPACING;
+    }
+  });
+  if(COUPON_SELECTED === key){
+    ctx.strokeStyle = '#2563EB'; ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 3]);
+    ctx.strokeRect(boxL, boxT, boxW, boxH);
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+  return { l: s.cx + boxL, t: s.cy + boxT, w: boxW, h: boxH, cx: s.cx, cy: s.cy };
+}
+
+var _couponRects = {};
+function drawCoupon(){
+  var type = D.tabType || 'bau';
+  var spec = COUPON_SPEC[type] || COUPON_SPEC.bau;
+  _couponRects = {};
+  var r1 = drawCouponLine(D.coupon1, spec.coupon1, 'coupon1');
+  if(r1) _couponRects.coupon1 = r1;
+  if(type === 'flash'){
+    var r2 = drawCouponLine(D.coupon2, spec.coupon2, 'coupon2');
+    if(r2) _couponRects.coupon2 = r2;
+  }
+}
+
+function drawCTA(){
+  // CTA 規格：x=54, y=253, w=217, h=67
+  var bx=54, by=253, bw=217, bh=67;
+  if(D.ctaBtn && D.ctaBtn.naturalWidth){
+    ctx.drawImage(D.ctaBtn, bx, by, bw, bh);
+  } else {
+    // fallback：手動繪製
+    var r=bh/2;
+    ctx.beginPath();
+    ctx.moveTo(bx+r,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,r);
+    ctx.arcTo(bx+bw,by+bh,bx,by+bh,r); ctx.arcTo(bx,by+bh,bx,by,r);
+    ctx.arcTo(bx,by,bx+bw,by,r); ctx.closePath();
+    ctx.fillStyle='#EE4D2D'; ctx.fill();
+    ctx.font=font(22,700); ctx.fillStyle='white'; ctx.textAlign='center';
+    ctx.fillText('⊙ 立即看', bx+bw/2, by+bh/2+8);
+    ctx.textAlign='left';
+  }
+}
+
+/* ── Overlay：選取框 + handles + 懸浮 bar ── */
+function updateOverlay(){
+  overlay.innerHTML='';
+  if(!D.host||!D.selected) return;
+
+  var dw = D.host.naturalWidth  * D.imgScale;
+  var dh = D.host.naturalHeight * D.imgScale;
+  D.imgW = dw; D.imgH = dh;
+
+  /* 用 tight bounds 決定選取框範圍 */
+  var boxL, boxT, boxW, boxH;
+  if(D.hostBounds){
+    var PAD = 2;
+    boxL = D.imgX - dw/2 + D.hostBounds.x * D.imgScale - PAD;
+    boxT = D.imgY - dh/2 + D.hostBounds.y * D.imgScale - PAD;
+    boxW = D.hostBounds.w * D.imgScale + PAD*2;
+    boxH = D.hostBounds.h * D.imgScale + PAD*2;
+  } else {
+    boxL = D.imgX - dw/2;
+    boxT = D.imgY - dh/2;
+    boxW = dw; boxH = dh;
+  }
+  var imgL=boxL, imgT=boxT, imgR=boxL+boxW, imgB=boxT+boxH;
+
+  var box=document.createElement('div');
+  box.className='sel-box';
+  box.style.cssText='left:'+imgL+'px;top:'+imgT+'px;width:'+boxW+'px;height:'+boxH+'px;';
+  overlay.appendChild(box);
+
+  [
+    {h:'nw',lx:imgL,        ly:imgT        },
+    {h:'n', lx:imgL+boxW/2, ly:imgT        },
+    {h:'ne',lx:imgR,        ly:imgT        },
+    {h:'e', lx:imgR,        ly:imgT+boxH/2 },
+    {h:'se',lx:imgR,        ly:imgB        },
+    {h:'s', lx:imgL+boxW/2, ly:imgB        },
+    {h:'sw',lx:imgL,        ly:imgB        },
+    {h:'w', lx:imgL,        ly:imgT+boxH/2 },
+  ].forEach(function(hd){
+    var el=document.createElement('div');
+    el.className='sel-handle';
+    el.dataset.h=hd.h;
+    el.style.cssText='left:'+hd.lx+'px;top:'+hd.ly+'px;';
+    el.addEventListener('mousedown',startResize);
+    overlay.appendChild(el);
+  });
+
+  // 懸浮 action bar — 置於圖片頂部中央，超出畫布上方時改顯示在下方
+  var bar=document.createElement('div');
+  bar.className='sel-bar';
+  bar.innerHTML=
+    '<button class="sel-bar-btn" onclick="doAction(\'edit\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>去背編輯</button>'
+    +'<div class="sel-bar-sep"></div>'
+    +'<button class="sel-bar-btn" onclick="doAction(\'replace\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M1 8a7 7 0 1 0 14 0"/><path d="M8 1v5l3-3M8 1l-3 2"/></svg>更換</button>'
+    +'<div class="sel-bar-sep"></div>'
+    +'<button class="sel-bar-btn danger" onclick="doAction(\'delete\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>刪除</button>';
+
+  // 固定在作圖區底部，水平置中，不超出畫布
+  var barTop = ZONE.y + ZONE.h + 8;
+  // 如果作圖區底部已超出畫布高度，貼齊畫布底部往上
+  if(barTop + 42 > H) barTop = H - 50;
+  bar.style.left = (ZONE.x + ZONE.w/2) + 'px';
+  bar.style.top  = barTop + 'px';
+  bar.style.transform = 'translateX(-50%)';
+  overlay.appendChild(bar);
+
+  overlay.style.pointerEvents='auto';
+}
+
+function updateCouponOverlay(){
+  overlay.querySelectorAll('.coupon-handle-wrap').forEach(function(el){ el.remove(); });
+  if(!COUPON_SELECTED) return;
+  var r = _couponRects[COUPON_SELECTED];
+  if(!r) return;
+  var wrap = document.createElement('div');
+  wrap.className = 'coupon-handle-wrap';
+  wrap.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;';
+  var box = document.createElement('div');
+  box.style.cssText = 'position:absolute;pointer-events:none;' +
+    'left:'+r.l+'px;top:'+r.t+'px;width:'+r.w+'px;height:'+r.h+'px;' +
+    'border:1.5px dashed #2563EB;border-radius:3px;box-shadow:0 0 0 1px rgba(37,99,235,0.15);';
+  wrap.appendChild(box);
+  overlay.appendChild(wrap);
+}
+
+/* ── Action handler ── */
+function doAction(action){
+  if(action==='edit'){
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_OPEN_EDITOR', key:'host', src:D.host.src}, '*');
+    }
+  } else if(action==='replace'){
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_REPLACE_IMG', key:'host'}, '*');
+    }
+  } else if(action==='delete'){
+    D.host=null; D.selected=false; D.imgW=0; D.imgH=0;
+    overlay.style.pointerEvents='none';
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_DELETE_IMG', key:'host'}, '*');
+    }
+    render();
+  }
+}
+
+/* ── Resize ── */
+var _rd=null;
+function startResize(e){
+  e.preventDefault(); e.stopPropagation();
+  // 記錄當下的實際寬高和 scale
+  var dw = D.host.naturalWidth  * D.imgScale;
+  var dh = D.host.naturalHeight * D.imgScale;
+  _rd={h:e.target.dataset.h, sx:e.clientX, sy:e.clientY,
+       sc:D.imgScale, sw:dw, sh:dh, ix:D.imgX, iy:D.imgY};
+  D.resizing=true;
+}
+document.addEventListener('mousemove',function(e){
+  if(!D.resizing||!_rd) return;
+  var rect=cv.getBoundingClientRect();
+  var stageScale=W/rect.width; // canvas 顯示縮放比
+  var dx=(e.clientX-_rd.sx)*stageScale;
+  var dy=(e.clientY-_rd.sy)*stageScale;
+  var h=_rd.h, ref=Math.max(_rd.sw,_rd.sh);
+  var delta=0;
+  if(h==='se'||h==='s'||h==='e')  delta= Math.max(dx,dy)/ref;
+  if(h==='nw'||h==='n'||h==='w')  delta=-Math.min(dx,dy)/ref;
+  if(h==='ne') delta= (dx-dy)/ref/2;
+  if(h==='sw') delta=-(dx-dy)/ref/2;
+  D.imgScale=Math.max(0.05,_rd.sc+delta);
+  render();
+});
+document.addEventListener('mouseup',function(){ D.resizing=false; _rd=null; });
+
+/* ── Drag ── */
+stage.addEventListener('mousedown',function(e){
+  if(D.resizing) return;
+  if(e.target.classList.contains('sel-handle')||e.target.closest('.sel-bar')) return;
+  var rect=cv.getBoundingClientRect();
+  var sx=W/rect.width, sy=H/rect.height;
+  var cx=(e.clientX-rect.left)*sx, cy=(e.clientY-rect.top)*sy;
+  /* 判斷是否點到主持人圖素的有色範圍 */
+  var hitOk = false;
+  if(D.host){
+    if(D.hostBounds){
+      var dw=D.host.naturalWidth*D.imgScale, dh=D.host.naturalHeight*D.imgScale;
+      var imgL=D.imgX-dw/2, imgT=D.imgY-dh/2;
+      var bx=imgL+D.hostBounds.x*D.imgScale;
+      var by=imgT+D.hostBounds.y*D.imgScale;
+      var bw=D.hostBounds.w*D.imgScale;
+      var bh=D.hostBounds.h*D.imgScale;
+      hitOk=(cx>=bx&&cx<=bx+bw&&cy>=by&&cy<=by+bh);
+    } else {
+      /* 沒有 bounds：用整張圖範圍 */
+      var dw2=D.host.naturalWidth*D.imgScale, dh2=D.host.naturalHeight*D.imgScale;
+      hitOk=(cx>=D.imgX-dw2/2&&cx<=D.imgX+dw2/2&&cy>=D.imgY-dh2/2&&cy<=D.imgY+dh2/2);
+    }
+  }
+
+  /* 券樣 hit-test */
+  var couponHit = null;
+  Object.keys(_couponRects).forEach(function(key){
+    var r = _couponRects[key];
+    if(cx >= r.l && cx <= r.l+r.w && cy >= r.t && cy <= r.t+r.h) couponHit = key;
+  });
+
+  if(couponHit){
+    COUPON_SELECTED = couponHit;
+    D.selected = false;
+    overlay.style.pointerEvents = 'none';
+    stage.style.cursor = 'default';
+  } else if(hitOk){
+    COUPON_SELECTED = null;
+    /* 點到圖素：選取並開始拖拉 */
+    D.selected=true;
+    overlay.style.pointerEvents='auto';
+    D.dragging=true;
+    D.dragStartX=cx; D.dragStartY=cy;
+    D.imgStartX=D.imgX; D.imgStartY=D.imgY;
+    stage.style.cursor='grabbing';
+  } else {
+    COUPON_SELECTED = null;
+    D.selected=false;
+    overlay.style.pointerEvents='none';
+    stage.style.cursor='default';
+  }
+  render();
+});
+stage.addEventListener('mousemove',function(e){
+  if(!D.dragging||D.resizing) return;
+  var rect=cv.getBoundingClientRect();
+  var sx=W/rect.width, sy=H/rect.height;
+  D.imgX=D.imgStartX+(e.clientX-rect.left)*sx-D.dragStartX;
+  D.imgY=D.imgStartY+(e.clientY-rect.top)*sy-D.dragStartY;
+  render();
+});
+stage.addEventListener('mouseup',function(){ D.dragging=false; stage.style.cursor='default'; });
+stage.addEventListener('mouseleave',function(){ D.dragging=false; stage.style.cursor='default'; });
+
+/* ── Scroll zoom ── */
+/* 滾輪縮放已移除 */
+
+/* ── Init host position ── */
+/* ── Tight bounding box：掃描有色像素範圍 ── */
+function calcTightBounds(img){
+  try{
+    var SCAN = 200;
+    var sc = Math.min(1, SCAN / Math.max(img.naturalWidth, img.naturalHeight));
+    var sw = Math.max(1, Math.floor(img.naturalWidth  * sc));
+    var sh = Math.max(1, Math.floor(img.naturalHeight * sc));
+    var tmp = document.createElement('canvas');
+    tmp.width = sw; tmp.height = sh;
+    var tx = tmp.getContext('2d');
+    tx.clearRect(0, 0, sw, sh);
+    tx.drawImage(img, 0, 0, sw, sh);
+    var d = tx.getImageData(0, 0, sw, sh).data;
+    var x0=sw, y0=sh, x1=0, y1=0, found=false;
+    for(var y=0; y<sh; y++){
+      for(var x=0; x<sw; x++){
+        if(d[(y*sw+x)*4+3] > 15){
+          if(x<x0) x0=x; if(x>x1) x1=x;
+          if(y<y0) y0=y; if(y>y1) y1=y;
+          found=true;
+        }
+      }
+    }
+    if(!found) return null;
+    var b={ x:x0/sc, y:y0/sc, w:(x1-x0+1)/sc, h:(y1-y0+1)/sc };
+    console.log('[bounds] x='+Math.round(b.x)+' y='+Math.round(b.y)+' w='+Math.round(b.w)+' h='+Math.round(b.h));
+    return b;
+  } catch(e){ console.warn('[bounds] err:', e.message); return null; }
+}
+
+function initHostPos(){
+  D.hostBounds = calcTightBounds(D.host);
+  if(D.hostBounds){
+    /* 有色部分填滿作圖區，再放大 20% */
+    var scH = ZONE.h / D.hostBounds.h;
+    var scW = ZONE.w / D.hostBounds.w;
+    D.imgScale = Math.min(scH, scW) * 1.2;
+    var dw = D.host.naturalWidth  * D.imgScale;
+    var dh = D.host.naturalHeight * D.imgScale;
+    /* 水平：有色中心對齊作圖區水平中心 */
+    var bcX = D.hostBounds.x * D.imgScale + D.hostBounds.w * D.imgScale / 2;
+    D.imgX = ZONE.x + ZONE.w/2 - bcX + dw/2;
+    /* 垂直：有色頂部對齊作圖區頂部（頭部不被遮擋） */
+    var boundsTop = D.hostBounds.y * D.imgScale;
+    D.imgY = ZONE.y - boundsTop + dh/2;
+  } else {
+    /* 無 bounds 退回 cover */
+    D.imgX = ZONE.x + ZONE.w/2;
+    D.imgY = ZONE.y + ZONE.h/2;
+    D.imgScale = Math.max(ZONE.w/D.host.naturalWidth, ZONE.h/D.host.naturalHeight);
+  }
+}
+
+/* ── postMessage ── */
+window.addEventListener('message',function(e){
+  var msg=e.data;
+
+  /* 狀態儲存/恢復 */
+  if(msg && msg.type==='BN_GET_STATE'){
+    window.parent.postMessage({
+      type:'BN_CANVAS_STATE',
+      msgId: msg.msgId,
+      state:{ imgX:D.imgX, imgY:D.imgY, imgScale:D.imgScale, selected:false }
+    },'*');
+    return;
+  }
+  if(msg && msg.type==='BN_RESTORE_STATE'){
+    var st = msg.state || {};
+    if(st.imgX!==undefined) D.imgX = st.imgX;
+    if(st.imgY!==undefined) D.imgY = st.imgY;
+    if(st.imgScale!==undefined) D.imgScale = st.imgScale;
+    render();
+    return;
+  }
+
+  if(!msg||msg.type!=='BN_UPDATE') return;
+  var p=msg.payload;
+
+  if(p.theme!==undefined) D.theme=p.theme;
+  if(p.main!==undefined)  D.main=p.main;
+  if(p.sub!==undefined)   D.sub=p.sub;
+  if(p.date!==undefined)  D.date=p.date;
+  if(p.time!==undefined)  D.time=p.time;
+  if(p.brand!==undefined) D.brand=p.brand;
+  if(p.cSub!==undefined)  D.cSub=p.cSub;
+  if(p.cMain!==undefined) D.cMain=p.cMain;
+  if(p.cDate!==undefined)   D.cDate=p.cDate;
+  if(p.showCTA!==undefined)  D.showCTA=p.showCTA;
+  if(p.coupon1!==undefined)  D.coupon1=p.coupon1;
+  if(p.coupon2!==undefined)  D.coupon2=p.coupon2;
+  /* bgBase 是資料夾路徑，自己補上版位檔名 */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '11_lpbn_app.jpg' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null); /* 向下相容 */
+  }
+
+  var pending=0;
+  function dec(){ if(--pending<=0) render(); }
+
+  if(p.host!==undefined){ pending++;
+    var isNew=!D.host||(p.host!==D._lastHostSrc&&!p.keepPos);
+    loadImg(p.host,function(img){
+      D.host=img;
+      if(img&&isNew){
+        D._lastHostSrc=p.host;
+        initHostPos(); D.selected=false; // initHostPos 內已呼叫 calcTightBounds
+      }
+      else if(img){ D._lastHostSrc=p.host; }
+      dec();
+    });
+  }
+  // 依分頁類型切換 logo
+  if(p.tabType!==undefined) reloadLogo(p.tabType);
+  if(pending===0) render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+function snapBlob(fmt, q, cb){
+  var ws = D.selected; D.selected = false; render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+}
+
+window.BNExport = {
+  /* 單張輸出（目前狀態） */
+  getBlob: function(fmt, q, cb){ snapBlob(fmt, q, cb); },
+
+  /* 輸出兩張：有CTA + 無CTA */
+  getBothBlobs: function(fmt, q, cb){
+    var origCTA = D.showCTA;
+    D.showCTA = true; render();
+    exportBlob(fmt, q, function(blobWith){
+      D.showCTA = false; render();
+      exportBlob(fmt, q, function(blobWithout){
+        D.showCTA = origCTA; render();
+        cb(blobWith, blobWithout);
+      });
+    });
+  },
+
+  spec:{id:'11_lpbn_app', name:'LPBN_APP', width:W, height:H, hasCTAVariant:false}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done=0;
+  function tick(){ if(++done>=2) cb(); }
+  var i1=new Image();
+  i1.onload=function(){ D.logo1=i1; tick(); };
+  i1.onerror=tick;
+  i1.src='../logos/logo_shopee_live.png'; // 初始預設 BAU，收到 tabType 後更新
+  var i3=new Image();
+  i3.onload=function(){ D.ctaBtn=i3; tick(); };
+  i3.onerror=tick;
+  i3.src='../cta/bau/11.png';
+}
+
+function reloadLogo(tabType){
+  D.tabType = tabType;
+  var logoSrc = (tabType==='flash')
+    ? '../logos/flash-sale-logo.png'
+    : '../logos/logo_shopee_live.png';
+  if(D._logoSrc !== logoSrc){
+    D._logoSrc = logoSrc;
+    var img = new Image();
+    img.onload = function(){ D.logo1 = img; render(); };
+    img.onerror = function(){ D.logo1 = null; render(); };
+    img.src = logoSrc;
+  }
+  var ctaSrc = (tabType==='flash')
+    ? '../cta/flash-sale/11.png'
+    : '../cta/bau/11.png';
+  if(D._ctaSrc !== ctaSrc){
+    D._ctaSrc = ctaSrc;
+    var btn = new Image();
+    btn.onload = function(){ D.ctaBtn = btn; render(); };
+    btn.onerror = function(){ D.ctaBtn = null; render(); };
+    btn.src = ctaSrc;
+  }
+}
+
+/* 明確等待三個字重都載入 */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  loadDefaultLogos(function(){
+    render();
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_READY',id:'11_lpbn_app'},'*');
+    }
+  });
+});
+</script>
+</body>
+</html>

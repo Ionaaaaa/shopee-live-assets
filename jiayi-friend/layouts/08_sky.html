@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>08 天空標字卡</title>
+<style>:root{ --cw:1080px; --ch:1920px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1080" height="1920"></canvas>
+</div>
+
+<script src="../js/logo-row-defaults.js"></script>
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 1080, H = 1920;
+
+/* ── 設計稿規格 ──
+   背景是固定的一張裝飾圖（backgrounds/08_天空標_直式.png），不隨版型 A/B/C 變化；
+   畫面上只需要置入 logo：
+     - 只有 logo1 時，logo1 在 LOGO 區內單獨置中
+     - 有 logo2 時，logo1＋分隔線＋logo2 整條一起置中
+   （跟其他版位共用同一套置中／分隔線邏輯，見 drawLogos()）
+
+   設計稿給的 LOGO 範圍：top=811, width=425, height=76（後續調整：往上 139px，再往上 150px，再往上 100px，再往上 20px）。
+   水平位置這裡改成置中，沒有直接套用設計稿給的 left(3700px)——那個數字明顯是
+   在比 1080 大很多的設計稿整頁座標下量出來的（可能是多個版位並排的其中一格），
+   不是這張 1080 寬畫布本身的座標，所以水平位置以「置中」為準，只取 top/height
+   當作垂直位置與 logo 高度的依據。 */
+var LOGO = { x:(W-382.6125)/2, y:811-139-150-100-20+1+1+2+2, w:382.6125, h:67.64 }; // 425x76→縮5%→再縮1px→再縮5%；y累計往下6px
+var LOGO_RATIOS = getLogoRowRatios(); // logo1 高度 / 分隔線長度比例，來自 logo-row-defaults.js
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ──
+   這個版位只有背景圖＋logo，沒有主標/副標/主持人/商品/CTA，
+   D 物件故意只放用得到的欄位，不跟著其他版位一起帶一堆沒用到的預設值 */
+var D = {
+  bg: null, bgUrl: null,
+  logo1: null, logo2: null, logo2Shape: null,
+};
+
+function render(){
+  ctx.clearRect(0,0,W,H); // 背景色透明，不像其他版位先填白——輸出的 PNG 要保留透明通道
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  drawLogos();
+}
+
+function drawLogos(){
+  var a = LOGO;
+  var hasLogo2 = !!(D.logo2 && D.logo2.naturalWidth);
+
+  var lh1=0, lw1=0, lh2=0, lw2=0;
+  if(D.logo1 && D.logo1.naturalWidth){
+    lh1 = a.h * LOGO_RATIOS.logo1HeightRatio;
+    lw1 = D.logo1.naturalWidth * (lh1 / D.logo1.naturalHeight);
+  }
+  if(hasLogo2){
+    lh2 = a.h * logo2HeightRatioFor(D.logo2Shape, LOGO_RATIOS);
+    lw2 = D.logo2.naturalWidth * (lh2 / D.logo2.naturalHeight);
+  }
+
+  // 沒有 logo2 時，不能把分隔線／logo2 預留的間距也算進去置中，不然 logo1 會偏移中心
+  var totalW = hasLogo2 ? (lw1 + LOGO_RATIOS.gapBeforeDividerPx + LOGO_RATIOS.dividerLineWidthPx + LOGO_RATIOS.gapAfterDividerPx + lw2) : lw1;
+
+  /* 長型 logo2 的寬度是「用固定高度反推」算出來的（lw2 = 原圖寬高比 × lh2），
+     遇到很寬的長型素材，totalW 可能撐得比畫面預留的範圍還寬，logo1＋分隔線＋logo2
+     整條會超出去。這裡限制總寬度上限，超出的話整組（logo1/分隔線/logo2/間距）
+     依同一個比例一起縮小，維持彼此的相對大小關係，不是只縮logo2自己——
+     這個判斷是「形狀無關」的：方形 logo2 因為寬高比接近1:1，同樣高度下天生
+     比長型窄很多，totalW 通常本來就不會超過這個上限，實際上幾乎不會觸發縮小；
+     長型才會頂到這個上限。兩種形狀共用同一個 MAX_TOTAL_W，不用分開設定。
+
+     上限用設計稿給的 LOGO 範圍寬度（a.w＝382.6125px）再乘0.88——這個乘數目前
+     調整歷程是 1→0.85→0.88，還要再調的話改這一個數字就好，不用動 a.w
+     （那個是設計稿本來的範圍，不要動）。 */
+  var MAX_TOTAL_W = a.w * 0.88;
+  var shrink = (totalW > MAX_TOTAL_W) ? (MAX_TOTAL_W / totalW) : 1;
+  if (shrink < 1){
+    lw1 *= shrink; lh1 *= shrink; lw2 *= shrink; lh2 *= shrink;
+    totalW = totalW * shrink;
+  }
+  var gapBeforeDivider = LOGO_RATIOS.gapBeforeDividerPx * shrink;
+  var gapAfterDivider  = LOGO_RATIOS.gapAfterDividerPx * shrink;
+  var dividerLineWidth = LOGO_RATIOS.dividerLineWidthPx * shrink;
+
+  var x = W/2 - totalW/2; // 畫布水平置中
+
+  /* logo1 原本跟 divider／logo2 共用同一條頂邊基準線（a.y），這裡讓 logo1 自己
+     單獨往下偏一點點，脫鉤處理——divider／logo2 的垂直位置不受影響。
+     8px 是先抓一個小幅度，還要再往下/往上，改這個數字就好。 */
+  var LOGO1_Y_OFFSET = 8;
+
+  if(D.logo1 && D.logo1.naturalWidth){
+    ctx.drawImage(D.logo1, x, a.y + LOGO1_Y_OFFSET, lw1, lh1);
+    x += lw1;
+  }
+
+  if(!hasLogo2) return;
+
+  x += gapBeforeDivider;
+  var lineH = a.h * LOGO_RATIOS.dividerHeightRatio * shrink;
+  ctx.strokeStyle = '#b36e57'; ctx.lineWidth = dividerLineWidth;
+  ctx.beginPath();
+  ctx.moveTo(x, a.y + (a.h - lineH)/2);
+  ctx.lineTo(x, a.y + (a.h + lineH)/2);
+  ctx.stroke();
+  x += gapAfterDivider;
+
+  /* logo2：editor 的 Logo2 編輯面板已經把圓角/底色/位置合成好了，
+     這裡拿到的是現成的一張圖，跟 logo1 一樣直接畫，固定高度、寬度依比例算 */
+  ctx.drawImage(D.logo2, x, a.y + (a.h - lh2)/2, lw2, lh2);
+}
+
+/* ── postMessage ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  /* bgBase 是資料夾路徑，自己補上版位檔名；這個版位背景固定不隨 A/B/C 變化，
+     但仍走跟其他版位一樣的 bgBase 拼檔名機制，維持同一套邏輯 */
+  if(p.bgBase !== undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '08_\u5929\u7a7a\u6a19_\u76f4\u5f0f.png' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl !== undefined){
+    loadBg(p.bgUrl || null); /* 向下相容 */
+  }
+
+  var pending = 0;
+  function dec(){ if(--pending<=0) render(); }
+
+  /* logo1 目前仍維持預設內建、忽略外部傳入；
+     logo2 可被 editor 上傳的圖覆蓋（沒有上傳時維持預設圖）——
+     editor 的 Logo2 面板已經把圓角/底色/位置都合成好了，這裡收到的是
+     一張現成的圖，當一般圖片載入即可 */
+  if(p.logo2Shape !== undefined) D.logo2Shape = p.logo2Shape; // 'square' 或 'wide'，決定 logo2 高度比例
+  if(p.logo2 !== undefined && p.logo2){ pending++;
+    loadImg(p.logo2, function(img){ D.logo2 = img; dec(); });
+  }
+  if(pending === 0) render();
+});
+
+/* ── Export ──
+   最終下載檔要是 PNG（見下面 spec.fmt），不是其他版位預設的 JPEG */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'png'), q);
+}
+
+window.BNExport = {
+  getBlob: function(fmt, q, cb){ exportBlob(fmt, q, cb); },
+  spec:{id:'08_sky', name:'天空標字卡', width:W, height:H, hasCTAVariant:false, fmt:'png'}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done = 0;
+  function tick(){ if(++done>=2) cb(); }
+  var i1 = new Image();
+  i1.onload = function(){ D.logo1 = i1; tick(); };
+  i1.onerror = tick;
+  i1.src = '../logos/logo_shopee_live.png';
+  var i2 = new Image();
+  i2.onload = function(){ D.logo2 = i2; tick(); };
+  i2.onerror = tick;
+  /* 沿用專案其他版位既有的預設 logo2 佔位檔名（目前不存在，會 404 後靜默略過，
+     跟其他版位行為一致，不影響實際運作——logo2 一律等 editor 廣播進來後才會真的出現） */
+  i2.src = '../logos/logo_star_studio.png';
+}
+
+loadDefaultLogos(function(){
+  render();
+  if(window.parent !== window){
+    window.parent.postMessage({type:'BN_READY', id:'08_sky'}, '*');
+    window.parent.postMessage({type:'LC_READY'}, '*');
+  }
+});
+</script>
+</body>
+</html>

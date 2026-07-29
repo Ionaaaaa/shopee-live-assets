@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>02 直播大廳 LPBN</title>
+<style>:root{ --cw:1125px; --ch:360px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1125" height="360"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/logo-row-defaults.js"></script>
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 1125, H = 360;
+
+/* ── PSD 規格 ──
+   這個版位（直播大廳LPBN）工單規格明確寫「不套Logo＆品，使用天秤視覺」，
+   原本理解成連Logo也不放，經確認後更正：Logo1/Logo2 還是要放，
+   只是不疊加商品/主持人陰影（那組已經改用背景圖裡的天秤視覺代替）。 */
+var LOGO = { x:52,  y: 42.5,  w:386, h:61.5  };
+var BAR  = { x:666, y:309, w:464, h:51  };
+var LOGO_RATIOS = getLogoRowRatios(); // logo1 高度 / 分隔線長度比例，來自 logo-row-defaults.js
+
+var cv      = document.getElementById('cv');
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* ── 高 DPR（Retina 畫質） ── */
+var DPR = 1;
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ── */
+var D = {
+  theme:'A', bg:null, bgUrl:null,
+  logo1:null, ctaBtn:null,
+  main:'主標文案$9字內', sub:'副標文案$8字內',
+  date:'XX/XX', time:'19:00', brand:'XXX', guest:'', combo:null,
+  cSub:'#AD6B00', cMain:'#ffe933', cDate:'#AD6B00',
+  showCTA: true,  // 預設顯示 CTA
+};
+
+var BG_FALLBACK = { A:'#F5C842', B:'#F5A0C5', C:'#bee1f2' };
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  // 背景（先填白色防止透明 PNG 合成時殘留前一張顏色）
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,W,H);
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else { ctx.fillStyle=BG_FALLBACK[D.theme]||'#F5C842'; ctx.fillRect(0,0,W,H); }
+
+  drawLogos();
+  drawText();
+  /* 這個版位不需要主持人的 bar 跟文案（工單規格已改用天秤視覺代替，
+     不放主持人/來賓資訊），drawHostBar() 保留函式定義但不呼叫，
+     以防之後又要改回來，不用重寫。 */
+  if(D.showCTA) drawCTA();
+}
+
+function drawLogos(){
+  var a = LOGO, x = a.x;
+
+  /* 這個版位只放Logo1（蝦皮直播固定Logo），不放廠商自己的Logo2──
+     跟01_thumbnail/04_opening不一樣，那兩個版位才需要logo1+logo2並排 */
+  if(D.logo1 && D.logo1.naturalWidth){
+    var lh1 = a.h * LOGO_RATIOS.logo1HeightRatio;
+    var lw1 = D.logo1.naturalWidth * (lh1 / D.logo1.naturalHeight);
+    ctx.drawImage(D.logo1, x, a.y + (a.h - lh1)/2, lw1, lh1); // 垂直置中
+  }
+}
+
+function drawText(){
+  ctx.textAlign = 'left';
+
+  /* ── 主標：PSD top=116.21, left=47.35, 41px Medium ── */
+  ctx.font = font(41, 500);
+  var mainAscent   = ctx.measureText('測').actualBoundingBoxAscent || 41 * 0.88;
+  var mainBaseline = 115.21 + mainAscent;
+  if(D.main){
+    ctx.fillStyle = D.cSub;
+    ctx.fillText(D.main, 47, mainBaseline);
+  }
+
+  /* ── 日期時間：PSD top=130.31, left=377.48, 26px Regular ── */
+  // 日期：緊接主標右側 + 24px，高度維持
+  ctx.font = font(41, 500); // 先用主標字型量主標寬度
+  var mainW = D.main ? ctx.measureText(D.main).width : 0;
+  ctx.font = font(26, 400);
+  var dateAscent   = ctx.measureText('測').actualBoundingBoxAscent || 26 * 0.88;
+  var dateBaseline = 129.31 + dateAscent;
+  var dateX        = 47 + mainW + 24;
+  ctx.fillStyle = D.cDate;
+  ctx.fillText(D.date + ' ' + D.time, dateX, dateBaseline);
+
+  /* ── 副標：PSD top=166.01, left=43.94, 70px Bold ── */
+  ctx.font = font(70, 700);
+  var subAscent   = ctx.measureText('測').actualBoundingBoxAscent || 70 * 0.88;
+  var subBaseline = 169.01 + subAscent;
+  if(D.sub){
+    ctx.fillStyle = D.cMain;
+    ctx.fillText(D.sub, 44, subBaseline);
+  }
+}
+
+function drawHostBar(){
+  var b=BAR;
+  var barColor = '#ffffff';
+  var barColorRgb = '255,255,255';
+  // 漸層
+  var grad=ctx.createLinearGradient(b.x,0,b.x+65,0);
+  grad.addColorStop(0,'rgba('+barColorRgb+',0)');
+  grad.addColorStop(1,'rgba('+barColorRgb+',1)');
+  ctx.fillStyle=grad; ctx.fillRect(b.x,b.y,65,b.h);
+  ctx.fillStyle=barColor; ctx.fillRect(b.x+65,b.y,b.w-65,b.h);
+
+  // 文字規格：29.41pt ≈ 39px，深藍色
+  // 格式：主持人 [15px空] | [15px空] 人名，整體置右
+  // 有來賓時：來賓 | 來賓名稱 [兩個空格寬] 主持人 | 主持人名稱
+  var fs = 29; // 29.41pt * (96/72) ≈ 39px
+  ctx.font = font(fs, 500);
+  ctx.fillStyle = '#1f305d';
+
+  var wLine  = 1;   // 分隔線寬度視覺上 1px
+  var GAP15  = 8;
+  var GAPGRP = ctx.measureText('  ').width; // 群組之間的間距＝兩個全形空白寬
+
+  // 每個群組（來賓 | 名字、主持人 | 名字）各自的寬度
+  function measureGroup(label, name){
+    return ctx.measureText(label).width + GAP15 + wLine + GAP15 + ctx.measureText(name).width;
+  }
+
+  var groups = [];
+  if(D.guest){ groups.push({ label:'來賓', name: D.guest }); }
+  groups.push({ label:'主持人', name: D.brand || 'XXX' });
+
+  var totalW = 0;
+  groups.forEach(function(g, i){
+    totalW += measureGroup(g.label, g.name);
+    if(i < groups.length-1) totalW += GAPGRP;
+  });
+
+  // 置右：從 bar 右側 20px 開始往左
+  var rightEdge = b.x + b.w - 20;
+  var startX    = rightEdge - totalW;
+
+  // 垂直置中
+  var baseline  = b.y + b.h/2 + fs * 0.35;
+
+  ctx.textAlign = 'left';
+  var cx = startX;
+  groups.forEach(function(g, i){
+    var wLabel = ctx.measureText(g.label).width;
+    var wName  = ctx.measureText(g.name).width;
+    ctx.fillText(g.label, cx, baseline);
+    cx += wLabel + GAP15;
+    ctx.strokeStyle = '#1f305d';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, b.y + 10);
+    ctx.lineTo(cx, b.y + b.h - 10);
+    ctx.stroke();
+    cx += wLine + GAP15;
+    ctx.fillText(g.name, cx, baseline);
+    cx += wName;
+    if(i < groups.length-1) cx += GAPGRP;
+  });
+  ctx.textAlign = 'left';
+}
+
+function drawCTA(){
+  // CTA 規格：x=54, y=253, w=217, h=67
+  var bx=54, by=253, bw=217, bh=67;
+  if(D.ctaBtn && D.ctaBtn.naturalWidth){
+    ctx.drawImage(D.ctaBtn, bx, by, bw, bh);
+  } else {
+    // fallback：手動繪製
+    var r=bh/2;
+    ctx.beginPath();
+    ctx.moveTo(bx+r,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,r);
+    ctx.arcTo(bx+bw,by+bh,bx,by+bh,r); ctx.arcTo(bx,by+bh,bx,by,r);
+    ctx.arcTo(bx,by,bx+bw,by,r); ctx.closePath();
+    ctx.fillStyle='#EE4D2D'; ctx.fill();
+    ctx.font=font(22,700); ctx.fillStyle='white'; ctx.textAlign='center';
+    ctx.fillText('⊙ 立即看', bx+bw/2, by+bh/2+8);
+    ctx.textAlign='left';
+  }
+}
+
+/* ── 這個版位不套商品/主持人陰影疊層，沒有可拖曳/縮放的素材，
+   不需要 initHostPos()（原本用來把商品圖層第一次自動貼合作圖區）；
+   Logo1/Logo2 是固定尺寸直接貼上去，不需要選取/拖曳互動。 */
+
+/* ── postMessage ── */
+window.addEventListener('message',function(e){
+  var msg=e.data;
+
+  if(!msg||msg.type!=='BN_UPDATE') return;
+  var p=msg.payload;
+
+  if(p.theme!==undefined) D.theme=p.theme;
+  if(p.main!==undefined)  D.main=p.main;
+  if(p.sub!==undefined)   D.sub=p.sub;
+  if(p.date!==undefined)  D.date=p.date;
+  if(p.time!==undefined)  D.time=p.time;
+  if(p.brand!==undefined) D.brand=p.brand;
+  if(p.combo!==undefined) D.combo=p.combo;
+  if(p.guest!==undefined) D.guest=p.guest;
+  if(p.cSub!==undefined)  D.cSub=p.cSub;
+  if(p.cMain!==undefined) D.cMain=p.cMain;
+  if(p.cDate!==undefined) D.cDate=p.cDate;
+  if(p.showCTA!==undefined) D.showCTA=p.showCTA;
+  /* bgBase 是資料夾路徑，自己補上版位檔名 */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '02_lpbn.jpg' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null); /* 向下相容 */
+  }
+
+  /* logo1 目前仍維持預設內建、忽略外部傳入。這個版位刻意不接收 host
+     （商品/主持人陰影合成圖）也不接收logo2（廠商自己的Logo）——工單規格
+     明確這個版位不套商品，只放固定的Logo1，用背景圖裡的天秤視覺代替商品；
+     廠商Logo只在01_thumbnail/04_opening放，這個版位不需要。 */
+
+  render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+function snapBlob(fmt, q, cb){
+  var ws = D.selected; D.selected = false; render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+}
+
+window.BNExport = {
+  /* 單張輸出（目前狀態） */
+  getBlob: function(fmt, q, cb){ snapBlob(fmt, q, cb); },
+
+  /* 輸出兩張：有CTA + 無CTA */
+  getBothBlobs: function(fmt, q, cb){
+    var origCTA = D.showCTA;
+    /* 第一張：有CTA */
+    D.showCTA = true; render();
+    exportBlob(fmt, q, function(blobWith){
+      D.showCTA = false; render();
+      exportBlob(fmt, q, function(blobWithout){
+        D.showCTA = origCTA; render();
+        cb(blobWith, blobWithout);
+      });
+    });
+  },
+
+  spec:{id:'02_lpbn', name:'直播大廳 LPBN', width:W, height:H, hasCTAVariant:true}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done=0;
+  function tick(){ if(++done>=2) cb(); }
+  var i1=new Image();
+  i1.onload=function(){ D.logo1=i1; tick(); };
+  i1.onerror=tick;
+  i1.src='../logos/logo_shopee_live.png';
+  var i3=new Image();
+  i3.onload=function(){ D.ctaBtn=i3; tick(); };
+  i3.onerror=tick;
+  i3.src='../logos/cta_btn.png';
+}
+
+/* 明確等待三個字重都載入 */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  loadDefaultLogos(function(){
+    render();
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_READY',id:'02_lpbn'},'*');
+    }
+  });
+});
+</script>
+</body>
+</html>

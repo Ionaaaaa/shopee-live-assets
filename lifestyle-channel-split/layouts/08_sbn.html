@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>08 Seller BN (SBN)</title>
+<style>:root{ --cw:1024px; --ch:512px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1024" height="512"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/shadow-plugin.js"></script>
+<script src="../js/shadow-layout-defaults.js"></script>
+<script src="../js/shadow-scene-scale.js"></script>
+<script src="../js/shadow-layout-receiver.js"></script>
+
+<script src="../js/logo-row-defaults.js"></script>
+<script src="../js/host-scene-scale.js"></script>
+<script src="../js/mask-defaults.js"></script>
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 1024, H = 512;
+
+/* ── PSD 規格（Iona 提供的實際 CSS 座標，已經是相對這個 1024x512 版位本身的位置）──
+   作圖區換算自母畫布座標 left:3536,top:2025,w:496,h:458，
+   母畫布→本地位移量 (3008, 1995)（沒有縮放，只有位移，右邊界剛好貼齊畫布最右邊）；
+   底部再延長到畫布最底（512），所以高度從 458 改成 482（512-30） */
+var ZONE = { x:528, y:30, w:496, h:482 };
+var LOGO = { x:61,  y:156, w:212, h:52  }; // logo 範圍：白底容器
+var GAP  = 15; // logo 分隔線兩側間距
+var LOGO_RATIOS = getLogoRowRatios(); // logo1 高度 / 分隔線長度比例，來自 logo-row-defaults.js
+
+var cv      = document.getElementById('cv');
+var lcReceiver = ShadowLayoutReceiver.create(cv); // 陰影套件 receiver
+window.addEventListener('message', function(e){ lcReceiver.handleMessage(e.data, render); });
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* ── 高 DPR（Retina 畫質） ── */
+var DPR = 1;
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ── */
+var D = {
+  theme:'A', bg:null, bgUrl:null,
+  host:null, hostBounds:null, logo1:null, logo2:null, logo2Shape:null, ctaBtn:null,
+  main:'主標文案$9字內', sub:'副標文案$8字內',
+  date:'XX/XX', time:'19:00', brand:'XXX', combo:null, guest:'',
+  cSub:'#A8D9FB', cMain:'#FFE88B', cDate:'#A8D9FB',
+  showCTA: true,  // SBN 有 CTA，套用 cta_watch_now.png
+  imgX: ZONE.x + ZONE.w/2,
+  imgY: ZONE.y + ZONE.h/2,
+  imgW: 0, imgH: 0,
+  imgScale: 1,
+  selected: false,
+  dragging: false, dragStartX:0, dragStartY:0, imgStartX:0, imgStartY:0,
+  resizing: false,
+  _lastHostSrc: null,
+  maskOn: false, // 底部遮罩總開關，由editor廣播控制，預設關閉
+};
+
+var BG_FALLBACK = { A:'#F5C842', B:'#F5A0C5', C:'#bee1f2' };
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  // 背景（先填白色防止透明 PNG 合成時殘留前一張顏色）
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,W,H);
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else { ctx.fillStyle=BG_FALLBACK[D.theme]||'#F5C842'; ctx.fillRect(0,0,W,H); }
+
+  // 作圖區：clip 讓圖不超出（但選取框在 overlay 上，不受影響）
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ZONE.x,ZONE.y,ZONE.w,ZONE.h);
+  ctx.clip();
+  if(D.host){
+    var dw=D.host.naturalWidth*D.imgScale;
+    var dh=D.host.naturalHeight*D.imgScale;
+    D.imgW=dw; D.imgH=dh;
+    ctx.drawImage(D.host, D.imgX-dw/2, D.imgY-dh/2, dw, dh);
+  }
+  ctx.restore();
+
+  lcReceiver.drawItems(ctx); // 商品/主持人 陰影套件疊層
+
+  drawMaskLayer(ctx); // 主持人身體太短時，補在最底部的裝飾色塊（蓋在主持人/商品圖層上面）
+
+  drawLogos();
+  drawText();
+  if(D.showCTA) drawCTA();
+
+  updateOverlay();
+}
+
+function drawLogos(){
+  var a = LOGO;
+
+  // Logo 範圍原本畫一塊白色只是先前用來示意範圍，實際上這裡應該是透明，
+  // 讓底下的背景圖/主題色透出來，所以拿掉白色 fillRect，範圍本身還是保留給版位定位用
+
+  var x = a.x;
+  if(D.logo1 && D.logo1.naturalWidth){
+    var lh1 = a.h * LOGO_RATIOS.logo1HeightRatio;
+    var lw1 = D.logo1.naturalWidth * (lh1 / D.logo1.naturalHeight);
+    ctx.drawImage(D.logo1, x, a.y + (a.h - lh1)/2, lw1, lh1);
+    x += lw1;
+  }
+
+  // 分隔線前後間距
+  x += LOGO_RATIOS.gapBeforeDividerPx;
+  var lineH = a.h * LOGO_RATIOS.dividerHeightRatio;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = LOGO_RATIOS.dividerLineWidthPx;
+  ctx.beginPath();
+  ctx.moveTo(x, a.y + (a.h - lineH)/2);
+  ctx.lineTo(x, a.y + (a.h + lineH)/2);
+  ctx.stroke();
+  x += LOGO_RATIOS.gapAfterDividerPx;
+
+  /* logo2：editor 的 Logo2 編輯面板已經把圓角/底色/位置合成好了，
+     這裡拿到的是現成的一張圖，跟 logo1 一樣直接畫，固定高度、寬度依比例算 */
+  if(D.logo2 && D.logo2.naturalWidth){
+    var lh2 = a.h * logo2HeightRatioFor(D.logo2Shape, LOGO_RATIOS);
+    var lw2 = D.logo2.naturalWidth * (lh2 / D.logo2.naturalHeight);
+    ctx.drawImage(D.logo2, x, a.y + (a.h - lh2)/2, lw2, lh2); // 高度比 logo1 矮，垂直置中對齊
+  }
+}
+
+function drawText(){
+  ctx.textAlign = 'left';
+
+  /* 主標/副標/日期共用同一條左邊線──原本三行各自用 59.252 / 54.68 / 113.288，
+     日期那行多推了快 60px，看起來像沒對齊，這裡統一成同一個左邊界。
+     55 是取主標(59.252)、副標(54.68)兩者中間偏左的估計值，實際數字麻煩再跟設計稿核對。 */
+  var TEXT_LEFT = 55;
+
+  /* ── 主標：46px Medium，淺藍色 rgb(168,217,251)。原始 top=213.882，往下 8px ── */
+  ctx.font = font(46, 500);
+  if(D.main){
+    ctx.fillStyle = D.cSub;
+    ctx.fillText(D.main, TEXT_LEFT, (213.882 + 8) + 46*0.8); // CSS top 座標換算成畫布baseline，用字級*0.8估算上緣到基線距離
+  }
+
+  /* ── 副標：60px Bold，黃色 rgb(255,232,139)。原始 top=272.56，往下 11px ── */
+  ctx.font = font(60, 700);
+  if(D.sub){
+    ctx.fillStyle = D.cMain;
+    ctx.fillText(D.sub, TEXT_LEFT, (272.56 + 11) + 60*0.8);
+  }
+
+  /* ── 日期時間：Iona 原始 CSS 是 9.628px 再乘上 matrix scale(3.4276)，
+     實際顯示字級＝9.628×3.4276≈33px，這裡直接換算成最終字級。
+     在主標/副標的共用左邊線上再往右 3px、原始 top=364.723 往上 8px、
+     字級縮小 3pt（33→31→30，這次再多縮 1pt） ── */
+  var dateFontSize = 33 - 3;
+  ctx.font = font(dateFontSize, 400);
+  ctx.fillStyle = D.cDate;
+  ctx.fillText(D.date + '  ' + D.time, TEXT_LEFT + 3, (364.723 - 8) + dateFontSize*0.8);
+}
+
+function drawHostBar(){ /* ★ 待確認：SBN 是否需要主持人 bar */ }
+
+function drawCTA(){
+  // CTA 規格：x=870, y=456, w=146, h=45，套用 cta_watch_now.png（跟MSBN共用同一張圖）
+  var bx=870, by=456, bw=146, bh=45;
+  if(D.ctaBtn && D.ctaBtn.naturalWidth){
+    ctx.drawImage(D.ctaBtn, bx, by, bw, bh);
+  } else {
+    var r=bh/2;
+    ctx.beginPath();
+    ctx.moveTo(bx+r,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,r);
+    ctx.arcTo(bx+bw,by+bh,bx,by+bh,r); ctx.arcTo(bx,by+bh,bx,by,r);
+    ctx.arcTo(bx,by,bx+bw,by,r); ctx.closePath();
+    ctx.fillStyle='#ffffff'; ctx.fill();
+    ctx.font=font(16,700); ctx.fillStyle='#EE4D2D'; ctx.textAlign='center';
+    ctx.fillText('⊙ 立即看', bx+bw/2, by+bh/2+6);
+    ctx.textAlign='left';
+  }
+}
+
+/* ── Overlay：選取框 + handles + 懸浮 bar ── */
+function initHostPos(){
+  D.hostBounds = calcTightBounds(D.host);
+  if(D.hostBounds){
+    /* 有色部分填滿作圖區，再放大 20% */
+    var scH = ZONE.h / D.hostBounds.h;
+    var scW = ZONE.w / D.hostBounds.w;
+    D.imgScale = Math.min(scH, scW) * 1.2;
+    D.imgScale *= getHostSceneScale(D.combo); // 這個版位「主持人圖層」預設縮放（host-scene-scale.js），不影響使用者後續手動調整
+    var dw = D.host.naturalWidth  * D.imgScale;
+    var dh = D.host.naturalHeight * D.imgScale;
+    /* 水平：有色左邊對齊作圖區左邊（貼齊左邊，超出的部分往右邊溢出，
+       反正右邊本來就會被作圖區的 clip 裁掉，不會被右下角 CTA 蓋到左半邊内容） */
+    D.imgX = ZONE.x - D.hostBounds.x * D.imgScale + dw/2;
+    /* 垂直：有色頂部對齊作圖區頂部（頭部不被遮擋） */
+    var boundsTop = D.hostBounds.y * D.imgScale;
+    D.imgY = ZONE.y - boundsTop + dh/2;
+    D.imgY += getHostSceneOffsetY(D.combo); // 這個版位「主持人圖層」預設Y偏移（host-scene-scale.js），不影響使用者後續手動調整
+  } else {
+    /* 無 bounds 退回 cover，一樣貼齊左邊──先算好 scale 才能算 dw */
+    D.imgScale = Math.max(ZONE.w/D.host.naturalWidth, ZONE.h/D.host.naturalHeight);
+    D.imgScale *= getHostSceneScale(D.combo); // 這個版位「主持人圖層」預設縮放（host-scene-scale.js），不影響使用者後續手動調整
+    var dwFallback = D.host.naturalWidth * D.imgScale;
+    D.imgX = ZONE.x + dwFallback/2;
+    D.imgY = ZONE.y + ZONE.h/2;
+    D.imgY += getHostSceneOffsetY(D.combo); // 這個版位「主持人圖層」預設Y偏移（host-scene-scale.js），不影響使用者後續手動調整
+  }
+}
+
+/* ── postMessage ── */
+window.addEventListener('message',function(e){
+  var msg=e.data;
+
+  /* 狀態儲存/恢復 */
+  if(msg && msg.type==='BN_RESTORE_STATE'){
+    var st = msg.state || {};
+    if(st.imgX!==undefined) D.imgX = st.imgX;
+    if(st.imgY!==undefined) D.imgY = st.imgY;
+    if(st.imgScale!==undefined) D.imgScale = st.imgScale;
+    render(); updateOverlay();
+    return;
+  }
+
+if(!msg||msg.type!=='BN_UPDATE') return;
+  var p=msg.payload;
+
+  if(p.theme!==undefined) D.theme=p.theme;
+  if(p.main!==undefined)  D.main=p.main;
+  if(p.sub!==undefined)   D.sub=p.sub;
+  if(p.date!==undefined)  D.date=p.date;
+  if(p.time!==undefined)  D.time=p.time;
+  if(p.brand!==undefined) D.brand=p.brand;
+  if(p.combo!==undefined) D.combo=p.combo;
+  if(p.guest!==undefined) D.guest=p.guest;
+  if(p.cSub!==undefined)  D.cSub=p.cSub;
+  if(p.cMain!==undefined) D.cMain=p.cMain;
+  if(p.cDate!==undefined) D.cDate=p.cDate;
+  if(p.maskOn!==undefined) D.maskOn=p.maskOn;
+  if(p.showCTA!==undefined) D.showCTA=p.showCTA;
+  /* bgBase 是資料夾路徑，自己補上版位檔名──
+     背景資料夾裡實際檔名是 08_SBN.jpg（大寫 SBN），已對應正確 */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '08_SBN.jpg' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null); /* 向下相容 */
+  }
+
+  var pending=0;
+  function dec(){ if(--pending<=0) render(); }
+
+  if(p.host!==undefined){ pending++;
+    var isNew=!D.host||(p.host!==D._lastHostSrc&&!p.keepPos);
+    loadImg(p.host,function(img){
+      D.host=img;
+      if(img&&isNew){
+        D._lastHostSrc=p.host;
+        initHostPos(); D.selected=false; // initHostPos 內已呼叫 calcTightBounds
+      }
+      else if(img){ D._lastHostSrc=p.host; }
+      dec();
+    });
+  }
+  /* logo1 目前仍維持預設內建、忽略外部傳入（跟 05_fb_post 行為一致）；
+     logo2 接收 editor 廣播、支援方形／橫型形狀 */
+  if(p.logo2Shape!==undefined) D.logo2Shape = p.logo2Shape;
+  if(p.logo2!==undefined && p.logo2){ pending++;
+    loadImg(p.logo2, function(img){ D.logo2=img; dec(); });
+  }
+  if(pending===0) render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+window.BNExport={
+  getBlob:function(fmt,q,cb){
+    var ws=D.selected; D.selected=false; render();
+    exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  },
+  getDataURL:function(fmt,q){
+    var ws=D.selected; D.selected=false; render();
+    var u=cv.toDataURL('image/'+(fmt||'jpeg'),q||0.95);
+    D.selected=ws; render(); return u;
+  },
+  spec:{id:'08_sbn',name:'Seller BN',width:W,height:H,hasCTAVariant:false}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done=0;
+  function tick(){ if(++done>=3) cb(); }
+  var i1=new Image();
+  i1.onload=function(){ D.logo1=i1; tick(); };
+  i1.onerror=tick;
+  i1.src='../logos/logo_shopee_live.png';
+  var i2=new Image();
+  i2.onload=function(){ D.logo2=i2; tick(); };
+  i2.onerror=tick;
+  i2.src='../logos/logo_star_studio.png';
+  var i3=new Image();
+  i3.onload=function(){ D.ctaBtn=i3; tick(); };
+  i3.onerror=tick;
+  i3.src='../logos/cta_watch_now.png';
+}
+
+/* 明確等待三個字重都載入 */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  loadDefaultLogos(function(){
+    render();
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_READY',id:'08_sbn'},'*');
+      window.parent.postMessage({type:'LC_READY'},'*');
+    }
+  });
+});
+</script>
+</body>
+</html>

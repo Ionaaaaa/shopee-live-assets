@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>09 直播大廳Tab</title>
+<style>:root{ --cw:339px; --ch:144px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="339" height="144"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/layout-common.js?v=20260730c"></script>
+<script>
+'use strict';
+
+/* 09_tab（直播大廳Tab，毛孩衝蝦米新專案新增版位）
+   底色固定白色，不做底色吸取/斜切色塊/圓柱舞台——只有一塊置中的LOGO區。
+   LOGO區座標（Iona 提供，已確認是相對這個339×144畫布本身的座標，不是Figma整頁座標）：
+     x=55, y=10, w=229, h=54（水平置中：(339-229)/2=55）
+   LOGO素材沿用「明星直播間 Logo」，跟 07_fl.html 版型L是同一份圖、同一個上傳入口。
+
+   2026-07-29 跟 Iona 確認修正：原本直接吃 p.logo2（Logo2編輯面板合成好的整張卡片圖，
+   固定 1200×540 或 735×810，卡片裡logo本尊四周留了很多背景色空間）去 drawContain()，
+   等於是「整張卡片」等比縮到塞滿 LOGO_ZONE，而不是「logo本尊」塞滿——卡片上留白越多，
+   縮進小小的 LOGO_ZONE 之後看起來就越小。
+   改成跟 07_fl.html 的 drawVariantL() 同一套做法：吃原始上傳圖（p.logo2Raw）＋
+   calcTightBounds() 掃出來的「logo本尊」有色範圍（p.logo2Raw 本身周圍才是真的透明，
+   不是卡片那種背景色留白），直接用這個緊裁範圍去貼滿 LOGO_ZONE，跟FL Icon的LOGO版型
+   視覺一致。p.logo2（合成卡片）保留當備援：還沒收到 raw 圖片資訊時才退回舊的畫法。 */
+
+var W = 339, H = 144;
+var LOGO_ZONE = { x:55, y:10, w:229, h:54 };
+
+/* 2026-07-30 修正：layout-common.js 底部有幾行不分版位、載入時就一定會執行的
+   stage.addEventListener(...)（拖曳選取用），這個版位本身沒有可拖曳的主持人/商品
+   圖素（只有置中的LOGO，不支援拖曳選取），但還是要把 stage/overlay 這兩個變數
+   宣告出來，不然那幾行會直接噴 ReferenceError，把這個版位剩下的程式都卡住。
+   D.host 這裡永遠是 undefined，所以 layout-common.js 那段「點到圖素判斷」邏輯
+   永遠落到「沒點到」分支，等於直接停用拖曳選取，不會誤動到LOGO。 */
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* 跟 editor-logo2-canvas.js 的 LOGO2_WORK_DIM 完全對應（原圖在「Logo2編輯」
+   面板裡的縮放/位移，是用這個工作畫布尺寸換算成比例的），數字要跟那邊保持一致。 */
+var LOGO2_WORK_DIM = { wide: { w:1200, h:540 }, square: { w:735, h:810 } };
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+cv.style.width = W + 'px'; cv.style.height = H + 'px';
+
+var D = {
+  logo2: null,        // 合成卡片圖（備援用）
+  logo2RawImg: null,  // 使用者上傳的原圖（未合成）
+  logo2Bounds: null,  // 原圖裡「logo本尊」的緊裁範圍（calcTightBounds() 算出來）
+  logo2Shape: 'wide',
+  logo2Scale: 1,
+  logo2OffX: 0,
+  logo2OffY: 0
+};
+
+function drawContain(img, x, y, w, h){
+  var iw = img.naturalWidth, ih = img.naturalHeight;
+  if(!iw || !ih) return;
+  var scale = Math.min(w / iw, h / ih);
+  var dw = iw * scale, dh = ih * scale;
+  var ox = x + (w - dw) / 2, oy = y + (h - dh) / 2;
+  ctx.drawImage(img, ox, oy, dw, dh);
+}
+
+/* 跟 07_fl.html 的 drawVariantL() 同一套公式：用「logo本尊」緊裁範圍（而不是整張
+   合成卡片）等比塞滿 LOGO_ZONE，Logo2編輯面板調過的縮放/位移（logo2Scale/OffX/OffY）
+   直接照比例套用，畫面才會跟FL Icon的LOGO版型、Logo2編輯畫布三邊視覺一致。 */
+function drawLogo2(){
+  var z = LOGO_ZONE;
+  if(D.logo2RawImg && D.logo2Bounds && D.logo2Bounds.w && D.logo2Bounds.h){
+    var b = D.logo2Bounds;
+    var workDim = LOGO2_WORK_DIM[D.logo2Shape] || LOGO2_WORK_DIM.wide;
+    var sclBase = Math.min(z.w / b.w, z.h / b.h);
+    var scl = sclBase * (D.logo2Scale || 1);
+    var dw = b.w * scl, dh = b.h * scl;
+    var offXRatio = (D.logo2OffX || 0) / workDim.w;
+    var offYRatio = (D.logo2OffY || 0) / workDim.h;
+    var dx = z.x + (z.w - dw) / 2 + offXRatio * z.w;
+    var dy = z.y + (z.h - dh) / 2 + offYRatio * z.h;
+    ctx.drawImage(D.logo2RawImg, b.x, b.y, b.w, b.h, dx, dy, dw, dh);
+    return;
+  }
+  if(D.logo2){
+    drawContain(D.logo2, z.x, z.y, z.w, z.h); // 備援：還沒收到 raw 圖片資訊時的舊畫法
+  }
+}
+
+function render(){
+  ctx.clearRect(0, 0, W, H);
+  // 背景固定白色（Iona 確認：不用做設計，放上logo就好）
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  drawLogo2();
+}
+
+/* ── postMessage ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  if(p.logo2Shape !== undefined) D.logo2Shape = p.logo2Shape;
+  if(p.logo2Scale !== undefined) D.logo2Scale = p.logo2Scale;
+  if(p.logo2OffX  !== undefined) D.logo2OffX  = p.logo2OffX;
+  if(p.logo2OffY  !== undefined) D.logo2OffY  = p.logo2OffY;
+
+  var needsSyncRender = true;
+
+  /* 原圖＋緊裁範圍：優先用這組，才能跟 Logo2 編輯畫布／FL Icon的LOGO版型視覺一致 */
+  if(p.logo2Raw !== undefined && p.logo2Raw && p.logo2Raw !== D._logo2RawCacheSrc){
+    D._logo2RawCacheSrc = p.logo2Raw;
+    needsSyncRender = false;
+    loadImg(p.logo2Raw, function(img){
+      D.logo2RawImg = img;
+      D.logo2Bounds = img ? (calcTightBounds(img) || { x:0, y:0, w:img.naturalWidth, h:img.naturalHeight }) : null;
+      render();
+    });
+  }
+
+  /* 合成卡片圖：沒有原圖資訊時的備援畫法用 */
+  if(p.logo2 !== undefined && p.logo2 && p.logo2 !== D._logo2CacheSrc){
+    D._logo2CacheSrc = p.logo2;
+    needsSyncRender = false;
+    loadImg(p.logo2, function(img){ D.logo2 = img; render(); });
+  } else if(p.logo2 !== undefined && !p.logo2){
+    D.logo2 = null; D._logo2CacheSrc = null;
+  }
+
+  if(needsSyncRender) render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/' + (fmt || 'jpeg'), q || 0.95);
+}
+
+window.BNExport = {
+  getBlob: function(fmt, q, cb){ exportBlob(fmt, q, cb); },
+  spec: { id: '09_tab', name: '直播大廳Tab', width: W, height: H, hasCTAVariant: false }
+};
+
+/* ── Init ── */
+render();
+if(window.parent !== window){
+  window.parent.postMessage({ type: 'BN_READY', id: '09_tab' }, '*');
+}
+</script>
+</body>
+</html>

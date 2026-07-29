@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>05 直播間FL</title>
+<style>:root{ --cw:336px; --ch:120px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="336" height="120"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/layout-common.js"></script>
+<script src="../js/fl-themes.js"></script>
+<script>
+'use strict';
+
+var W = 336, H = 120;
+
+/* ── PSD 規格（Iona 提供的實際 CSS 座標）──
+   .背景：深藍色 rgb(31,48,93)，330x98，置中在 336x120 的畫布裡（四邊留一點邊界）
+   .文案6字內：50px，黃色 rgb(255,232,139)，text-align:center ──
+   原始 CSS 座標是相對一個更大的母畫布，沒有給這個版位自己的外框基準點，
+   所以文字位置這裡改用「在背景框內置中」處理（跟 CSS 給的 text-align:center 一致），
+   如果之後看起來跟設計稿對不上，麻煩截圖給我對一下實際要往哪裡偏 */
+var BG_BOX = { x:3, y:11, w:330, h:98 };
+BG_BOX.r = BG_BOX.h / 2; // 版型LOGO用：圓角＝高度一半＝膠囊造型
+var TEXT_COLOR = '#FFE88B';
+var FONT_SIZE = 50, FONT_WEIGHT = 500;
+var BORDER_W = 3;             // 橘邊框線寬（往內畫，不往外擴），只有版型LOGO＋白底模式會用到
+var BORDER_COLOR = '#EE4D2D'; // 橘色邊框
+var LOGO_BG_COLOR = '#FFFFFF'; // 版型LOGO固定白底，搭配橘色邊框
+/* Logo區：內縮6px（比橘框3px粗一倍當緩衝），要跟 editor-logo2-canvas.js 的
+   FL_PREVIEW.LOGO_ZONE 用同一組數字，示意圖才會跟這裡實際套用的結果一致。 */
+var LOGO_ZONE = {
+  x: BG_BOX.x + 6, y: BG_BOX.y + 6,
+  w: BG_BOX.w - 12, h: BG_BOX.h - 12
+};
+/* 跟 editor-logo2-canvas.js 的 LOGO2_WORK_DIM 完全對應（原圖在「Logo2編輯」
+   畫布上的工作尺寸），換算偏移量時需要用同一組數字，才能讓這裡的位移比例
+   跟編輯畫布一致。 */
+/* double：跟 editor-logo2-canvas.js 的 LOGO2_WORK_DIM.double 完全對應（雙logo
+   共用範圍模式下，編輯畫布本身的工作尺寸，比單張長型多拉寬20px），換算
+   offX/offY比例時要用這一組，不能用 wide，不然位移量會對不起來。 */
+var LOGO2_WORK_DIM = { wide:{ w:1200, h:540 }, square:{ w:735, h:810 }, double:{ w:1260, h:540 } };
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width  = W;
+cv.height = H;
+cv.style.width  = W + 'px';
+cv.style.height = H + 'px';
+
+/* ── State ──
+   flText：這個版位專屬的一行文案。目前暫時沿用 editor 廣播的 main（主標）欄位，
+   如果之後想要獨立一個專屬欄位（不跟主標共用），跟 Iona 確認後再另外接一個新欄位即可。 */
+var D = {
+  bg:null, bgUrl:null,
+  flText: '文案內容$6字內',
+  flTheme: 'A',      // 保留欄位相容舊存檔，但底色已改成 fl-themes.js 裡固定的 #ee4d24，這個值目前不影響畫面
+  flStyle: '無',     // 工單「05_直播間FL / 版型」欄位值：'LOGO' | '無' | '案型'
+  /* 版型LOGO：用「廠商自己的Logo（logo2）」，不是固定不變的蝦皮直播Logo（logo1）──
+     優先用「logo2Fl」：Logo2編輯彈窗「確認並套用」時烤好的透明底合成圖
+     （單張或雙logo都已經含在裡面，雙logo的相對位置/大小/間距都已經定案），
+     整張直接contain進LOGO_ZONE，只再套用「FL額外放大/位移」這組整體調整
+     ——不用再自己判斷形狀、自己重算每個logo的位置，兩者一定long跟Logo2
+     編輯畫布/FL示意圖長一模一樣。沒有logo2Fl時（例如這次改版前存的舊資料）
+     才退回舊做法：原圖(logo2Raw)＋Logo2編輯畫布的縮放位移直接算，或最後
+     退回合成好的白底小卡整張contain進去。 */
+  logo2Fl: null,        // 透明底合成圖（主要畫法，見上方註解）
+  logo2: null,          // 合成好的白底小卡（最後備援畫法用）
+  logo2RawImg: null,    // 原圖（未合成），沒有logo2Fl時的舊版備援公式用
+  logo2Bounds: null,    // 原圖有色範圍 {x,y,w,h}
+  logo2Shape: null,
+  logo2Scale: 1,
+  logo2OffX: 0,
+  logo2OffY: 0,
+  /* 雙logo（共播）模式的第二格：只有 logo2Shape==='double' 時才會用到，
+     跟A格共用同一塊膠囊框範圍（可自由重疊），誰疊在上面看 logo2TopSlot；
+     只有在沒有logo2Fl、要走舊版備援公式時才會用到這組。 */
+  logo2RawImgB: null,
+  logo2BoundsB: null,
+  logo2ScaleB: 1,
+  logo2OffXB: 0,
+  logo2OffYB: 0,
+  logo2TopSlot: 'B', // 共用範圍模式：誰疊在上面（'A'或'B'）
+  flLogoBgMode: 'white',        // 'white'=白底+橘框／'sampled'=吸Logo底色填滿，不加框
+  flLogoSampledColor: '#ffffff',
+  flLogoExtraScale: 1,          // FL示意圖手動額外放大，跟 logo2Scale 分開（見 editor 端註解）
+  flLogoExtraOffX: 0,           // 佔 LOGO_ZONE 寬度的比例
+  flLogoExtraOffY: 0,           // 佔 LOGO_ZONE 高度的比例
+};
+
+/* ── 繪圓角矩形路徑（膠囊造型用） ── */
+function roundRectPath(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y,     x + w, y + r,     r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x,     y + h, x,     y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x,     y,     x + r, y,         r);
+  ctx.closePath();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  var isLogoVariant = (D.flStyle === 'LOGO');
+
+  if(isLogoVariant){
+    /* 版型LOGO：自己畫一個獨立的膠囊色塊（白底+橘框，或吸Logo底色填滿），
+       不套用一般文案版型共用的公版背景圖/配色——這兩種版型視覺上是分開的。 */
+    var flMode = D.flLogoBgMode || 'white';
+    var isWhite = flMode === 'white';
+    var b = BG_BOX;
+
+    ctx.save();
+    roundRectPath(b.x, b.y, b.w, b.h, b.r);
+    ctx.fillStyle = isWhite ? LOGO_BG_COLOR : (D.flLogoSampledColor || LOGO_BG_COLOR);
+    ctx.fill();
+    ctx.clip();
+    drawLogoVariant();
+    ctx.restore();
+
+    /* 橘色邊框：只有白底模式才需要，吸色模式底色已經跟Logo是同一套顏色，
+       不需要橘框再框一次（在 clip 外面畫，才不會被裁掉；往內縮 BORDER_W/2
+       確保不超出色塊，跟色塊本身的圓角同心） */
+    if(isWhite){
+      var bw2 = BORDER_W / 2;
+      roundRectPath(b.x + bw2, b.y + bw2, b.w - BORDER_W, b.h - BORDER_W, b.r - bw2);
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth   = BORDER_W;
+      ctx.stroke();
+    }
+    return;
+  }
+
+  /* 這個版位背景本來就是透明疊圖（疊在直播畫面上），原本這裡先鋪一層白色
+     是抄其他版位「防止透明 PNG 合成殘留前一張顏色」的寫法，但 05_fl 的背景圖
+     (05_fl.png) 本身就有透明區塊，先鋪白色會讓 drawImage 用 source-over
+     疊上去時，透明的地方直接透出底下的白色，等於整張圖都變不透明了。
+     clearRect 已經把畫布清成全透明，這裡不用再多鋪白色。 */
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else {
+    // 沒有背景圖時，用目前選的 FL 公版(flTheme)配色畫底框，方便編輯時定位，
+    // 畫布其他地方維持透明。（真正的 FL 專屬公版美術圖之後補上後，
+    // 這裡可以改成依 flTheme 選對應資料夾的 05_fl.png 背景圖）
+    ctx.fillStyle = (typeof getFlThemeBoxColor==='function') ? getFlThemeBoxColor(D.flTheme) : '#1F305D';
+    ctx.fillRect(BG_BOX.x, BG_BOX.y, BG_BOX.w, BG_BOX.h);
+  }
+
+  drawText();
+}
+
+/* ── 版型 LOGO：用廠商自己的Logo（logo2） ──
+   優先用「原圖＋使用者在 Logo2 編輯畫布調的縮放/位移」直接算位置大小，
+   公式跟 editor-logo2-canvas.js 的 drawLogo2BigCanvas()／drawFlPreviewLogo()
+   完全對應：
+     sclBase：LOGO_ZONE 跟原圖「有色範圍」的自動貼合比例（等比縮到剛好塞滿）
+     scl = sclBase × 使用者調的縮放倍數 × FL額外放大倍數
+     位移：使用者在編輯畫布拖曳的量，換算成「佔編輯畫布寬/高的比例」，
+           再乘上 LOGO_ZONE 自己的寬/高，加上FL示意圖上另外拖曳的額外位移
+   沒有原圖資訊時（例如舊存檔還沒帶這些欄位）才退回舊做法：直接把合成好
+   的白底小卡整張 contain 進 LOGO_ZONE。 */
+function drawLogoVariant(){
+  var z = LOGO_ZONE;
+
+  /* 主要畫法：Logo2編輯彈窗「確認並套用」時烤好的透明底合成圖，單張/雙logo
+     都已經包含在裡面（雙logo的相對位置/大小/間距都已經定案），整張直接
+     contain進LOGO_ZONE，只再套用「FL額外放大/位移」這組整體調整，
+     效果跟商品廣播那類版位一樣：先在別的地方排好版，這裡只調整體位置/大小。 */
+  if(D.logo2Fl){
+    var sclBase = Math.min(z.w / D.logo2Fl.naturalWidth, z.h / D.logo2Fl.naturalHeight);
+    var scl = sclBase * (D.flLogoExtraScale || 1);
+    var dw = D.logo2Fl.naturalWidth * scl, dh = D.logo2Fl.naturalHeight * scl;
+    var dx = z.x + (z.w - dw) / 2 + (D.flLogoExtraOffX || 0) * z.w;
+    var dy = z.y + (z.h - dh) / 2 + (D.flLogoExtraOffY || 0) * z.h;
+    ctx.drawImage(D.logo2Fl, dx, dy, dw, dh);
+    return;
+  }
+
+  /* 以下是這次改版前的舊做法，只有「舊存檔沒有logo2Fl」時才會走到這裡
+     （例如改版前就存好、之後沒有重新按過「確認並套用」的分頁）。 */
+
+  /* 雙logo（共播）模式：兩個logo共用同一塊 LOGO_ZONE（可自由重疊），
+     兩張原圖都準備好了才畫，其中一張還沒載入完成（例如非同步載入中）
+     就先退回單張/備援畫法，避免畫面只出現一半，等下一次render()自然補上。
+     畫的順序跟著 logo2TopSlot 走（先畫下面那個、後畫上面那個），
+     才會跟 Logo2 編輯畫布的疊放結果一致。 */
+  if(D.logo2Shape === 'double' && D.logo2RawImg && D.logo2Bounds && D.logo2RawImgB && D.logo2BoundsB){
+    var doubleDim = LOGO2_WORK_DIM.double;
+    var topSlot = D.logo2TopSlot === 'A' ? 'A' : 'B';
+    var bottomSlot = topSlot === 'A' ? 'B' : 'A';
+    [bottomSlot, topSlot].forEach(function(slot){
+      if(slot === 'A') drawLogoInZone(z, D.logo2RawImg, D.logo2Bounds, D.logo2Scale, D.logo2OffX, D.logo2OffY, doubleDim, true);
+      else drawLogoInZone(z, D.logo2RawImgB, D.logo2BoundsB, D.logo2ScaleB, D.logo2OffXB, D.logo2OffYB, doubleDim, true);
+    });
+    return;
+  }
+
+  if(D.logo2RawImg && D.logo2Bounds && D.logo2Bounds.w && D.logo2Bounds.h){
+    drawLogoInZone(z, D.logo2RawImg, D.logo2Bounds, D.logo2Scale, D.logo2OffX, D.logo2OffY);
+    return;
+  }
+  if(!D.logo2) return;
+  var img = D.logo2;
+  var scale = Math.min(z.w/img.naturalWidth, z.h/img.naturalHeight);
+  var w = img.naturalWidth*scale, h = img.naturalHeight*scale;
+  var x = z.x + (z.w-w)/2, y = z.y + (z.h-h)/2;
+  ctx.drawImage(img, x, y, w, h);
+}
+
+/* 把一張「原圖＋有色範圍＋縮放倍數＋位移」畫進目標區域 z，公式完全對應
+   editor-logo2-canvas.js 的 drawLogo2BigCanvas()／drawFlPreviewLogo()。
+   workDim 預設是長型單張的工作尺寸(1200x540)；雙logo共用範圍模式下，
+   位移是相對於共用畫布本身(1260x540)算的，呼叫時要改傳 LOGO2_WORK_DIM.double。
+   heightOnlyFit：雙logo模式固定用「高度基準」縮放（不跟寬度比較取最小值）——
+   這個LOGO_ZONE（膠囊框）比編輯畫布扁很多，如果沿用寬高取最小值的舊寫法，
+   兩個logo有可能各自被寬度/高度卡住的情況不一樣，換算過來間距就會跑掉，
+   固定用高度基準才能跟編輯畫布/FL示意圖三邊都維持同一個比例。 */
+function drawLogoInZone(z, img, bounds, scale, offX, offY, workDim, heightOnlyFit){
+  var b = bounds;
+  workDim = workDim || LOGO2_WORK_DIM.wide;
+  var sclBase = heightOnlyFit ? (z.h / b.h) : Math.min(z.w / b.w, z.h / b.h);
+  var scl = sclBase * (scale || 1) * (D.flLogoExtraScale || 1);
+  var dw = b.w * scl, dh = b.h * scl;
+  var offXRatio = (offX || 0) / workDim.w;
+  var offYRatio = (offY || 0) / workDim.h;
+  var dx = z.x + (z.w - dw) / 2 + offXRatio * z.w + (D.flLogoExtraOffX || 0) * z.w;
+  var dy = z.y + (z.h - dh) / 2 + offYRatio * z.h + (D.flLogoExtraOffY || 0) * z.h;
+  ctx.drawImage(img, b.x, b.y, b.w, b.h, dx, dy, dw, dh);
+}
+
+function drawText(){
+  if(!D.flText) return;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = font(FONT_SIZE, FONT_WEIGHT);
+  ctx.fillStyle = TEXT_COLOR;
+  ctx.fillText(D.flText, BG_BOX.x + BG_BOX.w/2, BG_BOX.y + BG_BOX.h/2);
+  ctx.textBaseline = 'alphabetic'; // 還原預設值，避免影響其他繪製
+}
+
+/* ── postMessage ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  if(p.theme!==undefined) D.theme = p.theme;
+  if(p.flTheme!==undefined) D.flTheme = p.flTheme;
+  if(p.flStyle!==undefined) D.flStyle = p.flStyle;
+  /* 專屬文案欄位：跟 editor 的 txt-fl 對應，不再沿用主標(main)欄位 */
+  if(p.flText!==undefined) D.flText = p.flText;
+
+  if(p.flLogoBgMode!==undefined) D.flLogoBgMode = p.flLogoBgMode;
+  if(p.flLogoSampledColor!==undefined) D.flLogoSampledColor = p.flLogoSampledColor;
+  if(p.flLogoExtraScale!==undefined) D.flLogoExtraScale = p.flLogoExtraScale;
+  if(p.flLogoExtraOffX!==undefined)  D.flLogoExtraOffX  = p.flLogoExtraOffX;
+  if(p.flLogoExtraOffY!==undefined)  D.flLogoExtraOffY  = p.flLogoExtraOffY;
+
+  /* logo2（廠商自己的Logo）：版型LOGO使用。
+     這裡刻意「不要」在載入完成後直接 return——每個欄位各自獨立處理、
+     各自需要非同步載入的就各自在載入完成後 render()，不會互相卡住。 */
+  if(p.logo2Shape !== undefined) D.logo2Shape = p.logo2Shape;
+  if(p.logo2Scale !== undefined) D.logo2Scale = p.logo2Scale;
+  if(p.logo2OffX  !== undefined) D.logo2OffX  = p.logo2OffX;
+  if(p.logo2OffY  !== undefined) D.logo2OffY  = p.logo2OffY;
+  // 雙logo（共播）模式的第二格，跟A格用同一套欄位規則
+  if(p.logo2ScaleB !== undefined) D.logo2ScaleB = p.logo2ScaleB;
+  if(p.logo2OffXB  !== undefined) D.logo2OffXB  = p.logo2OffXB;
+  if(p.logo2OffYB  !== undefined) D.logo2OffYB  = p.logo2OffYB;
+  if(p.logo2TopSlot !== undefined) D.logo2TopSlot = p.logo2TopSlot;
+
+  var needsSyncRender = true; // 沒有任何非同步載入時，最後統一 render() 一次
+
+  /* 原圖＋縮放位移：優先用這組直接算，才能跟 Logo2 編輯畫布1:1對應
+     （放大就放大、偏左偏右就偏左偏右），細節見 drawLogoVariant()。 */
+  if(p.logo2Raw !== undefined && p.logo2Raw && p.logo2Raw !== D._logo2RawCacheSrc){
+    D._logo2RawCacheSrc = p.logo2Raw;
+    needsSyncRender = false;
+    loadImg(p.logo2Raw, function(img){
+      D.logo2RawImg = img;
+      D.logo2Bounds = img ? (calcTightBounds(img) || { x:0, y:0, w:img.naturalWidth, h:img.naturalHeight }) : null;
+      render();
+    });
+  } else if(p.logo2Raw !== undefined && !p.logo2Raw){
+    D._logo2RawCacheSrc = null;
+    D.logo2RawImg = null;
+    D.logo2Bounds = null;
+  }
+
+  /* 雙logo（共播）模式的第二格原圖，跟A格是同一套非同步載入邏輯，
+     各自獨立快取/載入，不會互相等待卡住。 */
+  if(p.logo2RawB !== undefined && p.logo2RawB && p.logo2RawB !== D._logo2RawBCacheSrc){
+    D._logo2RawBCacheSrc = p.logo2RawB;
+    needsSyncRender = false;
+    loadImg(p.logo2RawB, function(img){
+      D.logo2RawImgB = img;
+      D.logo2BoundsB = img ? (calcTightBounds(img) || { x:0, y:0, w:img.naturalWidth, h:img.naturalHeight }) : null;
+      render();
+    });
+  } else if(p.logo2RawB !== undefined && !p.logo2RawB){
+    D._logo2RawBCacheSrc = null;
+    D.logo2RawImgB = null;
+    D.logo2BoundsB = null;
+  }
+
+  /* 合成好的白底小卡：沒有logo2Fl、也沒有原圖資訊時的最後備援畫法用（見 drawLogoVariant） */
+  if(p.logo2 !== undefined && p.logo2 && p.logo2 !== D._logo2CacheSrc){
+    D._logo2CacheSrc = p.logo2;
+    needsSyncRender = false;
+    loadImg(p.logo2, function(img){ D.logo2 = img; render(); });
+  } else if(p.logo2 !== undefined && !p.logo2){
+    D._logo2CacheSrc = null;
+    D.logo2 = null;
+  }
+
+  /* 透明底合成圖：主要畫法，優先用這張（見 drawLogoVariant 開頭） */
+  if(p.logo2Fl !== undefined && p.logo2Fl && p.logo2Fl !== D._logo2FlCacheSrc){
+    D._logo2FlCacheSrc = p.logo2Fl;
+    needsSyncRender = false;
+    loadImg(p.logo2Fl, function(img){ D.logo2Fl = img; render(); });
+  } else if(p.logo2Fl !== undefined && !p.logo2Fl){
+    D._logo2FlCacheSrc = null;
+    D.logo2Fl = null;
+  }
+
+  /* bgBase 是資料夾路徑，自己補上版位檔名──
+     背景資料夾裡實際檔名是 05_fl.png（副檔名是 png 不是 jpg，
+     這張背景本身就是透明底，所以用 png 才留得住透明度） */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase + '05_fl.png' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null);
+  }
+
+  if(needsSyncRender) render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width  = W;
+  out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+window.BNExport = {
+  getBlob:function(fmt,q,cb){
+    render();
+    exportBlob(fmt, q, cb);
+  },
+  getDataURL:function(fmt,q){
+    render();
+    return cv.toDataURL('image/'+(fmt||'jpeg'), q||0.95);
+  },
+  spec:{id:'05_fl', name:'直播間FL', width:W, height:H, hasCTAVariant:false, fmt:'png'} // 背景是透明的，要用 PNG 匯出才留得住透明度，沒有指定 fmt 的話 editor-export.js 預設是 jpeg 會把透明背景填成實色
+};
+
+/* ── Init ── */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  render();
+  if(window.parent!==window){
+    window.parent.postMessage({type:'BN_READY',id:'05_fl'},'*');
+  }
+});
+</script>
+</body>
+</html>

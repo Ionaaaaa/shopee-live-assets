@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>06 開播字卡</title>
+<style>
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('../fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('../fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('../fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { background:transparent; overflow:hidden; }
+
+#stage {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+}
+canvas {
+  position: absolute;
+  top: 0; left: 0;
+  display: block;
+}
+
+#overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 1080px;
+  height: 1920px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.sel-handle {
+  position: absolute;
+  width: 10px; height: 10px;
+  background: white;
+  border: 2px solid #2563EB;
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 10;
+}
+.sel-handle[data-h="n"],  .sel-handle[data-h="s"]  { cursor: ns-resize; }
+.sel-handle[data-h="e"],  .sel-handle[data-h="w"]  { cursor: ew-resize; }
+.sel-handle[data-h="nw"], .sel-handle[data-h="se"] { cursor: nwse-resize; }
+.sel-handle[data-h="ne"], .sel-handle[data-h="sw"] { cursor: nesw-resize; }
+
+.sel-bar {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 4px;
+  pointer-events: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 20;
+}
+.sel-bar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+.sel-bar-btn:hover { background: #334155; color: white; }
+.sel-bar-btn.danger:hover { background: rgba(239,68,68,0.2); color: #f87171; }
+.sel-bar-btn svg {
+  width: 13px; height: 13px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.sel-bar-sep {
+  width: 1px;
+  background: #334155;
+  margin: 2px 0;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1080" height="1920"></canvas>
+  <div id="overlay"></div>
+  <div id="logo2-ui" style="position:absolute;top:0;left:0;width:1080px;height:1920px;pointer-events:none;overflow:visible;z-index:50;"></div>
+</div>
+
+<script>
+'use strict';
+
+var W = 1080, H = 1920;
+
+/* ── PSD 規格：LOGO 區（logo1 + 分隔線 + logo2），正確位置 ── */
+var LOGO = { x:1251, y:616, w:591, h:88 }; // CSS: left:1251 top:616 width:591 height:88
+var GAP  = 15;
+
+var cv      = document.getElementById('cv');
+var overlay = document.getElementById('overlay');
+var stage   = document.getElementById('stage');
+
+/* ── 高 DPR ── */
+var DPR = window.devicePixelRatio || 1;
+var ctx = cv.getContext('2d');
+if(DPR > 1){
+  cv.width  = W * DPR;
+  cv.height = H * DPR;
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+  ctx.scale(DPR, DPR);
+}
+
+/* ── State ── */
+var D = {
+  bg:null, bgUrl:null,
+  logo1:null, logo2:null,
+  _logo2DataUrl: null,
+  main:'看直播領券領蝦幣',
+  sub:'嚴選蝦拼TIME',
+  date:'XX/XX', time:'19:00', brand:'XXX',
+  cSub:'#fff2d0', cMain:'#fffd72', cDate:'#fff2d0',
+  sepColor:'#ffffff',
+};
+
+var BG_FALLBACK = '#F5C842';
+function font(sz, w){ return w+' '+sz+'px "ShopeeNoto","Noto Sans TC",sans-serif'; }
+
+/* ── Logo2 縮放/拖動狀態（作用在 LOGO 區的 logo2 框上）── */
+var _logo2Scale    = 1;
+var _logo2RD       = null;   /* resize drag data */
+var _logo2Sel      = false;
+var _logo2Bounds   = null;   /* 去背後的實際像素範圍 */
+var _logo2OffX     = 0;
+var _logo2OffY     = 0;
+var _logo2DragData = null;
+/* logo2 在畫面上的實際繪製位置（render 後更新，供 UI 定位用）*/
+var _logo2DrawRect = null;   /* {x, y, w, h} 畫面座標 */
+
+function calcLogo2Bounds(img){
+  try{
+    var SCAN=300, sc=Math.min(1,SCAN/Math.max(img.naturalWidth,img.naturalHeight));
+    var sw=Math.max(1,Math.floor(img.naturalWidth*sc));
+    var sh=Math.max(1,Math.floor(img.naturalHeight*sc));
+    var tmp=document.createElement('canvas'); tmp.width=sw; tmp.height=sh;
+    var tx=tmp.getContext('2d'); tx.clearRect(0,0,sw,sh); tx.drawImage(img,0,0,sw,sh);
+    var d=tx.getImageData(0,0,sw,sh).data;
+    var x0=sw,y0=sh,x1=0,y1=0,found=false;
+    for(var y=0;y<sh;y++) for(var x=0;x<sw;x++){
+      if(d[(y*sw+x)*4+3]>15){ if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;found=true; }
+    }
+    if(!found) return null;
+    return {x:x0/sc,y:y0/sc,w:(x1-x0+1)/sc,h:(y1-y0+1)/sc};
+  }catch(e){ return null; }
+}
+
+/* ── BG ── */
+function loadBg(url){
+  if(!url){ D.bg=null; D.bgUrl=null; render(); return; }
+  if(url===D.bgUrl && D.bg){ render(); return; }
+  D.bgUrl=url;
+  var img=new Image();
+  img.onload=function(){ D.bg=img; render(); };
+  img.onerror=function(){ D.bg=null; render(); };
+  img.src=url;
+}
+function loadImg(src,cb){
+  if(!src){ cb(null); return; }
+  var img=new Image();
+  img.onload=function(){ cb(img); };
+  img.onerror=function(){ cb(null); };
+  img.src=src;
+}
+
+/* ── Render ── */
+function render(){
+  ctx.clearRect(0,0,W,H);
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else { ctx.fillStyle=BG_FALLBACK; ctx.fillRect(0,0,W,H); }
+
+  drawLogos();
+  drawText();
+  updateLogo2UI();
+
+  /* BN_RENDERED 通知 editor 截圖 */
+  if(window._renderNotify && window.parent!==window){
+    window.parent.postMessage({type:'BN_RENDERED',id:'06_opening'},'*');
+    window._renderNotify=false;
+  }
+}
+
+/* ── Logo2 固定框尺寸（框不動，只有框內圖片可移動）── */
+var L2_W = 180;   /* logo2 固定框寬 (維持)*/
+var L2_H = 88;    /* logo2 固定框高（= LOGO 區高度）*/
+var L2_R = 3;     /* 圓角 */
+var _logo2Box = null; /* 記錄框位置供 UI 用 */
+
+function sampleLogo2BgColor(img){
+  var os = document.createElement('canvas');
+  os.width = img.naturalWidth; os.height = img.naturalHeight;
+  var oc = os.getContext('2d');
+  oc.drawImage(img, 0, 0);
+  var pts=[[0,0],[img.naturalWidth-1,0],[0,img.naturalHeight-1],[img.naturalWidth-1,img.naturalHeight-1]];
+  var r=0,g=0,b=0,a=0,cnt=0;
+  pts.forEach(function(p){
+    try{ var d=oc.getImageData(p[0],p[1],1,1).data;r+=d[0];g+=d[1];b+=d[2];a+=d[3];cnt++;}catch(_){}
+  });
+  if(!cnt||a/cnt<128) return '#ffffff';
+  return 'rgb('+Math.round(r/cnt)+','+Math.round(g/cnt)+','+Math.round(b/cnt)+')';
+}
+function drawRoundRect(c,x,y,w,h,r){
+  c.beginPath();c.moveTo(x+r,y);
+  c.lineTo(x+w-r,y);c.arcTo(x+w,y,x+w,y+r,r);
+  c.lineTo(x+w,y+h-r);c.arcTo(x+w,y+h,x+w-r,y+h,r);
+  c.lineTo(x+r,y+h);c.arcTo(x,y+h,x,y+h-r,r);
+  c.lineTo(x,y+r);c.arcTo(x,y,x+r,y,r);c.closePath();
+}
+
+/* ── drawLogos：logo2 框固定，只有框內圖片可縮放/拖動 ── */
+function drawLogos(){
+  var a = LOGO;
+  _logo2Box = null;
+
+  /* logo1：等比縮放到 a.h 的 80%，垂直置中 */
+  var lh1=0, lw1=0;
+  if(D.logo1 && D.logo1.naturalWidth){
+    lh1 = a.h * 0.8;
+    lw1 = D.logo1.naturalWidth * (lh1 / D.logo1.naturalHeight);
+  }
+
+  var hasL2 = D.logo2 && D.logo2.naturalWidth;
+
+  /* 置中計算：固定用 L2_W（不隨縮放跑位）*/
+  var sep = hasL2 ? (GAP + 1 + GAP) : 0;
+  var totalW = lw1 + sep + (hasL2 ? L2_W : 0);
+  var startX = W/2 - totalW/2;
+  var curX = startX;
+
+  /* logo1：垂直置中於 LOGO 區 */
+  if(D.logo1 && D.logo1.naturalWidth){
+    ctx.drawImage(D.logo1, curX, a.y + (a.h - lh1)/2, lw1, lh1);
+    curX += lw1;
+  }
+
+  /* 分隔線 + logo2 */
+  if(hasL2){
+    curX += GAP;
+    var lineH = a.h * 0.5;
+    /* 分隔線：用 save/restore 保護，避免後續 clip 影響 */
+    ctx.save();
+    ctx.strokeStyle=D.sepColor||'#ffffff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(curX, a.y+(a.h-lineH)/2); ctx.lineTo(curX, a.y+(a.h+lineH)/2); ctx.stroke();
+    ctx.restore();
+    curX += 1 + GAP;
+
+    /* logo2 固定框位置 */
+    var frameX = curX;
+    var frameY = a.y + (a.h - L2_H) / 2;
+
+    /* 計算圖片在框內的縮放尺寸（contain）*/
+    var bnd = _logo2Bounds;
+    var sx = bnd?bnd.x:0, sy2 = bnd?bnd.y:0;
+    var sw = bnd?bnd.w:D.logo2.naturalWidth, sh = bnd?bnd.h:D.logo2.naturalHeight;
+    var sclBase = Math.min(L2_W/sw, L2_H/sh);
+    var scl = sclBase * _logo2Scale;
+    var lw2 = sw*scl, lh2 = sh*scl;
+
+    /* 圖片在框內的位置（置中 + 拖動偏移）*/
+    var imgX = frameX + (L2_W - lw2)/2 + _logo2OffX;
+    var imgY = frameY + (L2_H - lh2)/2 + _logo2OffY;
+
+    /* 先填 logo2 底色（吸取 logo2 角落像素）*/
+    var bgColor = '#ffffff';
+    try{ bgColor = sampleLogo2BgColor(D.logo2); }catch(e){}
+    ctx.save(); drawRoundRect(ctx, frameX, frameY, L2_W, L2_H, L2_R);
+    ctx.fillStyle = bgColor; ctx.fill(); ctx.restore();
+
+    /* clip 到固定框內再繪製圖片（框不動）*/
+    ctx.save();
+    drawRoundRect(ctx, frameX, frameY, L2_W, L2_H, L2_R);
+    ctx.clip();
+    ctx.drawImage(D.logo2, sx, sy2, sw, sh, imgX, imgY, lw2, lh2);
+    ctx.restore();
+
+    /* 記錄固定框位置供 UI 使用（框永遠不動）*/
+    _logo2Box = { x:frameX, y:frameY, w:L2_W, h:L2_H };
+    _logo2DrawRect = _logo2Box;
+  } else {
+    _logo2DrawRect = null;
+  }
+}
+
+function drawText(){
+  var CX=W/2;
+  ctx.font=font(62,500);
+  var mainAsc=ctx.measureText('測').actualBoundingBoxAscent||62*0.88;
+  var mainBase=744+mainAsc;
+  var mainW=D.main?ctx.measureText(D.main).width:0;
+  ctx.font=font(40,400);
+  var dateStr=D.date+' '+D.time;
+  var dateW=ctx.measureText(dateStr).width;
+  var dateAsc=ctx.measureText('測').actualBoundingBoxAscent||40*0.88;
+  var dateBase=761+dateAsc;
+  var totW=mainW+GAP+dateW;
+  var startX=CX-totW/2;
+  ctx.font=font(62,500);
+  if(D.main){ ctx.fillStyle=D.cSub; ctx.textAlign='left'; ctx.fillText(D.main,startX,mainBase); }
+  ctx.font=font(40,400);
+  ctx.fillStyle=D.cDate; ctx.textAlign='left';
+  ctx.fillText(dateStr,startX+mainW+GAP,dateBase);
+  ctx.font=font(106,700);
+  var subAsc=ctx.measureText('測').actualBoundingBoxAscent||106*0.88;
+  var subBase=823+subAsc;
+  if(D.sub){ ctx.fillStyle=D.cMain; ctx.textAlign='center'; ctx.fillText(D.sub,CX,subBase); }
+  ctx.textAlign='left';
+}
+
+/* ── Logo2 UI（定位在 LOGO 區的 logo2 固定框上）── */
+var logo2UI=document.getElementById('logo2-ui');
+
+function updateLogo2UI(){
+  logo2UI.innerHTML='';
+  logo2UI.style.pointerEvents='none';
+  if(!D.logo2 || !_logo2Box) return;
+
+  var r=_logo2Box; /* 永遠使用固定框位置 */
+
+  /* 透明 hit 區，可拖動（範圍 = 固定框）*/
+  var hit=document.createElement('div');
+  hit.style.cssText='position:absolute;left:'+r.x+'px;top:'+r.y+'px;width:'+r.w+'px;height:'+r.h+'px;cursor:move;z-index:1;pointer-events:auto;';
+  hit.addEventListener('mousedown',function(e){
+    e.stopPropagation(); if(e.button!==0) return;
+    if(!_logo2Sel){ _logo2Sel=true; render(); }
+    var rect=cv.getBoundingClientRect(), ss=W/rect.width;
+    _logo2DragData={sx:(e.clientX-rect.left)*ss,sy:(e.clientY-rect.top)*ss,ox:_logo2OffX,oy:_logo2OffY};
+  });
+  hit.addEventListener('mouseenter',function(){ if(!_logo2Sel) hit.style.outline='1.5px dashed rgba(37,99,235,0.5)'; });
+  hit.addEventListener('mouseleave',function(){ if(!_logo2Sel) hit.style.outline=''; });
+  logo2UI.appendChild(hit);
+  if(!_logo2Sel) return;
+
+  /* 選取框（固定在框上）*/
+  var selBox=document.createElement('div');
+  selBox.style.cssText='position:absolute;left:'+(r.x-2)+'px;top:'+(r.y-2)+'px;width:'+(r.w+4)+'px;height:'+(r.h+4)+'px;border:2px solid #2563EB;border-radius:4px;box-shadow:0 0 0 1px rgba(37,99,235,0.2);pointer-events:none;z-index:2;';
+  logo2UI.appendChild(selBox);
+
+  /* 8 個縮放把手（固定在框上）*/
+  [{h:'nw',lx:r.x,ly:r.y},{h:'n',lx:r.x+r.w/2,ly:r.y},{h:'ne',lx:r.x+r.w,ly:r.y},
+   {h:'e',lx:r.x+r.w,ly:r.y+r.h/2},{h:'se',lx:r.x+r.w,ly:r.y+r.h},{h:'s',lx:r.x+r.w/2,ly:r.y+r.h},
+   {h:'sw',lx:r.x,ly:r.y+r.h},{h:'w',lx:r.x,ly:r.y+r.h/2}
+  ].forEach(function(hd){
+    var hel=document.createElement('div');
+    hel.className='sel-handle'; hel.dataset.h=hd.h;
+    hel.style.cssText='left:'+hd.lx+'px;top:'+hd.ly+'px;z-index:5;pointer-events:auto;';
+    hel.addEventListener('mousedown',startLogo2Resize);
+    logo2UI.appendChild(hel);
+  });
+
+  /* 懸浮 bar */
+  var bar=document.createElement('div');
+  bar.className='sel-bar';
+  var barTop=r.y-8;
+  var barLeft=r.x+r.w/2;
+  bar.style.cssText='position:absolute;left:'+barLeft+'px;top:'+barTop+'px;transform:translateX(-50%) translateY(-100%);z-index:20;pointer-events:auto;';
+  if(r.y < 60){ bar.style.top=(r.y+r.h+8)+'px'; bar.style.transform='translateX(-50%)'; }
+  bar.innerHTML=
+    '<button class="sel-bar-btn" onclick="doLogo2Action(\'edit\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>裁切編輯</button>'
+    +'<div class="sel-bar-sep"></div>'
+    +'<button class="sel-bar-btn" onclick="doLogo2Action(\'replace\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M1 8a7 7 0 1 0 14 0"/><path d="M8 1v5l3-3M8 1l-3 2"/></svg>更換</button>'
+    +'<div class="sel-bar-sep"></div>'
+    +'<button class="sel-bar-btn danger" onclick="doLogo2Action(\'delete\')">'
+    +'<svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>刪除</button>';
+  logo2UI.appendChild(bar);
+}
+
+function startLogo2Resize(e){
+  e.preventDefault(); e.stopPropagation();
+  var r=_logo2DrawRect||{w:100,h:50};
+  _logo2RD={h:e.target.dataset.h,sx:e.clientX,sy:e.clientY,sc:_logo2Scale,bw:r.w,bh:r.h};
+}
+document.addEventListener('mousemove',function(e){
+  if(_logo2RD){
+    var rect=cv.getBoundingClientRect(), ss=W/rect.width;
+    var dx=(e.clientX-_logo2RD.sx)*ss, dy=(e.clientY-_logo2RD.sy)*ss;
+    var h=_logo2RD.h, ref=Math.max(_logo2RD.bw,_logo2RD.bh), delta=0;
+    if(h==='se'||h==='s'||h==='e') delta=Math.max(dx,dy)/ref;
+    if(h==='nw'||h==='n'||h==='w') delta=-Math.min(dx,dy)/ref;
+    if(h==='ne') delta=(dx-dy)/ref/2;
+    if(h==='sw') delta=-(dx-dy)/ref/2;
+    _logo2Scale=Math.max(0.1,_logo2RD.sc+delta); render(); return;
+  }
+  if(_logo2DragData){
+    var rect2=cv.getBoundingClientRect(), ss2=W/rect2.width;
+    _logo2OffX=_logo2DragData.ox+(e.clientX-rect2.left)*ss2-_logo2DragData.sx;
+    _logo2OffY=_logo2DragData.oy+(e.clientY-rect2.top)*ss2-_logo2DragData.sy;
+    render();
+  }
+});
+document.addEventListener('mouseup',function(){ _logo2RD=null; _logo2DragData=null; });
+stage.addEventListener('mousedown',function(e){
+  if(e.target.closest('#logo2-ui')||e.target.classList.contains('sel-handle')||e.target.closest('.sel-bar')) return;
+  if(_logo2Sel){ _logo2Sel=false; render(); }
+},true);
+
+function doLogo2Action(action){
+  if(action==='edit'){
+    var src=D._logo2DataUrl||(D.logo2?D.logo2.src:'');
+    if(!src) return;
+    if(window.parent!==window) window.parent.postMessage({type:'BN_OPEN_EDITOR',key:'logo2',src:src},'*');
+  } else if(action==='replace'){
+    if(window.parent!==window) window.parent.postMessage({type:'BN_REPLACE_IMG',key:'logo2'},'*');
+  } else if(action==='delete'){
+    D.logo2=null; D._logo2DataUrl=null;
+    _logo2Bounds=null; _logo2Sel=false; _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; _logo2DrawRect=null;
+    if(window.parent!==window) window.parent.postMessage({type:'BN_DELETE_IMG',key:'logo2'},'*');
+    render();
+  }
+}
+
+/* ── postMessage ── */
+window.addEventListener('message',function(e){
+  var msg=e.data;
+  if(msg&&msg.type==='BN_RESTORE_STATE'){
+    var st=msg.state||{};
+    if(st.logo2Scale!==undefined) _logo2Scale=st.logo2Scale;
+    if(st.logo2OffX!==undefined)  _logo2OffX=st.logo2OffX;
+    if(st.logo2OffY!==undefined)  _logo2OffY=st.logo2OffY;
+    render(); return;
+  }
+  if(!msg||msg.type!=='BN_UPDATE') return;
+  var p=msg.payload;
+
+  if(p.sub!==undefined)      D.sub=p.sub;
+  if(p.date!==undefined)     D.date=p.date;
+  if(p.time!==undefined)     D.time=p.time;
+  if(p.brand!==undefined)    D.brand=p.brand;
+  if(p.cSub!==undefined)     D.cSub=p.cSub;
+  if(p.cMain!==undefined)    D.cMain=p.cMain;
+  if(p.cDate!==undefined)    D.cDate=p.cDate;
+  if(p.sepColor!==undefined) D.sepColor=p.sepColor;
+
+  var pending=0;
+  function dec(){ if(--pending<=0) render(); }
+
+  /* 背景：納入 pending 計數，避免非同步 render 蓋掉分隔線 */
+  if(p.bgBase!==undefined){
+    var bgUrl = p.bgBase ? p.bgBase+'06_opening.JPG' : null;
+    if(bgUrl && bgUrl!==D.bgUrl){
+      pending++;
+      var _bi=new Image(); _bi.crossOrigin='anonymous';
+      _bi.onload=function(){ D.bg=_bi; D.bgUrl=bgUrl; dec(); };
+      _bi.onerror=function(){ D.bg=null; dec(); };
+      _bi.src=bgUrl;
+    }
+  } else if(p.bgUrl!==undefined){
+    var bgUrl2 = p.bgUrl||null;
+    if(bgUrl2 && bgUrl2!==D.bgUrl){
+      pending++;
+      var _bi2=new Image(); _bi2.crossOrigin='anonymous';
+      _bi2.onload=function(){ D.bg=_bi2; D.bgUrl=bgUrl2; dec(); };
+      _bi2.onerror=function(){ D.bg=null; dec(); };
+      _bi2.src=bgUrl2;
+    }
+  }
+
+  /* logo2 */
+  if(p.logo2!==undefined){ pending++;
+    loadImg(p.logo2,function(img){
+      D.logo2=img; D._logo2DataUrl=p.logo2;
+      _logo2Bounds=img?calcLogo2Bounds(img):null;
+      if(!window._downloadMode){ _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; }
+      dec();
+    });
+  }
+  if(pending===0) render();
+});
+
+/* ── Export ── */
+function snapBlob(fmt,q,cb){
+  var ws2=_logo2Sel; _logo2Sel=false; logo2UI.style.display='none';
+  render();
+  cv.toBlob(function(blob){ logo2UI.style.display=''; _logo2Sel=ws2; render(); cb(blob); },'image/'+(fmt||'jpeg'),q||0.82);
+}
+window.BNExport={
+  getBlob:function(fmt,q,cb){ snapBlob(fmt,q,cb); },
+  getBothBlobs:function(fmt,q,cb){ snapBlob(fmt,q,function(b){ cb(b,b); }); },
+  spec:{id:'06_opening',name:'開播字卡',width:W,height:H,hasCTAVariant:false}
+};
+
+/* ── Init ── */
+function loadDefaultLogos(cb){
+  var done=0;
+  function tick(){ if(++done>=2) cb(); }
+  /* logo1：改用 logo_shopee_live.png */
+  var i1=new Image();
+  i1.onload=function(){ D.logo1=i1; tick(); }; i1.onerror=tick;
+  i1.src='../logos/logo_shopee_live.png';
+  /* logo2：預設贊助商 logo */
+  var i2=new Image();
+  i2.onload=function(){ D.logo2=i2; _logo2Bounds=calcLogo2Bounds(i2); tick(); }; i2.onerror=tick;
+  i2.src='../logos/logo_star_studio_sq.png';
+}
+
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  loadDefaultLogos(function(){
+    loadBg('../backgrounds/06_opening.JPG');
+    render();
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_READY',id:'06_opening'},'*');
+    }
+  });
+});
+</script>
+</body>
+</html>

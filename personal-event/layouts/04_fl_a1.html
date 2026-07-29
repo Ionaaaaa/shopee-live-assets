@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>04 FL Icon A1（方形）</title>
+<style>:root{ --cw:360px; --ch:360px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="360" height="360"></canvas>
+</div>
+
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+
+var W = 360, H = 360;
+
+/* ── 版位規格（座標逐一比照 Iona 提供的 CSS，不用另外量測）──
+   圓形底：x30,y30,300×300（圓心180,180，半徑150）
+   兩種版型共用的固定裝飾：左上角LIVE+1徽章、右上角CTA圓形圖 */
+var CIRCLE = { x:30, y:30, w:300, h:300, r:150 };
+var BADGE  = { x:17, y:14, w:157, h:83 };  // 裝飾（LIVE+"+1"）：logos/fl-live-badge.png
+var CTA    = { x:255, y:8, w:96, h:96 };   // 專用CTA圓形圖：logos/fl-a1-cta.png（所有主題共用同一張）
+
+/* 版型T（文案版，無LOGO，最多6字，可2排）文字設定 */
+var CAPTION_MAX_FS = 64;
+var CAPTION_BOX = { x:52.703, w:360 - 52.703*2 };
+var CAPTION_LINE_HEIGHT_RATIO = 1.2;
+
+/* 版型LB（LOGO+下方文案BAR）
+   LOGO_ZONE：圓形底可安全放LOGO的範圍，刻意避開下方色塊、且比圓形本身
+   略小一圈——四角超出圓形半徑的部分會被下面render()的圓形clip自動裁掉，
+   不用另外算圓形內接矩形，跟03_fl.html drawVariantL()同樣的做法。
+   這個範圍是先給的合理預設值，實際比例如果跟美術稿有落差，之後可以只調
+   這幾個數字，不用動下面的排版公式（跟其他版位的config-driven原則一致）。 */
+var LOGOBAR_LOGO_ZONE = { x:65, y:50, w:230, h:220 };
+var LOGOBAR_BAR = { x:24, y:287, w:312, h:64 };
+LOGOBAR_BAR.r = LOGOBAR_BAR.h / 2; // 膠囊造型（跟其他版位色塊同樣的圓角規則：圓角=高度一半）
+var LOGOBAR_TEXT_MAX_FS = 46;
+/* 文案＋箭頭當一整個區塊在膠囊安全範圍內置中，文案越短，整體越靠中間，
+   跟 03_fl.html drawVariantP()「商品＋固定間距＋文字，整區塊置中」同一套做法——
+   箭頭不再是寫死的絕對座標，而是「文字結束後再留一個固定間距」算出來的，
+   會跟著文案長短一起移動。 */
+var LOGOBAR_CONTENT_INSET = 14; // 膠囊內容左右安全邊距
+var LOGOBAR_ARROW_GAP = 10;     // 文案跟箭頭之間的固定間距
+var LOGOBAR_ARROW_SIZE = { w:20, h:25 };
+
+/* 跟 editor-logo2-canvas.js 的 LOGO2_WORK_DIM 完全對應，換算LOGO偏移量用 */
+var LOGO2_WORK_DIM = { wide: { w:1200, h:540 }, square: { w:735, h:810 } };
+
+/* A級專場FL ICON整體（文案版的文字、LOGO版的LOGO＋文案＋箭頭）統一往下
+   偏移的px數。這支layout只服務個人專場A級，不用另外判斷等級。想再微調
+   位置，只要改這一個數字，兩種版型／文字／LOGO／箭頭都會一起跟著動，
+   不用三個地方分別改。 */
+var LEVEL_A_FL_OFFSET_Y = 1;
+
+/* ── State ── */
+var D = {
+  flBgColor: '#1E6EB4',      // 主題底色（文案版圓形底／LOGO版下方色塊共用同一個值）
+  cSub: '#165AA5',           // 主標色（文案版文字、LOGO版文字+箭頭都用這個）
+  flAVariant: 'skip',        // 'skip' | 'caption' | 'logoBar'
+  flAText: '',               // 文案內容（兩種版型共用同一個文字來源，只是字數上限不同）
+  logo2RawImg: null,
+  logo2Bounds: null,
+  logo2Shape: null,
+  logo2Scale: 1,
+  logo2OffX: 0,
+  logo2OffY: 0,
+  flLogoBgMode: 'white',        // 'white'=白底／'sampled'=吸Logo底色填滿（跟直播間FL Logo2邏輯一致）
+  flLogoSampledColor: '#ffffff',
+  flLogoExtraScale: 1,
+  flLogoExtraOffX: 0,
+  flLogoExtraOffY: 0,
+  badgeImg: null,
+  ctaImg: null,
+};
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width  = W; cv.height = H;
+cv.style.width  = W + 'px'; cv.style.height = H + 'px';
+
+/* ── 固定裝飾圖：跟廣播內容無關，開場載入一次即可 ── */
+loadImg('../logos/fl-live-badge.png', function(img){ D.badgeImg = img; render(); });
+loadImg('../logos/fl-a1-cta.png',     function(img){ D.ctaImg   = img; render(); });
+
+function roundRect(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y,     x + w, y + r,     r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x,     y + h, x,     y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x,     y,     x + r, y,         r);
+  ctx.closePath();
+}
+
+function drawContain(img, x, y, w, h){
+  var iw = img.naturalWidth, ih = img.naturalHeight;
+  if(!iw || !ih) return;
+  var scale = Math.min(w / iw, h / ih);
+  var dw = iw * scale, dh = ih * scale;
+  var ox = x + (w - dw) / 2, oy = y + (h - dh) / 2;
+  ctx.drawImage(img, ox, oy, dw, dh);
+}
+
+function measureTightWidth(text, spacing){
+  text = text || '';
+  if(!text) return 0;
+  var chars = text.split('');
+  var widths = chars.map(function(c){ return ctx.measureText(c).width; });
+  return widths.reduce(function(a,b){ return a + b; }, 0) + spacing * (chars.length - 1);
+}
+
+function fillTextTight(text, cx, cy, spacing){
+  text = text || '';
+  if(!text) return;
+  var chars = text.split('');
+  var widths = chars.map(function(c){ return ctx.measureText(c).width; });
+  var totalWidth = widths.reduce(function(a,b){ return a + b; }, 0) + spacing * (chars.length - 1);
+  var prevAlign = ctx.textAlign;
+  ctx.textAlign = 'left';
+  var x = cx - totalWidth / 2;
+  for(var i = 0; i < chars.length; i++){
+    ctx.fillText(chars[i], x, cy);
+    x += widths[i] + spacing;
+  }
+  ctx.textAlign = prevAlign;
+}
+
+/* ── 主繪製 ── */
+function render(){
+  ctx.clearRect(0, 0, W, H);
+
+  if(D.flAVariant === 'logoBar'){
+    drawLogoBarVariant();
+  } else {
+    drawCaptionVariant(); // 'caption'／未知狀態一律當文案版處理，避免整張空白
+  }
+
+  /* 固定裝飾：兩種版型都有，畫在圓形/色塊之上 */
+  if(D.badgeImg) ctx.drawImage(D.badgeImg, BADGE.x, BADGE.y, BADGE.w, BADGE.h);
+  if(D.ctaImg) drawContain(D.ctaImg, CTA.x, CTA.y, CTA.w, CTA.h);
+}
+
+/* ── 版型：純文案（圓形底用主題色，文字用主標色，最多6字可2排）── */
+function drawCaptionVariant(){
+  ctx.save();
+  roundRect(CIRCLE.x, CIRCLE.y, CIRCLE.w, CIRCLE.h, CIRCLE.r);
+  ctx.fillStyle = D.flBgColor || '#1E6EB4';
+  ctx.fill();
+  ctx.clip();
+
+  var text = D.flAText || '';
+  var spacing = -2;
+  var lines = splitCaptionLines(text);
+  var fs = CAPTION_MAX_FS;
+  ctx.font = font(fs, 500);
+
+  /* 任一行超出可用寬度就整體等比縮小字級，維持兩行字級一致 */
+  var maxLineW = 0;
+  lines.forEach(function(line){
+    var w = measureTightWidth(line, spacing);
+    if(w > maxLineW) maxLineW = w;
+  });
+  if(maxLineW > CAPTION_BOX.w){
+    fs = fs * (CAPTION_BOX.w / maxLineW);
+    ctx.font = font(fs, 500);
+  }
+
+  var lineH = fs * CAPTION_LINE_HEIGHT_RATIO;
+  var totalH = lineH * lines.length;
+  var startY = CIRCLE.y + CIRCLE.h/2 - totalH/2 + lineH/2 + LEVEL_A_FL_OFFSET_Y;
+
+  ctx.fillStyle = D.cSub || '#165AA5';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  lines.forEach(function(line, i){
+    fillTextTight(line, W/2, startY + i*lineH, spacing);
+  });
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  ctx.restore();
+}
+
+/* 最多6字、最多2排：3字以內單行；超過3字時前後平均切成2行
+   （例如5字→3+2、6字→3+3），保留使用者輸入的手動換行字元優先套用 */
+function splitCaptionLines(text){
+  text = text || '';
+  if(text.indexOf('\n') !== -1){
+    return text.split('\n').slice(0, 2);
+  }
+  if(text.length <= 3) return [text];
+  var mid = Math.ceil(text.length / 2);
+  return [text.slice(0, mid), text.slice(mid)];
+}
+
+/* ── 版型：LOGO＋下方文案BAR（圓形底白色/吸色，最多5字）── */
+function drawLogoBarVariant(){
+  var isSampled = D.flLogoBgMode === 'sampled';
+
+  ctx.save();
+  roundRect(CIRCLE.x, CIRCLE.y, CIRCLE.w, CIRCLE.h, CIRCLE.r);
+  ctx.fillStyle = isSampled ? (D.flLogoSampledColor || '#ffffff') : '#ffffff';
+  ctx.fill();
+  ctx.clip();
+  drawLogoBarLogo();
+  ctx.restore();
+
+  /* 下方文案色塊：跟文案版圓形底同一個主題色 */
+  roundRect(LOGOBAR_BAR.x, LOGOBAR_BAR.y, LOGOBAR_BAR.w, LOGOBAR_BAR.h, LOGOBAR_BAR.r);
+  ctx.fillStyle = D.flBgColor || '#1E6EB4';
+  ctx.fill();
+
+  var text = D.flAText || '';
+  var spacing = -2;
+  var contentLeft  = LOGOBAR_BAR.x + LOGOBAR_CONTENT_INSET;
+  var contentRight = LOGOBAR_BAR.x + LOGOBAR_BAR.w - LOGOBAR_CONTENT_INSET;
+  var availableW   = contentRight - contentLeft;
+
+  var fs = LOGOBAR_TEXT_MAX_FS;
+  ctx.font = font(fs, 500);
+  var tw = measureTightWidth(text, spacing);
+  /* 文字最大可用寬度＝扣掉「箭頭寬度」＋固定間距後剩下的空間，超出才等比縮小字級 */
+  var maxTextW = availableW - LOGOBAR_ARROW_SIZE.w - LOGOBAR_ARROW_GAP;
+  if(tw > maxTextW && maxTextW > 0){
+    fs = fs * (maxTextW / tw);
+    ctx.font = font(fs, 500);
+    tw = measureTightWidth(text, spacing);
+  }
+
+  /* 文案＋固定間距＋箭頭，當一整個區塊在安全範圍內置中 */
+  var totalW = tw + LOGOBAR_ARROW_GAP + LOGOBAR_ARROW_SIZE.w;
+  var startX = contentLeft + Math.max(0, (availableW - totalW) / 2);
+
+  var textCenterX = startX + tw / 2;
+  ctx.fillStyle = D.cSub || '#165AA5';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  fillTextTight(text, textCenterX, LOGOBAR_BAR.y + LOGOBAR_BAR.h/2 + LEVEL_A_FL_OFFSET_Y, spacing);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+
+  /* 小箭頭（▶）：緊接在文案後面固定間距處，主標色，跟文字/色塊一起標示可點擊感。
+     箭頭本來就是跟文字同一條水平線置中（見上面 fillTextTight 那行），
+     所以這裡也要跟著加 LEVEL_A_FL_OFFSET_Y，不然文字往下3px、箭頭沒動，
+     兩個會對不齊。 */
+  var arrowX = startX + tw + LOGOBAR_ARROW_GAP;
+  var arrowY = LOGOBAR_BAR.y + (LOGOBAR_BAR.h - LOGOBAR_ARROW_SIZE.h) / 2 + LEVEL_A_FL_OFFSET_Y;
+  ctx.fillStyle = D.cSub || '#165AA5';
+  ctx.beginPath();
+  ctx.moveTo(arrowX, arrowY);
+  ctx.lineTo(arrowX, arrowY + LOGOBAR_ARROW_SIZE.h);
+  ctx.lineTo(arrowX + LOGOBAR_ARROW_SIZE.w, arrowY + LOGOBAR_ARROW_SIZE.h/2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/* 跟 03_fl.html drawVariantL() / editor-logo2-canvas.js drawFlPreviewLogo() 同一套公式，
+   原圖＋Logo2編輯畫布的縮放位移直接換算，只是這裡的目標範圍換成 LOGOBAR_LOGO_ZONE。
+   沒有原圖資訊（例如舊存檔）就退回整張合成小卡 contain 進 zone。 */
+function drawLogoBarLogo(){
+  var z = LOGOBAR_LOGO_ZONE;
+  if(D.logo2RawImg && D.logo2Bounds && D.logo2Bounds.w && D.logo2Bounds.h){
+    var b = D.logo2Bounds;
+    var workDim = LOGO2_WORK_DIM[D.logo2Shape] || LOGO2_WORK_DIM.wide;
+    var sclBase = Math.min(z.w / b.w, z.h / b.h);
+    var scl = sclBase * (D.logo2Scale || 1) * (D.flLogoExtraScale || 1);
+    var dw = b.w * scl, dh = b.h * scl;
+    var offXRatio = (D.logo2OffX || 0) / workDim.w;
+    var offYRatio = (D.logo2OffY || 0) / workDim.h;
+    var dx = z.x + (z.w - dw) / 2 + offXRatio * z.w + (D.flLogoExtraOffX || 0) * z.w;
+    var dy = z.y + (z.h - dh) / 2 + offYRatio * z.h + (D.flLogoExtraOffY || 0) * z.h + LEVEL_A_FL_OFFSET_Y;
+    ctx.drawImage(D.logo2RawImg, b.x, b.y, b.w, b.h, dx, dy, dw, dh);
+    return;
+  }
+  if(!D.logo2) return;
+  drawContain(D.logo2, z.x, z.y, z.w, z.h);
+}
+
+/* ── BN_UPDATE ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg) return;
+  if(msg.type === 'BN_RESTORE_STATE') return; // 沒有可拖曳素材，忽略
+
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  if(p.flBgColor !== undefined) D.flBgColor = p.flBgColor;
+  if(p.cSub      !== undefined) D.cSub      = p.cSub;
+  if(p.flAVariant !== undefined) D.flAVariant = p.flAVariant;
+  if(p.flAText    !== undefined) D.flAText    = p.flAText;
+  if(p.flLogoBgMode !== undefined) D.flLogoBgMode = p.flLogoBgMode;
+  if(p.flLogoSampledColor !== undefined) D.flLogoSampledColor = p.flLogoSampledColor;
+  if(p.flLogoExtraScale !== undefined) D.flLogoExtraScale = p.flLogoExtraScale;
+  if(p.flLogoExtraOffX  !== undefined) D.flLogoExtraOffX  = p.flLogoExtraOffX;
+  if(p.flLogoExtraOffY  !== undefined) D.flLogoExtraOffY  = p.flLogoExtraOffY;
+  if(p.logo2Shape !== undefined) D.logo2Shape = p.logo2Shape;
+  if(p.logo2Scale !== undefined) D.logo2Scale = p.logo2Scale;
+  if(p.logo2OffX  !== undefined) D.logo2OffX  = p.logo2OffX;
+  if(p.logo2OffY  !== undefined) D.logo2OffY  = p.logo2OffY;
+
+  var needsSyncRender = true;
+
+  if(p.logo2Raw !== undefined && p.logo2Raw && p.logo2Raw !== D._logo2RawCacheSrc){
+    D._logo2RawCacheSrc = p.logo2Raw;
+    needsSyncRender = false;
+    var _logo2RawSrcAtRequest = p.logo2Raw;
+    loadImg(p.logo2Raw, function(img){
+      D.logo2RawImg = img;
+      D.logo2Bounds = img ? (calcTightBounds(img) || { x:0, y:0, w:img.naturalWidth, h:img.naturalHeight }) : null;
+      render();
+      /* 見 03_fl.html 同樣位置的註解：真的畫上去才回報，editor那邊
+         （js/editor-export.js的waitForLogo2Ready）等到這個訊息才截圖。 */
+      window.parent.postMessage({ type:'BN_LOGO2_READY', layoutId:'04_fl_a1', src:_logo2RawSrcAtRequest }, '*');
+    });
+  } else if(p.logo2Raw !== undefined && p.logo2Raw && p.logo2Raw === D._logo2RawCacheSrc){
+    window.parent.postMessage({ type:'BN_LOGO2_READY', layoutId:'04_fl_a1', src:p.logo2Raw }, '*');
+  }
+  if(p.logo2 !== undefined && p.logo2 && p.logo2 !== D._logo2CacheSrc){
+    D._logo2CacheSrc = p.logo2;
+    needsSyncRender = false;
+    loadImg(p.logo2, function(img){ D.logo2 = img; render(); });
+  }
+
+  if(needsSyncRender) render();
+});
+
+window.parent.postMessage({ type: 'BN_READY' }, '*');
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/png'); // 跟直播間FL一樣永遠輸出透明底PNG
+}
+
+window.BNExport = {
+  getBlob: function(fmt, q, cb){ exportBlob(fmt, q, cb); },
+  spec: { id: '04_fl_a1', name: 'FL-Icon-A1-360x360', width: W, height: H, hasCTAVariant: false, fmt: 'png' }
+};
+
+</script>
+</body>
+</html>

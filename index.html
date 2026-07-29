@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C直播(官方/品類/直播日)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: sans-serif;
+    background: #141414;
+    color: #f0f0f0;
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  .page-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    margin-bottom: 28px;
+  }
+
+  /* ── 搜尋列（右側放大鏡圓形按鈕）── */
+  .search-wrap {
+    max-width: 680px;
+    margin: 0 auto 40px;
+    position: relative;
+  }
+
+  .search-wrap input {
+    width: 100%;
+    background: #1c1c1c;
+    border: 1px solid #2e2e2e;
+    border-radius: 40px;
+    padding: 13px 52px 13px 20px;
+    color: #f0f0f0;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s;
+    font-family: inherit;
+  }
+
+  .search-wrap input::placeholder { color: #555; }
+  .search-wrap input:focus { border-color: #EE4D2D; }
+
+  .search-icon-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #2b2b2b;
+    border: 1px solid #3a3a3a;
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #aaa;
+    font-size: 17px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .search-icon-btn:hover { background: #EE4D2D; color: #fff; border-color: #EE4D2D; }
+
+  /* ── 網格：一排最多 3 欄，第 4 個自動換行 ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  /* ── 卡片容器（圖片 + 下方標籤）── */
+  .card-wrap { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── 圖片區塊 ──
+     【如何替換圖片】
+     在 cards 陣列找到對應物件，把 img: null 改為圖片路徑
+     範例：img: "images/star-studio.jpg"
+     建議圖片尺寸：400×300px 以上，4:3 比例最佳
+  ── */
+  .card {
+    position: relative;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #1c1c1c;
+    border: 1px solid #2e2e2e;
+    cursor: pointer;
+    aspect-ratio: 4/3;
+  }
+
+  .card-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .placeholder {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px; color: #444; font-size: 13px;
+  }
+  .placeholder i { font-size: 32px; color: #333; }
+
+  /* ── Hover 遮罩：全區塊半透明黑，Generate 置中 ── */
+  .card-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+
+  .card:hover .card-overlay { opacity: 1; }
+
+  /* Generate 按鈕（含亮晶晶 sparkles icon）*/
+  .cta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #ffffff;
+    color: #111;
+    border: none;
+    border-radius: 40px;
+    padding: 10px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .cta-btn:hover { background: #EE4D2D; color: #fff; }
+  .cta-btn i { font-size: 17px; }
+
+  /* ── 標籤文字：圖片區塊下方 ── */
+  .card-label {
+    font-size: 13px;
+    color: #aaa;
+    font-weight: 500;
+    padding-left: 2px;
+  }
+
+  .no-result {
+    grid-column: 1/-1;
+    text-align: center;
+    color: #555;
+    font-size: 15px;
+    padding: 48px 0;
+  }
+  .no-result i { font-size: 28px; display: block; margin-bottom: 8px; color: #444; }
+</style>
+</head>
+<body>
+
+  <h1 class="page-title">C直播(官方/品類/直播日)</h1>
+
+  <div class="search-wrap">
+    <input type="text" id="search" placeholder="Search 搜尋工單類型..." />
+    <button class="search-icon-btn" aria-label="搜尋">
+      <i class="ti ti-search" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+  /*
+  ╔══════════════════════════════════════════════════════════╗
+  ║  【如何新增區塊】在陣列末尾加入新物件即可，第 4 個自動換行    ║
+  ║  【如何換圖片】把 img: null 改為 img: "路徑/圖片.jpg"       ║
+  ╚══════════════════════════════════════════════════════════╝
+  */
+  const cards = [
+    {
+      title: "明星直播間",
+      label: "明星直播間 編輯器",
+      href: "star-studio/editor.html",
+      tags: ["明星","直播間","star","studio","直播"],
+      img: "title-page/01.jpg"   // ← 換成 "images/star-studio.jpg"
+    },
+    {
+      title: "KOL代播",
+      label: "KOL代播 編輯器",
+      href: "kol-live-selling/editor.html",
+      tags: ["KOL","代播","kol","selling","直播"],
+      img: "title-page/02.jpg"   // ← 換成 "images/kol.jpg"
+    },
+    {
+      title: "資源交換專場",
+      label: "資源交換專場 編輯器",
+      href: "resource-exchange/editor.html",
+      tags: ["資源","交換","resource","exchange","直播"],
+      img: "title-page/03.jpg"   // ←換成 "images/resource.jpg"
+    },
+    {
+      title: "ENG_LIVE_BAU&快閃日",
+      label: "ENG_LIVE_BAU&快閃日 編輯器",
+      href: "eng-live-bau&flash-sale/editor.html",
+      tags: ["eng","live","bau","快閃日","BAU"],
+       img: "title-page/04.jpg"   // ← 換成 "images/resource.jpg"
+    },
+   {
+      title: "lifestyle-channel",
+      label: "lifestyle-channel 編輯器",
+      href: "lifestyle-channel-split/editor.html",
+      tags: ["lifestyle","channel","直播"],
+       img: "title-page/05.jpg"   // ← 換成 "images/resource.jpg"
+    },
+  {
+      title: "MCN代播",
+      label: "MCN代播 編輯器",
+      href: "mcn-daibo/editor.html",
+      tags: ["MCN","代播","直播"],
+       img: "title-page/06.jpg"   // ← 換成 "images/resource.jpg"
+    },
+      {
+      title: "賣家資源",
+      label: "賣家資源 編輯器",
+      href: "seller-resources/editor.html",
+      tags: ["賣家","資源","seller","resources"],
+       img: "title-page/07.jpg"   // ← 換成 "images/resource.jpg"
+    },
+   {
+      title: "SMT直播間",
+      label: "SMT直播間 編輯器",
+      href: "smt-live-room/editor.html",
+      tags: ["SMT","直播間","smt","live","room"],
+       img: "title-page/08.jpg"   // ← 換成 "images/resource.jpg"
+    },
+    {
+      title: "個人專場",
+      label: "個人專場 編輯器",
+      href: "personal-event/editor.html",
+      tags: ["個人","專場","personal","event"],
+       img: "title-page/09.jpg"   // ← 換成 "images/resource.jpg"
+    },
+    {
+      title: "蝦殺二選一",
+      label: "蝦殺二選一 編輯器",
+      href: "shrimp2choice/editor.html",
+      tags: ["蝦殺","二選一","shrimp","choice"],
+       img: "title-page/10.jpg"   // ← 換成 "images/resource.jpg"
+    },
+    {
+      title: "佳宜好朋友",
+      label: "佳宜好朋友 編輯器",
+      href: "jiayi-friend/editor.html",
+      tags: ["佳宜","好朋友","jia","yi","friends"],
+       img: "title-page/11.jpg"   // ← 換成 "images/resource.jpg"
+    },
+    {
+      title: "毛孩衝蝦米",
+      label: "毛孩衝蝦米 編輯器",
+      href: "pet-frenzy/editor.html",
+      tags: ["毛孩","衝蝦米","puppy","shrimp"],
+       img: "title-page/12.jpg"   // ← 換成 "images/resource.jpg"
+    },
+
+    /* ← 在此新增更多區塊 */
+  ];
+
+  function renderCards(list) {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    if (!list.length) {
+      grid.innerHTML = '<div class="no-result"><i class="ti ti-search" aria-hidden="true"></i>找不到相關工單</div>';
+      return;
+    }
+    list.forEach(c => {
+      const wrap = document.createElement('div');
+      wrap.className = 'card-wrap';
+      const imgHTML = c.img
+        ? `<img class="card-img" src="${c.img}" alt="${c.label}" />`
+        : `<div class="placeholder"><i class="ti ti-photo" aria-hidden="true"></i><span>尚未設定圖片</span></div>`;
+      wrap.innerHTML = `
+        <div class="card">
+          ${imgHTML}
+          <div class="card-overlay">
+            <a class="cta-btn" href="${c.href}" target="_blank">
+              <i class="ti ti-sparkles" aria-hidden="true"></i> Generate
+            </a>
+          </div>
+        </div>
+        <div class="card-label">${c.label}</div>
+      `;
+      grid.appendChild(wrap);
+    });
+  }
+
+  renderCards(cards);
+
+  document.getElementById('search').addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    if (!q) { renderCards(cards); return; }
+    renderCards(cards.filter(c =>
+      c.title.toLowerCase().includes(q) ||
+      c.label.toLowerCase().includes(q) ||
+      c.tags.some(t => t.toLowerCase().includes(q))
+    ));
+  });
+</script>
+</body>
+</html>

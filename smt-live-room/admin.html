@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCN代播 後台管理</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #141414;
+  --sidebar:    #1c1c1c;
+  --surface:    #242424;
+  --surface2:   #2a2a2a;
+  --border:     #2e2e2e;
+  --border2:    #383838;
+  --text:       #f0f0f0;
+  --text-muted: #8a8a8a;
+  --text-dim:   #555;
+  --accent:     #EE4D2D;
+  --accent-dim: rgba(238,77,45,0.15);
+  --success:    #3d9970;
+  --warning:    #d4a017;
+  --radius:     6px;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Noto Sans TC', sans-serif; font-size: 13px; }
+
+/* ── Topbar ── */
+.topbar {
+  height: 44px; background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; position: sticky; top: 0; z-index: 100;
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.topbar-logo { width:20px;height:20px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center; }
+.topbar-logo svg { width:12px;height:12px;fill:white; }
+.topbar-title { font-size:13px;font-weight:600; }
+.topbar-badge { font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:3px;letter-spacing:.5px; }
+
+.nav-tabs { display:flex;gap:2px; }
+.nav-tab {
+  height:28px;padding:0 14px;border-radius:var(--radius);border:1px solid transparent;
+  background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:all .15s;text-decoration:none;
+}
+.nav-tab:hover { color:var(--text);background:var(--surface); }
+.nav-tab.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600; }
+
+.tbtn {
+  height:28px;padding:0 12px;border-radius:var(--radius);border:1px solid var(--border2);
+  background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:all .15s;
+}
+.tbtn:hover { color:var(--text);background:#2e2e2e; }
+.tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
+.tbtn.primary:hover { background:#d4442a; }
+
+/* ── Layout ── */
+.page { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+/* Section */
+.section { margin-bottom: 32px; }
+.section-header {
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.section-title { font-size:14px;font-weight:600;color:var(--text); }
+.section-desc { font-size:12px;color:var(--text-muted);margin-top:3px; }
+
+/* Canvas cards */
+.canvas-grid { display:flex;flex-direction:column;gap:10px; }
+
+.canvas-card {
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:14px 16px;
+  display:grid;grid-template-columns:auto 1fr auto auto;
+  align-items:center;gap:12px;
+  transition:border-color .15s;
+}
+.canvas-card:hover { border-color:var(--border2); }
+.canvas-card.enabled { border-color:var(--success);background:rgba(61,153,112,0.06); }
+
+/* Toggle */
+.sw { position:relative;width:36px;height:20px;flex-shrink:0; }
+.sw input { opacity:0;width:0;height:0;position:absolute; }
+.sw-track {
+  position:absolute;inset:0;background:var(--border2);border-radius:20px;
+  cursor:pointer;transition:background .2s;
+}
+.sw-track::after {
+  content:'';position:absolute;width:14px;height:14px;background:var(--text-muted);
+  border-radius:50%;top:3px;left:3px;transition:transform .2s,background .2s;
+}
+.sw input:checked + .sw-track { background:rgba(61,153,112,0.4); }
+.sw input:checked + .sw-track::after { transform:translateX(16px);background:var(--success); }
+
+.canvas-info { min-width:0; }
+.canvas-name { font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px; }
+.canvas-meta { font-size:11px;color:var(--text-muted);display:flex;gap:10px; }
+.canvas-tag {
+  display:inline-flex;align-items:center;
+  padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;
+  background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);
+}
+.canvas-tag.active { background:rgba(61,153,112,0.1);color:var(--success);border-color:var(--success); }
+
+.canvas-actions { display:flex;gap:6px; }
+.icon-btn {
+  width:28px;height:28px;border-radius:var(--radius);border:1px solid var(--border2);
+  background:var(--surface2);color:var(--text-muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.icon-btn:hover { color:var(--text);border-color:var(--border2); }
+.icon-btn svg { width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.5; }
+
+/* Empty state */
+.empty-state {
+  padding:40px;text-align:center;
+  border:1px dashed var(--border2);border-radius:8px;color:var(--text-dim);
+}
+.empty-state p { font-size:13px;margin-bottom:8px; }
+.empty-state small { font-size:11px; }
+
+/* Add modal */
+.modal-overlay {
+  position:fixed;inset:0;background:rgba(0,0,0,.6);
+  display:none;align-items:center;justify-content:center;z-index:200;
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  width:min(90vw,480px);background:var(--sidebar);
+  border:1px solid var(--border2);border-radius:10px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;
+}
+.modal-header {
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.modal-title { font-size:14px;font-weight:600; }
+.modal-close { background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;padding:0; }
+.modal-close:hover { color:var(--text); }
+.modal-body { padding:20px; }
+.modal-footer { padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px; }
+
+.form-field { margin-bottom:14px; }
+.form-label { font-size:11px;color:var(--text-muted);margin-bottom:5px;display:block; }
+.form-input {
+  width:100%;padding:8px 10px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);font-size:13px;font-family:inherit;
+  -webkit-appearance:none;
+}
+.form-input:focus { outline:none;border-color:#444; }
+.form-input::placeholder { color:var(--text-dim); }
+.form-hint { font-size:11px;color:var(--text-dim);margin-top:4px; }
+
+/* Info box */
+.info-box {
+  background:rgba(212,160,23,0.08);border:1px solid rgba(212,160,23,0.3);
+  border-radius:6px;padding:10px 14px;font-size:12px;color:#d4a017;line-height:1.6;
+  margin-bottom:20px;
+}
+
+/* Toast */
+.toast {
+  position:fixed;bottom:24px;right:24px;
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:var(--radius);padding:10px 16px;
+  font-size:12px;color:var(--text);
+  box-shadow:0 4px 20px rgba(0,0,0,.4);
+  z-index:9999;opacity:0;transform:translateY(6px);
+  transition:opacity .2s,transform .2s;pointer-events:none;
+}
+.toast.show { opacity:1;transform:translateY(0); }
+.toast.ok { border-left:3px solid var(--success); }
+.toast.err { border-left:3px solid var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg>
+    </div>
+    <span class="topbar-title">MCN代播</span>
+    <span class="topbar-badge">後台管理</span>
+  </div>
+  <div class="nav-tabs">
+    <span class="nav-tab active">⚙️ 後台</span>
+  </div>
+  <div class="topbar-right" style="margin-left:auto;display:flex;gap:8px;">
+    <a class="tbtn" href="editor.html">🖥 前台編輯器</a>
+    <button class="tbtn" style="border-color:#ef4444;color:#ef4444;" onclick="clearAllStorage()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>清除暫存
+    </button>
+  </div>
+</div>
+
+<!-- Page -->
+<div class="page">
+
+  <div class="info-box">
+    💡 後台管理此專案的畫布清單。每個畫布是獨立的 HTML 檔案，放在 <code>layouts/</code> 資料夾。開關決定該畫布是否在編輯器中顯示與輸出。
+  </div>
+
+  <!-- 畫布清單 -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">📋 畫布清單</div>
+        <div class="section-desc">管理此專案要輸出的版位</div>
+      </div>
+      <div style="display:flex;gap:8px;"></div>
+    </div>
+
+    <div class="canvas-grid" id="canvas-grid">
+      <div class="empty-state"><p>尚未載入畫布清單</p></div>
+    </div>
+  </div>
+
+  <!-- 專案資訊 -->
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <div class="section-title">📁 專案資訊</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--text-muted);width:80px;">專案名稱</span>
+        <span style="font-size:13px;">MCN代播</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--text-muted);width:80px;">layouts/ 路徑</span>
+        <code style="font-size:11px;color:var(--text-muted);">mcn-live/layouts/</code>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--text-muted);width:80px;">啟用畫布數</span>
+        <span id="enabled-count" style="font-size:13px;color:var(--success);">0</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-size:11px;color:var(--text-muted);width:80px;">清單檔案</span>
+        <code style="font-size:11px;color:var(--text-muted);">js/index.js</code>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+
+<div class="toast" id="toast-el"></div>
+
+<script>
+'use strict';
+
+/* ── Toast ── */
+function toast(msg, type, duration){
+  var el = document.getElementById('toast-el');
+  el.textContent = msg;
+  el.className = 'toast '+(type||'')+' show';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.classList.remove('show'); }, duration||2500);
+}
+
+/* ── Storage key ── */
+var STORE_KEY = 'bn_admin_seller_resources_v1';
+
+/* ── Load / Save layout list ── */
+function loadList(){
+  try{
+    var raw = localStorage.getItem(STORE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  /* 預設：把 js/index.js 裡的清單帶進來 */
+  return {
+    layouts: [
+      { id:'02_lpbn', name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html', w:1125, h:360, enabled:true, note:'' },
+    ],
+    version: 1
+  };
+}
+
+function saveList(data){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+  catch(e){ toast('儲存失敗：'+e.message,'err'); }
+}
+
+/* ── Render list ── */
+var G = loadList();
+
+function render(){
+  var grid = document.getElementById('canvas-grid');
+  var enabledCount = G.layouts.filter(function(l){ return l.enabled; }).length;
+  document.getElementById('enabled-count').textContent = enabledCount;
+
+  if(!G.layouts.length){
+    grid.innerHTML = '<div class="empty-state"><p>尚未加入任何畫布</p><small>點右上角「新增畫布」開始</small></div>';
+    return;
+  }
+
+  grid.innerHTML = '';
+  G.layouts.forEach(function(layout, idx){
+    var card = document.createElement('div');
+    card.className = 'canvas-card' + (layout.enabled ? ' enabled' : '');
+    card.innerHTML =
+      '<label class="sw"><input type="checkbox"'+(layout.enabled?' checked':'')+' onchange="toggleLayout('+idx+',this.checked)"><div class="sw-track"></div></label>'+
+      '<div class="canvas-info">'+
+        '<div class="canvas-name">'+escHtml(layout.name)+'</div>'+
+        '<div class="canvas-meta">'+
+          '<span>'+layout.w+' × '+layout.h+' px</span>'+
+          '<code style="font-size:11px;color:var(--text-dim);">'+escHtml(layout.file)+'</code>'+
+          (layout.note ? '<span style="color:var(--text-dim);">'+escHtml(layout.note)+'</span>' : '')+
+        '</div>'+
+      '</div>'+
+      '<span class="canvas-tag'+(layout.enabled?' active':'')+'">'+( layout.enabled?'✓ 啟用':'停用')+'</span>'+
+      '<div class="canvas-actions">'+
+        '<button class="icon-btn" title="在新分頁預覽" onclick="previewLayout(\''+escHtml(layout.file)+'\')">'+
+          '<svg viewBox="0 0 16 16"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>'+
+        '</button>'+
+        '<button class="icon-btn" title="刪除" onclick="removeLayout('+idx+')" style="color:var(--text-dim);">'+
+          '<svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>'+
+        '</button>'+
+      '</div>';
+    grid.appendChild(card);
+  });
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleLayout(idx, checked){
+  G.layouts[idx].enabled = checked;
+  saveList(G);
+  render();
+  toast(checked ? '已啟用：'+G.layouts[idx].name : '已停用：'+G.layouts[idx].name, checked?'ok':'');
+}
+
+function removeLayout(idx){
+  var name = G.layouts[idx].name;
+  if(!confirm('確定要刪除「'+name+'」？\n（只刪除清單記錄，不刪除 HTML 檔案）')) return;
+  G.layouts.splice(idx, 1);
+  saveList(G);
+  render();
+  toast('已移除：'+name);
+}
+
+function previewLayout(file){
+  window.open('layouts/'+file, '_blank');
+}
+
+/* ── Scan（重新讀取 js/index.js） ── */
+function clearAllStorage(){
+  if(!confirm('確定清除所有暫存？\n（版位清單將重設）')) return;
+  localStorage.removeItem('bn_admin_mcn_live_v1');
+  localStorage.removeItem('bn_hosts_star_studio_v1');
+  toast('暫存已清除，重新整理中...','ok',2000);
+  setTimeout(function(){ location.reload(); }, 1200);
+}
+
+/* ── Init：自動從 js/index.js 合併版位，尺寸從各 layout spec 讀取 ── */
+function initFromIndexJS(){
+  window._bn_scan_cb = function(fileList){
+    var stored = loadList();
+    var existingMap = {};
+    stored.layouts.forEach(function(l){ existingMap[l.file] = l; });
+
+    /* 找出需要讀 spec 的新版位 */
+    var newFiles = fileList.filter(function(f){ return !existingMap[f]; });
+
+    function applyMerge(specMap){
+      var merged = fileList.map(function(file){
+        if(existingMap[file]) return existingMap[file];
+        var s = specMap[file] || {};
+        return {
+          id:      s.id   || file.replace('.html',''),
+          name:    s.name || file.replace('.html',''),
+          file:    file,
+          w:       s.width  || 1200,
+          h:       s.height || 630,
+          enabled: true,
+          note:    ''
+        };
+      });
+      G.layouts = merged;
+      saveList(G);
+      render();
+      delete window._bn_scan_cb;
+    }
+
+    if(newFiles.length === 0){ applyMerge({}); return; }
+
+    /* 用隱藏 iframe 載入每個新版位，讀取 BNExport.spec */
+    var specMap = {};
+    var pending = newFiles.length;
+    newFiles.forEach(function(file){
+      var ifr = document.createElement('iframe');
+      ifr.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;';
+      ifr.src = 'layouts/' + file;
+      ifr.onload = function(){
+        try{
+          var spec = ifr.contentWindow.BNExport && ifr.contentWindow.BNExport.spec;
+          if(spec) specMap[file] = spec;
+        }catch(e){}
+        document.body.removeChild(ifr);
+        if(--pending === 0) applyMerge(specMap);
+      };
+      ifr.onerror = function(){
+        document.body.removeChild(ifr);
+        if(--pending === 0) applyMerge(specMap);
+      };
+      document.body.appendChild(ifr);
+    });
+  };
+
+  var old = document.getElementById('_idx_script');
+  if(old) old.remove();
+  var s = document.createElement('script');
+  s.id = '_idx_script';
+  s.src = 'js/index.js?t='+Date.now();
+  s.onerror = function(){ render(); };
+  document.head.appendChild(s);
+}
+
+initFromIndexJS();
+
+/* ── 主持人圖庫 ── */
+var HOST_LIST_KEY = 'bn_hosts_star_studio_v1';
+
+function getHostList(){
+  try{ return JSON.parse(localStorage.getItem(HOST_LIST_KEY)||'[]'); }
+  catch(e){ return []; }
+}
+function saveHostList(list){
+  localStorage.setItem(HOST_LIST_KEY, JSON.stringify(list));
+}
+
+function refreshHosts(){
+  /* 讓使用者選擇圖片上傳到圖庫 */
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.onchange = function(e){
+    var files = Array.from(e.target.files);
+    var list = getHostList();
+    var promises = files.map(function(file){
+      return new Promise(function(resolve){
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          var existing = list.findIndex(function(h){ return h.name === file.name; });
+          var entry = { name: file.name, src: ev.target.result, added: Date.now() };
+          if(existing >= 0) list[existing] = entry;
+          else list.push(entry);
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+    Promise.all(promises).then(function(){
+      saveHostList(list);
+      renderHosts();
+      toast('已加入 '+files.length+' 張圖片','ok');
+    });
+  };
+  input.click();
+}
+
+function renderHosts(){
+  var list = getHostList();
+  var grid = document.getElementById('hosts-grid');
+  if(!list.length){
+    grid.innerHTML = '<div class="empty-state"><p>圖庫是空的</p><small>點「重新掃描」上傳圖片</small></div>';
+    return;
+  }
+  grid.innerHTML = '';
+  list.forEach(function(host, idx){
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;';
+    card.innerHTML =
+      '<img src="'+host.src+'" style="width:100%;aspect-ratio:1;object-fit:cover;display:block;">'
+      +'<div style="padding:6px 8px;font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(host.name)+'</div>'
+      +'<button onclick="removeHost('+idx+')" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,0.5);border:none;color:white;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">×</button>';
+    grid.appendChild(card);
+  });
+}
+
+function removeHost(idx){
+  var list = getHostList();
+  var name = list[idx].name;
+  if(!confirm('移除「'+name+'」？')) return;
+  list.splice(idx,1);
+  saveHostList(list);
+  renderHosts();
+  toast('已移除：'+name);
+}
+
+/* 提供給 editor.html 讀取圖庫 */
+window.BNHostLib = {
+  getAll: getHostList,
+  findByName: function(name){
+    var list = getHostList();
+    /* 精確比對：凱特-1 或 模糊比對：凱特 → 凱特-1 */
+    var exact = list.find(function(h){ return h.name.replace(/\.[^.]+$/,'') === name; });
+    if(exact) return exact.src;
+    var fuzzy = list.find(function(h){ return h.name.startsWith(name+'-'); });
+    return fuzzy ? fuzzy.src : null;
+  }
+};
+
+renderHosts();
+
+/* 讓編輯器可以讀取啟用清單 */
+window.BNAdmin = {
+  getEnabledLayouts: function(){
+    return G.layouts.filter(function(l){ return l.enabled; });
+  }
+};
+</script>
+</body>
+</html>

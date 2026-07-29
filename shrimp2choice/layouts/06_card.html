@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>06 案型字卡</title>
+<style>:root{ --cw:1080px; --ch:1920px; }</style>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" width="1080" height="1920"></canvas>
+  <div id="overlay"></div>
+</div>
+
+<script src="../js/layout-common.js"></script>
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════════════════
+   06_card.html — 案型字卡（純文字，無商品/主持人）
+   ----------------------------------------------------------------
+   5種樣式的規格（跟 Iona 對過的版本）：
+     樣式1：滿版色塊(754寬) + 文案，1格，最多15字
+     樣式2：純文字，1格，最多13字
+     樣式3：左＝色塊(小標，最多5字，固定265px寬，超過再自動加寬)
+            右＝一般文案(最多8字)，並排、整組置中
+     樣式4：左＝一般文案(最多10字)，右＝小字(最多8字)，並排、底部對齊、置中
+     樣式5：純小字，1格，最多28字
+
+   版型1~4＝這6個位置各自用哪個樣式（CARD_LAYOUTS，跟excel工單一致）。
+
+   排版規則：
+     - 色塊高度 64px；行距固定20px，樣式5前面縮到10px
+     - 整組內容在「6行文案的範圍」框內上下置中，且上下至少各留24px
+     - 樣式3左邊色塊寬度 = max(265px, 文字寬+左右20px)，中文字5字內都吃265px，
+       英數字較長時自動加寬
+     - 超過安全寬度(MAX_ROW_W)的行，畫布上直接不顯示該行內容(留白)，
+       同時回報 overflow 狀態給 editor，由編輯欄那邊顯示警告（不擋輸入）
+   ══════════════════════════════════════════════════════════════════ */
+
+var W = 1080, H = 1920;
+
+var cv  = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+cv.style.width = W+'px'; cv.style.height = H+'px';
+
+/* ── 版型1~4 對應的6格樣式序列（跟 excel「版型/第一行~第六行」一致）── */
+var CARD_LAYOUTS = {
+  1: [1,2,1,2,1,2],
+  2: [1,1,3,3,3,5],
+  3: [1,4,4,1,4,4],
+  4: [3,3,3,3,3,5],
+};
+
+var D = {
+  bg: null,
+  cardTitle: '',
+  layoutType: 1,
+  rows: [], // [{style,a,b}, ...] 由 editor 依 layoutType 產生，這裡只負責畫
+};
+
+/* ── 版面規格 ── */
+var BOX = { x:122, y:812, w:841, h:499 }; // 6行文案的範圍（黃底範圍）
+var BOX_CX = BOX.x + BOX.w/2;
+var BOX_PAD_V = 24;
+var INNER_TOP = BOX.y + BOX_PAD_V;
+var INNER_BOTTOM = BOX.y + BOX.h - BOX_PAD_V;
+var MAX_ROW_W = BOX.w; // 單行(樣式1/2/4/5，置中對齊)安全寬度上限
+var STYLE3_LEFT_X = BOX_CX - 754/2; // 樣式3色塊左邊固定位置，對齊樣式1色塊左邊
+var STYLE3_MAX_W = (BOX.x + BOX.w) - STYLE3_LEFT_X; // 樣式3靠左對齊後，右邊只到BOX右緣，可用寬度比MAX_ROW_W窄（不再是對稱置中）
+
+var TITLE_Y = 758;
+
+var PILL_FONT=45, BIG_FONT=50, SMALL_FONT=26;
+var PILL_H=64, PILL_PAD_H=20, STYLE4_GAP=15;
+var ROW_GAP=20, TIGHT_GAP_BEFORE_5=16; // 小字（樣式5）前面的間距，比一般行距緊，但2026-07-22從10px加大到16px，原本太貼近上一行
+var GROUP_GAP=22; // 樣式3/4 左右兩塊中間距（樣式3用，2026-07-22從24px拉近到22px），樣式4另外用 STYLE4_GAP
+
+var COLOR_PILL_BG = 'rgba(238,78,45,1)';
+var COLOR_PILL_TEXT = 'rgb(255,244,200)';
+var COLOR_BIG_TEXT = 'rgb(238,77,45)';
+var COLOR_SMALL_TEXT = 'rgb(198,141,73)';
+var COLOR_TITLE = 'rgb(210,29,29)';
+
+function textW(text, f){ ctx.font = f; return ctx.measureText(text||'').width; }
+
+/* 判斷欄位是否真的有填內容(去空白後非空字串)——樣式4沒填小字時，
+   置中/寬度計算都不該把小字那份間距算進去 */
+function hasText(s){ return !!(s && String(s).trim()); }
+
+/* 空行判斷：a、b（沒有b欄的樣式b本來就是空字串）都沒填才算空——
+   工單常見「第三行～第六行」沒填的情況，這種行要整格從畫面上消失，
+   不佔高度也不佔間距，下面（或原本更後面）的行自動往上補位 */
+function isRowBlank(row){
+  if(!row) return true;
+  var a = (row.a||'').trim();
+  var b = (row.b||'').trim();
+  return !a && !b;
+}
+
+function rowVisualH(row){
+  if(!row) return 0;
+  if(row.style===1 || row.style===3) return PILL_H;
+  if(row.style===2) return textMetricsH(row.a||'', font(BIG_FONT,500));
+  if(row.style===5) return textMetricsH(row.a||'', font(SMALL_FONT,500));
+  if(row.style===4) return hasText(row.b) ? Math.max(textMetricsH(row.a||'',font(BIG_FONT,500)), textMetricsH(row.b||'',font(SMALL_FONT,500))) : textMetricsH(row.a||'',font(BIG_FONT,500));
+  return 0;
+}
+/* 用 actualBoundingBox 量出文字實際視覺高度（比 fontBoundingBox 準，貼近 PIL 那版測試結果） */
+function textMetricsH(text, f){
+  ctx.font = f;
+  var m = ctx.measureText(text || '　');
+  if(m.actualBoundingBoxAscent!==undefined) return m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+  return parseInt(f,10) * 0.9;
+}
+
+function rowFullWidth(row){
+  if(!row) return 0;
+  if(row.style===1) return BOX.w > 754 ? 754 : BOX.w; // 樣式1固定754寬色塊本身
+  if(row.style===2) return textW(row.a||'', font(BIG_FONT,500));
+  if(row.style===5) return textW(row.a||'', font(SMALL_FONT,500));
+  if(row.style===3){
+    var pw = textW(row.a||'',font(PILL_FONT,500)) + PILL_PAD_H*2; // 純粹跟文字寬度走，不再有265px下限
+    var tw = textW(row.b||'', font(BIG_FONT,500));
+    return pw + GROUP_GAP + tw;
+  }
+  if(row.style===4){
+    var w1 = textW(row.a||'', font(BIG_FONT,500));
+    if(!hasText(row.b)) return w1;
+    var w2 = textW(row.b||'', font(SMALL_FONT,500));
+    return w1 + STYLE4_GAP + w2;
+  }
+  return 0;
+}
+
+function gapBefore(rows, i){
+  if(i===0) return 0;
+  return (rows[i] && rows[i].style===5) ? TIGHT_GAP_BEFORE_5 : ROW_GAP;
+}
+
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  if(D.bg){ ctx.drawImage(D.bg,0,0,W,H); }
+  else {
+    var g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#F2622B'); g.addColorStop(1,'#8C2A12');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  }
+
+  if(D.cardTitle){
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font = font(45,500);
+    ctx.fillStyle = COLOR_TITLE;
+    ctx.fillText(D.cardTitle, 540, TITLE_Y);
+  }
+
+  var rows = D.rows || [];
+  // 先把空行（a、b都沒填）濾掉，只留有內容的行參與排版——
+  // idxMap[k] 記住第k個「有內容的行」原本是第幾格，overflow回報時要對回原本索引，
+  // 不然編輯欄那邊的警告會貼錯欄位
+  var visibleRows = [];
+  var idxMap = [];
+  rows.forEach(function(r, idx){
+    if(!isRowBlank(r)){ visibleRows.push(r); idxMap.push(idx); }
+  });
+
+  var heights = visibleRows.map(rowVisualH);
+  var totalH = 0;
+  for(var i=0;i<visibleRows.length;i++) totalH += heights[i] + gapBefore(visibleRows,i);
+  var availH = INNER_BOTTOM - INNER_TOP;
+  var y = INNER_TOP + Math.max(0, (availH-totalH)/2);
+
+  var overflow = rows.map(function(){ return false; }); // 空行永遠不算overflow
+  for(var ri=0; ri<visibleRows.length; ri++){
+    y += gapBefore(visibleRows,ri);
+    var row = visibleRows[ri];
+    var h = heights[ri];
+    var cy = y + h/2;
+    var isOverflow = rowFullWidth(row) > (row.style===3 ? STYLE3_MAX_W : MAX_ROW_W);
+    overflow[idxMap[ri]] = isOverflow;
+
+    if(!isOverflow) drawRow(row, cy, h);
+
+    y += h;
+  }
+  ctx.textBaseline = 'alphabetic';
+  reportOverflow(overflow);
+}
+
+function drawRow(row, cy, h){
+  if(!row) return;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  if(row.style===1){
+    ctx.fillStyle = COLOR_PILL_BG;
+    roundRect(BOX_CX-754/2, cy-h/2, 754, h, 10);
+    ctx.fill();
+    ctx.font = font(PILL_FONT,500);
+    ctx.fillStyle = COLOR_PILL_TEXT;
+    ctx.fillText(row.a||'', BOX_CX, cy);
+
+  } else if(row.style===2){
+    ctx.font = font(BIG_FONT,500);
+    ctx.fillStyle = COLOR_BIG_TEXT;
+    ctx.fillText(row.a||'', BOX_CX, cy);
+
+  } else if(row.style===5){
+    ctx.font = font(SMALL_FONT,500);
+    ctx.fillStyle = COLOR_SMALL_TEXT;
+    ctx.fillText(row.a||'', BOX_CX, cy);
+
+  } else if(row.style===3){
+    var pw = textW(row.a||'',font(PILL_FONT,500)) + PILL_PAD_H*2; // 純粹跟文字寬度走，不再有265px下限
+    var gx = STYLE3_LEFT_X; // 靠左對齊，色塊左邊固定對齊樣式1色塊左邊，不再依整組寬度置中
+    ctx.fillStyle = COLOR_PILL_BG;
+    roundRect(gx, cy-h/2, pw, h, 10);
+    ctx.fill();
+    ctx.font = font(PILL_FONT,500);
+    ctx.fillStyle = COLOR_PILL_TEXT;
+    ctx.fillText(row.a||'', gx+pw/2, cy);
+    ctx.textAlign='left';
+    ctx.font = font(BIG_FONT,500);
+    ctx.fillStyle = COLOR_BIG_TEXT;
+    ctx.fillText(row.b||'', gx+pw+GROUP_GAP, cy);
+    ctx.textAlign='center';
+
+  } else if(row.style===4){
+    var w1 = textW(row.a||'', font(BIG_FONT,500));
+    var showB = hasText(row.b);
+    var w2 = showB ? textW(row.b||'', font(SMALL_FONT,500)) : 0;
+    var groupW2 = showB ? (w1+STYLE4_GAP+w2) : w1; // 沒填小字時，置中只算大字寬度，不把小字的間距也算進去
+    var gx2 = BOX_CX - groupW2/2;
+    var bottomY = cy + h/2; // 底部對齊
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    ctx.font = font(BIG_FONT,500);
+    ctx.fillStyle = COLOR_BIG_TEXT;
+    ctx.fillText(row.a||'', gx2, bottomY);
+    if(showB){
+      ctx.font = font(SMALL_FONT,500);
+      ctx.fillStyle = COLOR_SMALL_TEXT;
+      ctx.fillText(row.b||'', gx2+w1+STYLE4_GAP, bottomY);
+    }
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+  }
+}
+
+/* 只有 overflow 狀態改變時才回報，避免每次 render 都狂送 postMessage */
+var _lastOverflow = null;
+function reportOverflow(overflow){
+  var key = overflow.join(',');
+  if(key === _lastOverflow) return;
+  _lastOverflow = key;
+  if(window.parent!==window){
+    window.parent.postMessage({type:'BN_CARD_OVERFLOW', overflow:overflow}, '*');
+  }
+}
+
+/* ── postMessage ── */
+window.addEventListener('message', function(e){
+  var msg = e.data;
+  if(!msg || msg.type !== 'BN_UPDATE') return;
+  var p = msg.payload;
+
+  if(p.cardTitle!==undefined) D.cardTitle = p.cardTitle;
+  if(p.layoutType!==undefined) D.layoutType = p.layoutType;
+  if(p.rows!==undefined) D.rows = p.rows;
+
+  if(p.bgBase!==undefined){
+    /* 這個工單只有一種設計，背景圖固定一張 06_card.jpg，不依版型(layoutType)切換，
+       找不到檔案時 loadBg() 會自動退回暖色系漸層佔位，不會壞掉 */
+    var bgUrl = p.bgBase ? p.bgBase + '06_card.jpg' : null;
+    loadBg(bgUrl);
+  } else if(p.bgUrl!==undefined){
+    loadBg(p.bgUrl||null);
+  }
+
+  render();
+});
+
+/* ── Export ── */
+function exportBlob(fmt, q, cb){
+  var out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+}
+
+window.BNExport = {
+  getBlob:function(fmt,q,cb){ render(); exportBlob(fmt,q,cb); },
+  getDataURL:function(fmt,q){ render(); return cv.toDataURL('image/'+(fmt||'jpeg'), q||0.95); },
+  spec:{id:'06_card', name:'案型字卡', width:W, height:H, hasCTAVariant:false}
+};
+
+/* ── Init ── */
+Promise.all([
+  document.fonts.load('700 16px ShopeeNoto'),
+  document.fonts.load('500 16px ShopeeNoto'),
+  document.fonts.load('400 16px ShopeeNoto'),
+]).catch(function(){}).then(function(){
+  render();
+  if(window.parent!==window){
+    window.parent.postMessage({type:'BN_READY',id:'06_card'},'*');
+  }
+});
+</script>
+</body>
+</html>
