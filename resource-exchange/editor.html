@@ -525,14 +525,13 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v3</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -596,12 +595,6 @@ input[type="file"] { display:none; }
             <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;">
               <img id="logo2-thumb" src="" alt="logo2" style="max-height:32px;max-width:90px;object-fit:contain;border-radius:3px;flex-shrink:0;">
               <div style="flex:1;display:flex;gap:4px;justify-content:flex-end;">
-                <button onclick="editorLogo2Crop()"
-                  style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap;"
-                  onmouseenter="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'"
-                  onmouseleave="this.style.color='var(--text-muted)';this.style.borderColor='var(--border2)'">
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>裁切
-                </button>
                 <button onclick="document.getElementById('logo2Up').click()"
                   style="height:24px;padding:0 9px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;"
                   onmouseenter="this.style.color='var(--text)'"
@@ -681,7 +674,7 @@ input[type="file"] { display:none; }
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
       <div id="import-excel-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor=''">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''">
         <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
         <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:3px;">點擊上傳 Excel 工單</div>
         <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
@@ -689,7 +682,7 @@ input[type="file"] { display:none; }
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="handleImportExcel(event)">
       <div id="import-logo-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importLogoFolder').click()"
-        onmouseenter="this.style.borderColor='#3d9970'" onmouseleave="this.style.borderColor=''">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><path d="M1 4h14v10H1z"/><path d="M1 4l2-2h4l2 2"/></svg>
         <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳 Logo 素材資料夾（可選）</div>
         <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動對應工單 Logo</div>
@@ -1745,8 +1738,8 @@ function handleImportLogoFolder(e){
       if(++done>=imgs.length){
         _importPending.logoCount=imgs.length;
         var z=document.getElementById('import-logo-zone'),l=document.getElementById('import-logo-label');
-        if(z){z.style.borderColor='#3d9970';z.style.background='rgba(61,153,112,.06)';}
-        if(l){l.textContent='✓ 已載入 '+imgs.length+' 個 Logo';l.style.color='#3d9970';}
+        if(z){z.dataset.success='1';z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+        if(l){l.textContent='✓ 已載入 '+imgs.length+' 個 Logo';l.style.color='var(--accent)';}
         _updateImportStatus();
       }
     };r.readAsDataURL(f);
@@ -1817,7 +1810,7 @@ function doImport(){
 }
 function openImportModal(){
   _importPending={excelFile:null,logoMap:{},logoCount:0};
-  ['import-excel-zone','import-logo-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.style.borderColor='';el.style.background='';}});
+  ['import-excel-zone','import-logo-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.dataset.success='';el.style.borderStyle='dashed';el.style.borderColor='';el.style.background='';}});
   var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊上傳 Excel 工單';el.style.color='';}
   var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='上傳 Logo 素材資料夾（可選）';ll.style.color='';}
   var st=document.getElementById('import-status');if(st)st.style.display='none';
@@ -1827,7 +1820,7 @@ function handleImportExcel(e){
   var file=e.target.files[0];if(!file)return;
   _importPending.excelFile=file;
   var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
-  if(z){z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+  if(z){z.dataset.success='1';z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
   if(l){l.textContent='✓ '+file.name;l.style.color='var(--accent)';}
   _updateImportStatus();e.target.value='';
 }
@@ -2239,28 +2232,41 @@ function downloadAll(){
         /* 所有頁面截圖完畢，還原當前分頁，再打包 */
         window._downloadMode = false;
         applyTabData(TABS[ACTIVE_TAB], true);
-        pm.update(95, '壓縮 ZIP 中…');
+        pm.update(92, '整理暫存檔…');
 
-        var zip = new JSZip();
-        collectedPages.forEach(function(page){
-          var folder = zip.folder(page.folderName);
-          page.files.forEach(function(f){ folder.file(f.name, f.blob); });
-        });
-        zip.generateAsync({type:'blob'}).then(function(blob){
-          var a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          /* 外層 ZIP 命名：起始日-結束日_KOL代播，例如 0506-0610_KOL代播 */
-          var dates = TABS.map(function(t){ return (t.data&&t.data.date)||''; }).filter(Boolean);
-          function fmtDate(s){ return s.replace(/\//g,'').replace(/^(\d)(\d\d)$/,'0$1$2').replace(/^(\d)(\d)$/,'0$10$2'); }
-          var dateRange = dates.length
-            ? (dates.length > 1 ? fmtDate(dates[0])+'-'+fmtDate(dates[dates.length-1]) : fmtDate(dates[0]))
-            : (new Date().getMonth()+1)+''+(new Date().getDate());
-          a.download = dateRange+'_資源交換專場.zip';
-          a.click();
-          setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
-          pm.done('完成！共 '+total+' 個分頁');
-          pm.hide();
-        });
+        /* 外層 ZIP 命名：起始日-結束日_資源交換專場，例如 0506-0610_資源交換專場 */
+        var dates = TABS.map(function(t){ return (t.data&&t.data.date)||''; }).filter(Boolean);
+        function fmtDate(s){ return s.replace(/\//g,'').replace(/^(\d)(\d\d)$/,'0$1$2').replace(/^(\d)(\d)$/,'0$10$2'); }
+        var dateRange = dates.length
+          ? (dates.length > 1 ? fmtDate(dates[0])+'-'+fmtDate(dates[dates.length-1]) : fmtDate(dates[0]))
+          : (new Date().getMonth()+1)+''+(new Date().getDate());
+        var zipName = dateRange+'_資源交換專場';
+
+        /* 等 applyTabData 的還原（postMessage 廣播）真的跑完，再存暫存檔，
+           避免存到還原到一半的過渡狀態；暫存檔跟各分頁製作物一起塞進同一個
+           zip 再觸發一次下載，不額外另開一個下載，避免瀏覽器同時彈出兩個
+           下載造成互相衝突或其中一個被擋掉。 */
+        setTimeout(function(){
+          saveAllTabsState(function(snapshot){
+            var zip = new JSZip();
+            collectedPages.forEach(function(page){
+              var folder = zip.folder(page.folderName);
+              page.files.forEach(function(f){ folder.file(f.name, f.blob); });
+            });
+            zip.file(zipName+'_暫存.json', JSON.stringify(snapshot, null, 2));
+
+            pm.update(95, '壓縮 ZIP 中…');
+            zip.generateAsync({type:'blob'}).then(function(blob){
+              var a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = zipName+'.zip';
+              a.click();
+              setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
+              pm.done('完成！共 '+total+' 個分頁（含暫存檔）');
+              pm.hide();
+            });
+          });
+        }, 500);
         return;
       }
 

@@ -458,7 +458,7 @@ window.addEventListener('message',function(e){
 
   /* 背景：納入 pending 計數，避免非同步 render 蓋掉分隔線 */
   if(p.bgBase!==undefined){
-    var bgUrl = p.bgBase ? p.bgBase+'06_opening.JPG' : null;
+    var bgUrl = p.bgBase ? p.bgBase+'06_opening.jpg' : null;
     if(bgUrl && bgUrl!==D.bgUrl){
       pending++;
       var _bi=new Image(); _bi.crossOrigin='anonymous';
@@ -521,7 +521,7 @@ Promise.all([
   document.fonts.load('400 16px ShopeeNoto'),
 ]).catch(function(){}).then(function(){
   loadDefaultLogos(function(){
-    loadBg('../backgrounds/06_opening.JPG');
+    loadBg('../backgrounds/06_opening.jpg');
     render();
     if(window.parent!==window){
       window.parent.postMessage({type:'BN_READY',id:'06_opening'},'*');
