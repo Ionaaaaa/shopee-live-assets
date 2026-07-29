@@ -1316,8 +1316,12 @@ function _downloadSingle(id){
   var spec = api.spec || {};
   var name = spec.name || id;
 
+  pm.show('下載中');
+  pm.update(20, name);
+
   if(api.getBothBlobs && spec.hasCTAVariant){
     api.getBothBlobs(fmt, fmt==='png'?1:0.95, function(blobWith, blobWithout){
+      pm.update(55, '壓縮中…');
       compressToLimit(blobWith, id, fmt, function(bWith2){
         compressToLimit(blobWithout, id, fmt, function(bWithout2){
           function dl(blob, suffix){
@@ -1328,18 +1332,21 @@ function _downloadSingle(id){
           }
           dl(bWith2, '有CTA');
           setTimeout(function(){ dl(bWithout2, '無CTA'); }, 300);
-          toast('已下載兩張（有CTA + 無CTA）','ok');
+          pm.done('已下載兩張（有CTA + 無CTA）');
+          pm.hide();
         });
       });
     });
   } else {
     api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
+      pm.update(60, '壓縮中…');
       compressToLimit(blob, id, fmt, function(blob2){
         var a=document.createElement('a');
         a.href=URL.createObjectURL(blob2);
         a.download=(datePrefix?datePrefix+'_':'')+name+'.'+ext;
         a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-        toast('已下載：'+name,'ok');
+        pm.done('已下載：'+name);
+        pm.hide();
       });
     });
   }
@@ -1356,22 +1363,25 @@ function _downloadPage(){
   var collected = [];
   var zip = new JSZip();
 
-  toast('整頁打包中...','ok',3000);
+  pm.show('整頁下載中');
 
   function collect(i){
     if(i >= layouts.length){
       /* 全部收集完，打包下載 */
+      pm.update(95, '打包 zip…');
       zip.generateAsync({type:'blob'}).then(function(blob){
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = datePrefix+'.zip';
         a.click();
         setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-        toast('整頁下載完成：'+datePrefix+'.zip','ok',3000);
+        pm.done('已下載：'+datePrefix+'.zip');
+        pm.hide();
       });
       return;
     }
     var layout = layouts[i];
+    pm.update(Math.round(i/total*90), layout.name || layout.id);
     var ifr = iframes[layout.id];
     if(!ifr||!ifr.contentWindow){ collect(i+1); return; }
     var api = ifr.contentWindow.BNExport;
@@ -1455,10 +1465,14 @@ function _downloadAll(){
   var endDate = allDates[allDates.length-1] || '';
   var zipName = (startDate && endDate && startDate!==endDate ? startDate+'-'+endDate : startDate) + '_明星直播間';
   var zip = new JSZip();
-  toast('整包打包中，請稍候...','ok',8000);
+  var totalUnits = Math.max(1, TABS.length * LAYOUTS.length);
+  var doneUnits = 0;
+
+  pm.show('整包下載中');
 
   function processTab(ti){
     if(ti >= TABS.length){
+      pm.update(95, '打包 zip…');
       zip.generateAsync({type:'blob'}).then(function(blob){
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1466,7 +1480,8 @@ function _downloadAll(){
         a.click();
         setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
         applyTabData(TABS[ACTIVE_TAB], true);
-        toast('整包下載完成！','ok',3000);
+        pm.done('已下載：'+zipName+'.zip');
+        pm.hide();
       });
       return;
     }
@@ -1487,10 +1502,11 @@ function _downloadAll(){
       function collectLayout(i){
         if(i >= layouts.length){ processTab(ti+1); return; }
         var layout = layouts[i];
+        pm.update(Math.round(doneUnits/totalUnits*90), (dateFolder?dateFolder+' · ':'')+(layout.name||layout.id));
         var ifr = iframes[layout.id];
-        if(!ifr||!ifr.contentWindow){ collectLayout(i+1); return; }
+        if(!ifr||!ifr.contentWindow){ doneUnits++; collectLayout(i+1); return; }
         var api = ifr.contentWindow.BNExport;
-        if(!api){ collectLayout(i+1); return; }
+        if(!api){ doneUnits++; collectLayout(i+1); return; }
         var fmt = getFmt(layout.id), ext = fmt==='png'?'png':'jpg';
         var name = (api.spec && api.spec.name) || layout.id;
         if(api.getBothBlobs && api.spec && api.spec.hasCTAVariant){
@@ -1499,6 +1515,7 @@ function _downloadAll(){
               compressToLimit(bWithout, layout.id, fmt, function(bWithout2){
                 folder.file(name+'_有CTA.'+ext, bWith2);
                 folder.file(name+'_無CTA.'+ext, bWithout2);
+                doneUnits++;
                 collectLayout(i+1);
               });
             });
@@ -1507,6 +1524,7 @@ function _downloadAll(){
           api.getBlob(fmt, fmt==='png'?1:0.95, function(blob){
             compressToLimit(blob, layout.id, fmt, function(blob2){
               folder.file(name+'.'+ext, blob2);
+              doneUnits++;
               collectLayout(i+1);
             });
           });
