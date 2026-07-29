@@ -1472,36 +1472,35 @@ function _downloadAll(){
 
   function processTab(ti){
     if(ti >= TABS.length){
-      pm.update(95, '打包 zip…');
-      zip.generateAsync({type:'blob'}).then(function(blob){
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = zipName+'.zip';
-        a.click();
-        setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+      /* 全部分頁的截圖都收集完成、不會再有任何畫面擷取動作了，這時候才開始
+         「復原畫面 → 存暫存檔 → 打包zip」，順序刻意分開：先把畫面復原回
+         使用者原本停留的那個分頁，等復原動作真的套用完，才存暫存檔，
+         這樣存到的才是「按下整包下載當下」真正的畫面內容，不是批次跑
+         分頁過程中殘留的中間狀態。暫存檔跟圖片一起打包進同一個 zip，
+         只有等暫存檔也準備好了才會呼叫 generateAsync／觸發下載，
+         不會有兩個下載互相搶時間的問題。 */
+      applyTabData(TABS[ACTIVE_TAB], true);
+      pm.update(92, '整理暫存檔…');
+      setTimeout(function(){
+        saveCurrentTabState(function(){
+          var state = collectState();
+          state.tabs = TABS;
+          state.activeTab = ACTIVE_TAB;
+          var stateBlob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+          zip.file(zipName+'_暫存.json', stateBlob);
 
-        /* 圖片 zip 觸發下載後，先把畫面復原回原本停留的分頁，
-           等復原動作真的套用完（給一點緩衝時間），才去存暫存檔——
-           避免存到「整包下載跑批次時」殘留的中間狀態，也避免暫存檔的產生
-           跟上面圖片 zip 的下載動作互相搶時間、互相影響。 */
-        applyTabData(TABS[ACTIVE_TAB], true);
-        pm.update(97, '準備暫存檔…');
-        setTimeout(function(){
-          saveCurrentTabState(function(){
-            var state = collectState();
-            state.tabs = TABS;
-            state.activeTab = ACTIVE_TAB;
-            var stateBlob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
-            var a2 = document.createElement('a');
-            a2.href = URL.createObjectURL(stateBlob);
-            a2.download = zipName+'_暫存.json';
-            a2.click();
-            setTimeout(function(){URL.revokeObjectURL(a2.href);},1000);
-            pm.done('已下載：'+zipName+'.zip ＋ 暫存檔');
+          pm.update(95, '打包 zip…');
+          zip.generateAsync({type:'blob'}).then(function(blob){
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = zipName+'.zip';
+            a.click();
+            setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+            pm.done('已下載：'+zipName+'.zip（含暫存檔）');
             pm.hide();
           });
-        }, 500);
-      });
+        });
+      }, 500);
       return;
     }
     var tab = TABS[ti];
