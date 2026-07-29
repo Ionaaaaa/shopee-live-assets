@@ -616,7 +616,7 @@ if(!msg||msg.type!=='BN_UPDATE') return;
   if(p.showCTA!==undefined) D.showCTA=p.showCTA;
   /* bgBase 是資料夾路徑，自己補上版位檔名 */
   if(p.bgBase!==undefined){
-    var bgUrl = p.bgBase ? p.bgBase + '04_ig.JPG' : null;
+    var bgUrl = p.bgBase ? p.bgBase + '04_ig.jpg' : null;
     loadBg(bgUrl);
   } else if(p.bgUrl!==undefined){
     loadBg(p.bgUrl||null); /* 向下相容 */
