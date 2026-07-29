@@ -592,13 +592,15 @@ input[type="file"] { display:none; }
       </div>
 
       <!-- 右：1200x1200 合成畫布
-           2026-07-29 跟 Iona 確認：canvas 原本只靠 max-width:560px 限制寬度，
-           高度完全沒受視窗高度約束，遇到比較矮的螢幕/視窗，畫布還是照樣長到560px高，
-           結果被 .popup-panel 的 overflow:hidden 從下面裁掉（含左欄的匯出按鈕）。
-           這裡補上 max-height（用vh，隨視窗高度自動縮放，等於響應式），
-           跟 max-width 兩個一起夾，畫布固定1:1，取兩者較小值 -->
+           2026-07-29 跟 Iona 確認：canvas 需要同時被「容器寬度／固定560px上限／視窗高度56vh」
+           三個條件夾住，但還要維持 aspect-ratio:1/1 正方形。
+           一開始寫成 width:100%;max-width:560px;max-height:56vh 是錯的：
+           width 已經被定值決定了，max-height 又獨立去夾高度，兩條路各自算出不同數字，
+           畫布就被拉成長方形（變形的原因）。
+           正確寫法是只給「寬度」一個算式，用 min() 把三個限制都收進同一個值裡，
+           高度完全不另外設定、單純靠 aspect-ratio 跟著寬度走，永遠維持正方形 -->
       <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:10px;">
-        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:560px;max-height:56vh;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
+        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:min(100%,560px,56vh);aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 
     </div>
