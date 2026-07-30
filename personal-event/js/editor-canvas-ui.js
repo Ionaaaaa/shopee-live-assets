@@ -12,7 +12,7 @@ function buildCanvasArea(){
     block.className = 'canvas-block';
     block.id = 'canvas-block-'+layout.id;
 
-    var areaW = area.getBoundingClientRect().width || (window.innerWidth - 381);
+    var areaW = area.getBoundingClientRect().width || (window.innerWidth - 622);
     var padding = 72; // 左右 padding 各 36px
     var scaleByW = Math.min(1, (areaW - padding) / layout.w);
 

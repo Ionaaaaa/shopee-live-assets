@@ -99,10 +99,10 @@ window.ShadowPlugin = (function () {
     c.width = w; c.height = h;
     var cctx = c.getContext('2d');
     cctx.drawImage(img, 0, 0, w, h);
-    var top = 0, bottom = 0;
+    var top = 0, bottom = 0, left = 0, right = 0;
     try {
       var d = cctx.getImageData(0, 0, w, h).data;
-      var minY = h, maxY = -1;
+      var minY = h, maxY = -1, minX = w, maxX = -1;
       var alphaThresh = 10;
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
@@ -110,15 +110,19 @@ window.ShadowPlugin = (function () {
           if (a > alphaThresh) {
             if (y < minY) minY = y;
             if (y > maxY) maxY = y;
-            break;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
           }
         }
       }
-      if (maxY >= 0) { top = minY / h; bottom = (h - 1 - maxY) / h; }
+      if (maxY >= 0) {
+        top = minY / h; bottom = (h - 1 - maxY) / h;
+        left = minX / w; right = (w - 1 - maxX) / w;
+      }
     } catch (e) {
-      console.warn('ShadowPlugin: 無法偵測透明留白，影子支點改用圖片原始底邊', e);
+      console.warn('ShadowPlugin: 無法偵測透明留白，影子支點改用圖片原始邊界', e);
     }
-    return { top: top, bottom: bottom };
+    return { top: top, bottom: bottom, left: left, right: right };
   }
 
   // type: 'product'（貼地陰影，預設） 或 'person'（光暈陰影，可超出畫布下緣）
@@ -178,7 +182,8 @@ window.ShadowPlugin = (function () {
     var pw = state.w, ph = state.h;
     var cx = state.x;
     var squash = FIXED.squash;
-    var trimBottomPad = p.trim ? p.trim.bottom * ph : 0;
+    var trim = p.trim || { top: 0, bottom: 0, left: 0, right: 0 };
+    var trimBottomPad = trim.bottom * ph;
     var py = state.y + trimBottomPad; // 貼照片本體用：1:1 沒有形變，留白要整段補回去才會對齊
     /* 影子錨點跟貼照片的錨點不能共用同一個 py──
        貼地陰影會整張被 squash（0.32）壓扁，PNG 下緣的透明留白也會被同比例壓扁，
@@ -187,59 +192,91 @@ window.ShadowPlugin = (function () {
        壓扁後影子的可視範圍反而懸空浮在商品下方（PNG 留白比例小的圖幾乎看不出來，比例大的就會明顯脫開）。 */
     var shadowGroundY = state.y + trimBottomPad * squash;
 
-    /* 旋轉樞紐：整個item（陰影+照片）的視覺中心點，跟 shadow-layout-receiver.js
-       的軸對齊選取框中心一致（旋轉解耦：拖曳/縮放判定用的是不旋轉的框，
-       這裡只是「畫出來的時候」繞著同一個中心轉過去，兩邊的中心點定義要一致，
-       不然畫面上看到的旋轉中心會跟選取框/旋轉把手的視覺位置對不上） */
+    /* 水平置中修正（pet-frenzy 2026-07-28）：如果商品圖左右留白不對稱（商品整個
+       偏在圖片一邊），陰影的傾斜支點要抓商品視覺上的真正中心，不是整張原圖的中心，
+       不然斜切之後看起來像整個偏移。只套用在畫影子用的 shadowCx，商品照片本身的
+       位置（cx）完全不動。 */
+    var shadowCx = cx + (trim.left - trim.right) * pw / 2;
+
+    /* 旋轉樞紐：跟 shadow-layout-receiver.js 的軸對齊選取框中心一致（旋轉解耦：
+       拖曳/縮放判定用的是不旋轉的框）。旋轉解耦（pet-frenzy 2026-07-28）：
+       商品旋轉時，兩層陰影都畫在未旋轉的畫布座標上不會跟著轉，只有商品照片本身
+       會被 withRotation 包住旋轉──陰影是貼地／貼身形的，不會因為商品在原地轉了
+       幾度就整個跟著偏移方向。 */
     var pivotX = cx, pivotY = state.y - ph / 2;
     var rot = state.rot || 0;
 
-    withRotation(ctx, pivotX, pivotY, rot, function () {
-      var angle = opts.angle * Math.PI / 180;
-      var soft = FIXED.soft;
-      var fadeMul = FIXED.fade / 100;
-      var occludeStrength = FIXED.occlude / 100;
-      var shear = Math.tan(angle * 0.55);
-      var maxSpread = soft * 1.8;
+    var angle = opts.angle * Math.PI / 180;
+    var soft = FIXED.soft;
+    var fadeMul = FIXED.fade / 100;
+    var occludeStrength = FIXED.occlude / 100;
+    var shear = Math.tan(angle * 0.55);
+    var maxSpread = soft * 1.8;
 
-      var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
-      var tempW = Math.ceil(halfW * 2);
-      var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
-      var anchorX = halfW;
-      var anchorY = Math.ceil(tempH * 0.5);
+    var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
+    var tempW = Math.ceil(halfW * 2);
+    var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
+    var anchorX = halfW;
+    var anchorY = Math.ceil(tempH * 0.5);
 
-      var tmp = document.createElement('canvas');
-      tmp.width = tempW; tmp.height = tempH;
-      var tctx = tmp.getContext('2d');
+    var tmp = document.createElement('canvas');
+    tmp.width = tempW; tmp.height = tempH;
+    var tctx = tmp.getContext('2d');
 
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
 
-      if (occludeStrength > 0 && occluderMask) {
-        tctx.save();
-        tctx.globalCompositeOperation = 'destination-out';
-        tctx.globalAlpha = occludeStrength;
-        tctx.drawImage(occluderMask, -(cx - anchorX), -(shadowGroundY - anchorY));
-        tctx.restore();
-      }
+    if (occludeStrength > 0 && occluderMask) {
+      tctx.save();
+      tctx.globalCompositeOperation = 'destination-out';
+      tctx.globalAlpha = occludeStrength;
+      tctx.drawImage(occluderMask, -(shadowCx - anchorX), -(shadowGroundY - anchorY));
+      tctx.restore();
+    }
 
-      var tipX = -shear * ph * fadeMul;
-      var tipY = -squash * ph * fadeMul - soft * 0.6;
-      tctx.globalCompositeOperation = 'destination-in';
-      var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      tctx.fillStyle = grad;
-      tctx.fillRect(0, 0, tempW, tempH);
-      tctx.globalCompositeOperation = 'source-over';
+    var tipX = -shear * ph * fadeMul;
+    var tipY = -squash * ph * fadeMul - soft * 0.6;
+    tctx.globalCompositeOperation = 'destination-in';
+    var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    tctx.fillStyle = grad;
+    tctx.fillRect(0, 0, tempW, tempH);
+    tctx.globalCompositeOperation = 'source-over';
 
+    /* 主陰影底部裁切（pet-frenzy 2026-07-28）：柔化用的霧化抖動（stampLayer 的
+       spread）會讓陰影邊緣稍微超出接地線一點，合成到畫布前先把接地線
+       （本地座標 anchorY）以下超過 clipMarginBelow=5px 的部分切掉，不影響左右
+       延伸範圍。 */
+    var clipMarginBelow = 5;
+    tctx.save();
+    tctx.globalCompositeOperation = 'destination-out';
+    tctx.fillRect(0, anchorY + clipMarginBelow, tempW, Math.max(0, tempH - (anchorY + clipMarginBelow)));
+    tctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(tmp, shadowCx - anchorX, shadowGroundY - anchorY);
+    ctx.restore();
+
+    /* 接地補強陰影（pet-frenzy 2026-07-28 新增）：主陰影是繞單一支點壓扁＋斜切，
+       如果商品實際底部不是一直線（例如立體包裝盒有透視），斜切後某一角可能會跟
+       主陰影對不上、看起來懸空。這層不斜切，直接貼著商品去背輪廓（p.tinted）
+       往下延伸 CONTACT_GROW_PX 幾px，疊在商品照片下方，商品照片畫在最上層蓋掉
+       多餘部分。這層是貼著商品「未旋轉」輪廓算的，商品一旦旋轉（state.rot!==0）
+       角度就對不上了，直接跳過不畫，只保留主斜切陰影；旋轉角度歸零時自動恢復顯示。 */
+    if (!rot) {
+      var CONTACT_GROW_PX = 3;
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
-      ctx.drawImage(tmp, cx - anchorX, shadowGroundY - anchorY);
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(p.tinted, cx - pw / 2, py - ph, pw, ph + CONTACT_GROW_PX);
       ctx.restore();
+    }
 
+    withRotation(ctx, pivotX, pivotY, rot, function () {
       if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
         ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
       }

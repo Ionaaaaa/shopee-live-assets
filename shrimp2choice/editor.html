@@ -190,11 +190,11 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 input[type="file"] { display:none; }
 
 /* Layout */
-.layout { display:grid;grid-template-columns:220px 1fr 200px;height:calc(100vh - 44px);margin-top:44px; }
+.layout { display:grid;grid-template-columns:280px 1fr 240px;height:calc(100vh - 44px);margin-top:44px; }
 
 /* Sidebar */
-.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;zoom:0.75; }
-.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;zoom:0.75; }
+.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
+.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
 #sidebar-scroll { flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent; }
 #sidebar-scroll::-webkit-scrollbar { width:4px; }
 #sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border2);border-radius:2px; }
@@ -369,7 +369,6 @@ input[type="file"] { display:none; }
 .popup-overlay {
   position:fixed;inset:0;background:rgba(0,0,0,.7);
   display:none;align-items:center;justify-content:center;z-index:300;
-  zoom:0.75;
 }
 .popup-overlay.open { display:flex; }
 .popup-panel {
@@ -443,14 +442,13 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -744,7 +742,7 @@ input[type="file"] { display:none; }
       </div>
 
       <!-- 右區塊：陰影編輯器面板＋1200商品區畫布，同一排並排 -->
-      <div style="flex:1 1 560px;min-width:420px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
+      <div style="flex:1 1 560px;min-width:420px;display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
         <div style="grid-column:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
           <div id="shadow-editor-mount"></div>
           <div class="lc-field">

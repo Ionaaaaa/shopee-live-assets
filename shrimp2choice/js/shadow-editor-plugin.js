@@ -124,9 +124,10 @@
       '.lc-meta{font-size:12px;color:var(--text);flex:1;min-width:0;}' +
       '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
       '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
-      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
-      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
-      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
+      '.lc-frame-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
+      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;flex-shrink:0;}' +
+      '.lc-frame-row label{white-space:nowrap;flex-shrink:0;}' +
+      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;white-space:nowrap;flex-shrink:0;}' +
       '.lc-frame-row a:hover{text-decoration:underline;}';
     document.head.appendChild(style);
   }
@@ -307,6 +308,44 @@
     });
   }
 
+  /* ── 去背（只開放商品類型，人物走頭部定位邏輯，去背後形狀可能跟頭部偵測對不上）──
+     沿用既有外掛去背編輯器 window.openEraseEditor(imgEl)：建一個離屏的 <img>，
+     攔截它 .src 的寫入（編輯器完成時會把結果寫回 imgEl.src），攔到 data: URL
+     就套回這個 slot，走跟上傳/拍立得一樣的 applySlotDataUrl 管線。 */
+  function openEraseForSlot(slotId){
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl) return;
+    if (typeof window.openEraseEditor !== 'function'){
+      console.warn('shadow-editor-plugin: 找不到 window.openEraseEditor，請確認 editor-plugin.js 已載入');
+      return;
+    }
+    var img = document.createElement('img');
+    img.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(img);
+
+    var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    var origSetter = origDescriptor.set;
+    var cleaned = false;
+    function cleanup(){
+      if (cleaned) return; cleaned = true;
+      delete img.src;
+      if (img.parentNode) img.parentNode.removeChild(img);
+    }
+    Object.defineProperty(img, 'src', {
+      set: function(val){
+        origSetter.call(this, val);
+        if (val && val.indexOf('data:') === 0 && val !== dataUrl){
+          applySlotDataUrl(slotId, val);
+          cleanup();
+        }
+      },
+      get: function(){ return origDescriptor.get.call(this); },
+      configurable: true
+    });
+    img.src = dataUrl;
+    window.openEraseEditor(img);
+  }
+
   function removeSlot(slotId){
     delete state.slots[slotId];
     delete state.polaroid[slotId];
@@ -378,12 +417,19 @@
       meta.className = 'lc-meta';
       meta.innerHTML = def.label + '<span class="lc-tag">' + (def.type==='person' ? '主持人・光暈陰影' : '商品・貼地陰影') + '</span>';
 
-      // 商品類、而且已經有圖：加「拍立得」勾選（人物類先不開放——人物走頭部定位邏輯，
-      // 套框後整張圖的形狀跟頭部偵測會對不上，之後真的有需求再另外處理）
+      // 商品類、而且已經有圖：加「去背」連結＋「拍立得」勾選（人物類先不開放——
+      // 人物走頭部定位邏輯，去背/套框後整張圖的形狀跟頭部偵測會對不上，
+      // 之後真的有需求再另外處理）
       if (def.type === 'product' && state.slots[def.id]){
         var frameRow = document.createElement('div');
         frameRow.className = 'lc-frame-row';
         frameRow.addEventListener('click', function(e){ e.stopPropagation(); }); // 別讓點擊冒泡去觸發 box 的選取/上傳邏輯
+
+        var eraseLink = document.createElement('a');
+        eraseLink.textContent = '去背';
+        eraseLink.style.cursor = 'pointer';
+        eraseLink.addEventListener('click', function(e){ e.stopPropagation(); openEraseForSlot(def.id); });
+        frameRow.appendChild(eraseLink);
 
         var cbId = 'lc-polaroid-' + def.id;
         var cb = document.createElement('input');

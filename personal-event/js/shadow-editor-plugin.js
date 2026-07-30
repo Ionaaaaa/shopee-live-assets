@@ -118,7 +118,7 @@
       '.lc-field label{display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;}' +
       '.lc-field select,.lc-field input[type=file]{width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;}' +
       '.lc-slotbar{display:flex;flex-direction:column;gap:8px;}' +
-      '.lc-slot{position:relative;display:flex;align-items:center;gap:8px;padding:8px 24px 8px 8px;border:2px dashed var(--border2);border-radius:var(--radius);cursor:grab;background:var(--surface);}' +
+      '.lc-slot{position:relative;display:flex;align-items:center;gap:8px;padding:10px 24px 10px 8px;border:2px dashed var(--border2);border-radius:var(--radius);cursor:grab;background:var(--surface);}' +
       '.lc-slot.filled{border-style:solid;}' +
       '.lc-slot.active{border-color:var(--accent);}' +
       '.lc-slot.multi{border-color:#ff9800;}' +
@@ -131,10 +131,11 @@
       '.lc-meta{font-size:12px;color:var(--text);flex:1;min-width:0;}' +
       '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
       '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
-      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
-      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
-      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
-      '.lc-frame-row a:hover{text-decoration:underline;}';
+      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;flex-wrap:nowrap;}' +
+      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;flex-shrink:0;}' +
+      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;white-space:nowrap;flex-shrink:0;}' +
+      '.lc-frame-row a:hover{text-decoration:underline;}' +
+      '.lc-frame-row label{white-space:nowrap;flex-shrink:0;}';
     document.head.appendChild(style);
   }
 

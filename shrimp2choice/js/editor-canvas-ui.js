@@ -361,6 +361,11 @@ window.addEventListener('message', function(e){
       }
     });
   }
+  else if(msg.type === 'BN_OPEN_SHADOW_EDITOR'){
+    /* 版位懸浮「編輯」按鈕：開啟「Logo2＋商品／人物陰影」1200畫布 popup，
+       取代原本的「去背編輯／更換」兩顆按鈕（見 layout-common.js） */
+    if(typeof openLogo2Popup === 'function') openLogo2Popup();
+  }
   else if(msg.type === 'BN_REPLACE_IMG' && msg.key === 'host'){
     /* 取代主持人：直接開啟右側圖庫 popup */
     openPopup('host');

@@ -275,7 +275,16 @@
      每筆多加 sheetName 方便分頁標籤顯示 */
   function parseWorkbook(wb){
     var all = [];
-    wb.SheetNames.forEach(function(sheetName){
+    /* 隱藏工作表（Hidden===1）或極隱藏工作表（Hidden===2）跳過不解析：
+       常見情況是使用者複製上一檔期的分頁當草稿/備份後把它隱藏起來，
+       但只要「資料夾命名」列格式沒清掉，還是會被當成一個廠商解析出來，
+       造成「匯入N包卻多跑出重複的N包」（重複出來的那幾包因為是草稿，
+       商品組合/文案欄位通常沒填齊，只有素材資料夾還在→ 比對出來變成
+       「只有Logo」的空包，這正是這個防呆要擋下的情境）。 */
+    var sheetMeta = (wb.Workbook && wb.Workbook.Sheets) || [];
+    wb.SheetNames.forEach(function(sheetName, si){
+      var meta = sheetMeta[si];
+      if(meta && meta.Hidden) return; // Hidden: 1=隱藏, 2=極隱藏, 0/undefined=可見
       var ws = wb.Sheets[sheetName];
       var rows = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
       var r = parseWorkbookRows(rows);

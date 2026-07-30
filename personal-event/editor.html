@@ -62,11 +62,15 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 input[type="file"] { display:none; }
 
 /* Layout */
-.layout { display:grid;grid-template-columns:165px 1fr 216px;height:calc(100vh - 44px);margin-top:44px; }
+/* 左右兩欄寬度唯一定義處——.sidebar／.right-panel 本身故意不再各自寫 width，
+   全部只看這裡，改版面寬度只需要改這一行，不用兩處分別改（之前吃過虧：
+   .sidebar/.right-panel 各自寫了 width，這裡的 grid-template-columns 卻是
+   舊數字，兩邊對不上，元素撐破格子疊到旁邊去） */
+.layout { display:grid;grid-template-columns:300px 1fr 320px;height:calc(100vh - 44px);margin-top:44px; }
 
 /* Sidebar */
-.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:220px;height:calc(100vh - 44px); }
-.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:288px;height:calc(100vh - 44px); }
+.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;height:calc(100vh - 44px); }
+.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;height:calc(100vh - 44px); }
 #sidebar-scroll { flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent; }
 #sidebar-scroll::-webkit-scrollbar { width:4px; }
 #sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border2);border-radius:2px; }
@@ -665,7 +669,7 @@ input[type="file"] { display:none; }
       </div>
 
       <!-- 右區塊：陰影編輯器面板＋1200曝品區畫布，同一排並排 -->
-      <div id="logo2-shadow-block" style="flex:1 1 680px !important;min-width:480px !important;display:grid !important;grid-template-columns:200px minmax(0,1fr) !important;grid-template-rows:auto !important;gap:10px !important;align-items:start !important;background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:12px !important;padding:10px !important;">
+      <div id="logo2-shadow-block" style="flex:1 1 680px !important;min-width:480px !important;display:grid !important;grid-template-columns:240px minmax(0,1fr) !important;grid-template-rows:auto !important;gap:10px !important;align-items:start !important;background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:12px !important;padding:10px !important;">
 
         <div id="logo2-shadow-mount-col" style="grid-column:1 !important;grid-row:1 !important;width:auto !important;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
           <div id="shadow-editor-mount"></div>
@@ -692,12 +696,12 @@ input[type="file"] { display:none; }
           if(!block || !mount || !canvasCol) return;
           if(block.style.display === 'none') return;
           block.style.setProperty('display', 'grid', 'important');
-          block.style.setProperty('grid-template-columns', '200px minmax(0,1fr)', 'important');
+          block.style.setProperty('grid-template-columns', '240px minmax(0,1fr)', 'important');
           block.style.setProperty('grid-template-rows', 'auto', 'important');
           block.style.setProperty('flex-wrap', 'nowrap', 'important');
           mount.style.setProperty('grid-column', '1', 'important');
           mount.style.setProperty('width', 'auto', 'important');
-          mount.style.setProperty('max-width', '200px', 'important');
+          mount.style.setProperty('max-width', '240px', 'important');
           canvasCol.style.setProperty('grid-column', '2', 'important');
           canvasCol.style.setProperty('min-width', '0', 'important');
           console.log('[shadow-layout-fix] 已套用', {
