@@ -44,6 +44,8 @@
     bgDataUrl: null,
     slots: {}, // slotId -> dataUrl
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
+    polaroid: {}, // slotId -> true/false，這個 slot 目前是不是「已套拍立得框」的狀態
+    slotOriginal: {}, // slotId -> dataUrl，套框之前的原圖（只在第一次勾選時記錄，取消勾選時拿來還原）
     order: []  // 手動疊放順序：陣列前面＝後方，後面＝前方；也是左側清單的顯示順序來源（清單上面＝最前面，所以顯示時要反過來）
   };
   var activeSlotId = null;
@@ -74,6 +76,8 @@
       bgDataUrl: state.bgDataUrl,
       slots: Object.assign({}, state.slots),
       slotRatios: Object.assign({}, state.slotRatios),
+      polaroid: Object.assign({}, state.polaroid),
+      slotOriginal: Object.assign({}, state.slotOriginal),
       enabled: currentCombo().enabled.slice(),
       order: state.order.slice(),
       activeSlotId: activeSlotId,
@@ -109,7 +113,11 @@
       '.lc-thumb .lc-plus{font-size:18px;color:var(--text-dim);}' +
       '.lc-meta{font-size:12px;color:var(--text);}' +
       '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
-      '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}';
+      '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
+      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
+      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
+      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
+      '.lc-frame-row a:hover{text-decoration:underline;}';
     document.head.appendChild(style);
   }
 
@@ -214,9 +222,52 @@
     notifyChange();
   }
 
+  var _eraseScratchImg = null;
+  /* 商品去背：沿用既有的外掛去背編輯器（window.openEraseEditor，原本只給
+     人物圖片用），透過攔截一次性的 img.src 寫入，把去背結果收回這個 slot。 */
+  function openEraseForSlot(slotId){
+    if (typeof window.openEraseEditor !== 'function'){
+      toast('去背編輯器尚未載入，請稍後再試','err');
+      return;
+    }
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl){ toast('這個欄位還沒有圖片','err'); return; }
+
+    if (!_eraseScratchImg){
+      _eraseScratchImg = document.createElement('img');
+      _eraseScratchImg.style.display = 'none';
+      document.body.appendChild(_eraseScratchImg);
+    }
+    var scratchImg = _eraseScratchImg;
+    scratchImg.src = dataUrl; // 一般寫入，先把「輸入」放好，這次不用被攔截
+
+    var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    var origSetter = origDescriptor.set;
+    Object.defineProperty(scratchImg, 'src', {
+      set: function(val){
+        origSetter.call(this, val);
+        if (val && val.indexOf('data:') === 0){
+          delete scratchImg.src; // 還原成 prototype 預設的 setter，只攔這一次
+          applySlotDataUrl(slotId, val);
+          toast('去背結果已套用','ok');
+        }
+      },
+      get: function(){ return origDescriptor.get.call(this); },
+      configurable: true
+    });
+
+    window.openEraseEditor(scratchImg);
+  }
+
   function loadSlotFile(slotId, file, ratio){
     var reader = new FileReader();
-    reader.onload = function(ev){ applySlotDataUrl(slotId, ev.target.result, ratio); };
+    reader.onload = function(ev){
+      /* 換一張全新的圖時，之前記錄的「套框原圖」就不對應這張新圖了，要清掉，
+         不然下次取消勾選拍立得，會還原成上一張圖，而不是這次剛上傳的這張 */
+      delete state.polaroid[slotId];
+      delete state.slotOriginal[slotId];
+      applySlotDataUrl(slotId, ev.target.result, ratio);
+    };
     reader.readAsDataURL(file);
   }
 
@@ -230,10 +281,14 @@
         c.width = img.naturalWidth; c.height = img.naturalHeight;
         c.getContext('2d').drawImage(img, 0, 0);
         var dataUrl = c.toDataURL('image/png');
+        delete state.polaroid[slotId];
+        delete state.slotOriginal[slotId];
         applySlotDataUrl(slotId, dataUrl);
         if (cb) cb(true);
       } catch(e){
         // CORS 等問題：退回直接用路徑（本機同源資料夾通常不會遇到）
+        delete state.polaroid[slotId];
+        delete state.slotOriginal[slotId];
         applySlotDataUrl(slotId, url);
         if (cb) cb(true);
       }
@@ -242,8 +297,50 @@
     img.src = url;
   }
 
+  /* ── 拍立得框：勾選/取消勾選、重新調整 ──
+     依賴 window.ShadowFramePlugin（見 shadow-frame-plugin.js），沒載入的話會在
+     console 警告並直接跳過，不會噴錯讓整個 plugin 掛掉。 */
+  function togglePolaroid(slotId, on){
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl) return;
+    if (typeof window.ShadowFramePlugin === 'undefined' || !window.ShadowFramePlugin.open){
+      console.warn('shadow-editor-plugin: 找不到 ShadowFramePlugin，請確認 shadow-frame-plugin.js 已在這支檔案之前載入');
+      renderSlotBar(); // 把 checkbox 視覺狀態轉回目前實際的 state.polaroid（避免卡在使用者剛點的樣子）
+      return;
+    }
+    if (on){
+      if (!state.slotOriginal[slotId]) state.slotOriginal[slotId] = dataUrl; // 只在第一次勾選時記錄原圖
+      /* 這裡故意不呼叫 renderSlotBar()——彈窗是非同步的（使用者可能取消），
+         如果現在就重繪，畫面上的checkbox會因為 state.polaroid[slotId] 這時候
+         還是false，被立刻蓋回「未勾選」的樣子。維持checkbox目前使用者剛點出來
+         的勾選視覺就好，等使用者真的按下彈窗的「套用」，下面 applySlotDataUrl()
+         本身就會重繪一次，那時候 state.polaroid[slotId] 已經是true，checkbox
+         會正確顯示勾選。如果使用者取消彈窗，checkbox視覺會維持勾選（跟實際
+         state.polaroid=false 不同步），但下一次任何原因觸發的renderSlotBar()
+         都會自動校正回來，不影響實際套用結果。 */
+      window.ShadowFramePlugin.open(state.slotOriginal[slotId], function(flatDataUrl){
+        state.polaroid[slotId] = true;
+        applySlotDataUrl(slotId, flatDataUrl); // 沿用既有管線：壓平後就是普通商品圖，可貼地陰影、可在1200畫布縮放/旋轉
+      });
+    } else {
+      state.polaroid[slotId] = false;
+      var original = state.slotOriginal[slotId];
+      if (original) applySlotDataUrl(slotId, original);
+      else renderSlotBar();
+    }
+  }
+  function openFrameAdjust(slotId){
+    var original = state.slotOriginal[slotId] || state.slots[slotId];
+    if (!original || typeof window.ShadowFramePlugin === 'undefined' || !window.ShadowFramePlugin.open) return;
+    window.ShadowFramePlugin.open(original, function(flatDataUrl){
+      applySlotDataUrl(slotId, flatDataUrl);
+    });
+  }
+
   function removeSlot(slotId){
     delete state.slots[slotId];
+    delete state.polaroid[slotId];
+    delete state.slotOriginal[slotId];
     broadcastToAllFrames({ type:'LC_REMOVE_SLOT', slotId: slotId });
     setSelection(selectedIds.filter(function(id){ return id !== slotId; }));
     renderSlotBar();
@@ -310,6 +407,46 @@
       var meta = document.createElement('div');
       meta.className = 'lc-meta';
       meta.innerHTML = def.label + '<span class="lc-tag">' + (def.type==='person' ? '人物・光暈陰影' : '商品・貼地陰影') + '</span>';
+
+      // 商品類、而且已經有圖：加「拍立得」勾選＋「去背」連結（人物類先不開放——
+      // 人物走頭部定位邏輯，套框/去背後整張圖的形狀跟頭部偵測會對不上，
+      // 之後真的有需求再另外處理）
+      if (def.type === 'product' && state.slots[def.id]){
+        var frameRow = document.createElement('div');
+        frameRow.className = 'lc-frame-row';
+        frameRow.draggable = false; // box本身draggable=true會被繼承，蓋掉才能正常點擊連結
+        frameRow.addEventListener('click', function(e){ e.stopPropagation(); });
+
+        var cbId = 'lc-polaroid-' + def.id;
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = cbId;
+        cb.draggable = false;
+        cb.checked = !!state.polaroid[def.id];
+        cb.addEventListener('change', function(){ togglePolaroid(def.id, cb.checked); });
+        frameRow.appendChild(cb);
+
+        var cbLabel = document.createElement('label');
+        cbLabel.setAttribute('for', cbId);
+        cbLabel.style.cursor = 'pointer';
+        cbLabel.textContent = '拍立得';
+        frameRow.appendChild(cbLabel);
+
+        if (state.polaroid[def.id]){
+          var adjustLink = document.createElement('a');
+          adjustLink.textContent = '調整';
+          adjustLink.addEventListener('click', function(e){ e.stopPropagation(); openFrameAdjust(def.id); });
+          frameRow.appendChild(adjustLink);
+        }
+
+        var eraseLink = document.createElement('a');
+        eraseLink.textContent = '去背';
+        eraseLink.addEventListener('click', function(e){ e.stopPropagation(); openEraseForSlot(def.id); });
+        frameRow.appendChild(eraseLink);
+
+        meta.appendChild(frameRow);
+      }
+
       box.appendChild(meta);
 
       box.addEventListener('click', function(e){
@@ -423,6 +560,10 @@
     setSlotFromUrl: loadSlotFromUrl,     // setSlotFromUrl(slotId, url, cb) → cb(found:boolean)
     removeSlot: removeSlot,
     refreshUI: renderSlotBar,
+    /* 拍立得框：給外部（例如匯入工單時想預設某些商品直接套框）呼叫 */
+    setPolaroid: togglePolaroid,         // setPolaroid(slotId, true|false)
+    isPolaroid: function(slotId){ return !!state.polaroid[slotId]; },
+    openFrameAdjust: openFrameAdjust,    // openFrameAdjust(slotId) → 重新打開調整彈窗
     /* 暫存模式：匯入工單時用，先比對／填格子但不廣播，等使用者在 popup 裡按確認才 commit() */
     enterPending: function(){ pendingMode = true; },
     isPending: function(){ return pendingMode; },

@@ -1,7 +1,7 @@
 'use strict';
 
 /* ── 活動名稱：顯示在左上角、也用在下載檔名裡 ── */
-var ACTIVITY_NAME = 'lifestyle-channel';
+var ACTIVITY_NAME = 'MCN代播';
 
 /* 日期格式化：抓 M/D，兩邊補0成4碼 MMDD（檔名用，補0後長度固定、好排序） */
 function formatDateMMDD(raw){

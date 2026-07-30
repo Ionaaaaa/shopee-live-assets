@@ -54,7 +54,20 @@
 */
 window.ShadowLayoutReceiver = (function () {
   'use strict';
-  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-06-v2（含版型獨立位置＋商品比例功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-30-v3（含版型獨立位置＋商品比例功能＋旋轉/復原）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+
+  /* 旋轉解耦：旋轉「只」影響最後畫到 canvas 上的視覺效果，完全不影響 itemBounds／
+     拖曳／縮放控制點的判定邏輯——這些全部維持軸對齊矩形計算，跟原本沒有旋轉功能時
+     一模一樣。實際畫出旋轉效果的地方在 shadow-plugin.js，這支檔案只負責
+     「使用者怎麼用滑鼠把角度轉出來、存到哪裡」。 */
+  var ROT_SNAP_DEG = 15; // 拖曳旋轉把手時按住 Shift 的吸附角度
+
+  function normalizeDeg(deg){
+    deg = deg % 360;
+    if (deg > 180) deg -= 360;
+    if (deg <= -180) deg += 360;
+    return deg;
+  }
 
   function create(canvas){
     var slots = {};        // slotId -> { x,y,w0,h0,scaleMul,tight:{tx,ty,tw,th}(0~1比例) }
@@ -65,6 +78,35 @@ window.ShadowLayoutReceiver = (function () {
     var activeSlotId = null;
     var interaction = null;
     var bgImg = null;
+
+    /* ── 復原（Ctrl+Z）：只記錄「位置/縮放/旋轉」這幾個欄位的微調，不含
+       上傳/刪除素材、版型組合切換——範圍刻意縮小，最多存5步。每次開始一個新的
+       拖曳/縮放/旋轉動作之前（pointerdown 當下）就存一次快照，Ctrl+Z 復原到
+       「這個動作開始之前」的狀態。 */
+    var undoStack = [];
+    var UNDO_MAX = 5;
+    function pushUndoSnapshot(){
+      var snap = {};
+      Object.keys(slots).forEach(function(id){
+        var s = slots[id];
+        snap[id] = { x:s.x, y:s.y, scaleMul:s.scaleMul, rot:s.rot||0 };
+      });
+      undoStack.push({ slots:snap, ts:Date.now() });
+      if(undoStack.length > UNDO_MAX) undoStack.shift();
+    }
+    function peekUndoTs(){
+      return undoStack.length ? undoStack[undoStack.length-1].ts : 0;
+    }
+    function undo(redraw){
+      var snap = undoStack.pop();
+      if(!snap) return;
+      Object.keys(snap.slots).forEach(function(id){
+        if(!slots[id]) return; // 這個slot後來被刪掉了（刪除不在復原範圍內），跳過
+        var v = snap.slots[id];
+        slots[id].x = v.x; slots[id].y = v.y; slots[id].scaleMul = v.scaleMul; slots[id].rot = v.rot;
+      });
+      if(redraw) redraw();
+    }
 
     // 統一的選取狀態設定：selectedIds 是主要狀態，activeSlotId 在只選一個時同步更新（向下相容舊用法）
     function setSelection(ids){
@@ -174,13 +216,24 @@ window.ShadowLayoutReceiver = (function () {
     function getState(slotId){
       var s = slots[slotId];
       if (!s) return null;
-      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul };
+      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0 };
     }
+    // 跟 shadow-plugin.js 畫圖邏輯共用同一份錨點補償量，不各自計算，
+    // 避免選取框判定跟實際畫面的地面基準對不齊（往上偏移的根因）
+    function getTrimBottomPad(slotId){
+      var p = window.ShadowPlugin && window.ShadowPlugin._products && window.ShadowPlugin._products[slotId];
+      if (!p || !p.trim) return 0;
+      var s = slots[slotId];
+      if (!s) return 0;
+      var ph = s.h0 * s.scaleMul;
+      return p.trim.bottom * ph;
+    }
+
     // 選取框／點擊判定用的範圍：優先用「有色部分」的緊密邊框，偵測失敗才退回整張圖範圍
     function itemBounds(slotId){
       var s = slots[slotId];
       var fullW = s.w0*s.scaleMul, fullH = s.h0*s.scaleMul;
-      var imgLeft = s.x - fullW/2, imgTop = s.y - fullH;
+      var imgLeft = s.x - fullW/2, imgTop = s.y - fullH + getTrimBottomPad(slotId);
       if (s.tight){
         var w = s.tight.tw * fullW, h = s.tight.th * fullH;
         var left = imgLeft + s.tight.tx * fullW, top = imgTop + s.tight.ty * fullH;
@@ -214,7 +267,8 @@ window.ShadowLayoutReceiver = (function () {
               x: cx + (s.x - cx) * scale,
               y: cy + (s.y - cy) * scale,
               w: s.w * scale,
-              h: s.h * scale
+              h: s.h * scale,
+              rot: s.rot // 旋轉角度不受縮放影響，原樣帶過去
             };
           });
         }
@@ -228,6 +282,12 @@ window.ShadowLayoutReceiver = (function () {
       } else if (validSelected.length > 1){
         drawGroupSelectionBox(ctx, validSelected);
       }
+    }
+
+    // 旋轉把手離選取框頂邊的距離、把手半徑，統一算式跟 hitTestRotateHandle 共用
+    function rotateHandlePos(b){
+      var offset = Math.max(24, canvas.width*0.03);
+      return { x: (b.left+b.right)/2, y: b.top - offset };
     }
 
     function drawSelectionBox(ctx, slotId){
@@ -249,6 +309,40 @@ window.ShadowLayoutReceiver = (function () {
         ctx.rect(c[0]-hs/2, c[1]-hs/2, hs, hs);
         ctx.fill(); ctx.stroke();
       });
+
+      // 旋轉把手：頂邊中點往上拉一段距離的綠色圓點 + 連接線
+      var rp = rotateHandlePos(b);
+      ctx.beginPath();
+      ctx.moveTo((b.left+b.right)/2, b.top);
+      ctx.lineTo(rp.x, rp.y);
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
+      ctx.stroke();
+      var hr = Math.max(7, canvas.width*0.009);
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, hr, 0, Math.PI*2);
+      ctx.fillStyle = '#22c55e';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(1.5, canvas.width*0.0018);
+      ctx.stroke();
+
+      // 旋轉中即時顯示角度（拖曳旋轉把手時 interaction.mode === 'rotate' 才會有值）
+      if (interaction && interaction.mode === 'rotate' && interaction.slotId === slotId){
+        var deg = Math.round(slots[slotId].rot || 0);
+        ctx.font = Math.max(11, canvas.width*0.013) + 'px sans-serif';
+        ctx.fillStyle = 'rgba(13,16,24,.92)';
+        var label = deg + '°';
+        var tw = ctx.measureText(label).width;
+        var pad = 6;
+        ctx.fillRect(rp.x - tw/2 - pad, rp.y - hr - 26, tw + pad*2, 18);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, rp.x, rp.y - hr - 17);
+        ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+      }
+
       ctx.restore();
     }
 
@@ -476,6 +570,13 @@ window.ShadowLayoutReceiver = (function () {
       function pointInBox(gb, p){
         return p.x>=gb.left && p.x<=gb.right && p.y>=gb.top && p.y<=gb.bottom;
       }
+      // 頂部旋轉把手命中判定：獨立於四角控制點，半徑比角落 handle 稍大一點方便點擊
+      function hitTestRotateHandle(slotId, p){
+        var b = itemBounds(slotId);
+        var rp = rotateHandlePos(b);
+        var hr = Math.max(7, canvas.width*0.009) * 1.8;
+        return Math.hypot(p.x-rp.x, p.y-rp.y) <= hr;
+      }
 
       canvas.addEventListener('pointerdown', function(e){
         var p = pos(e);
@@ -486,6 +587,7 @@ window.ShadowLayoutReceiver = (function () {
           if (gb){
             var gcorner = hitTestHandleBox(gb, p);
             if (gcorner){
+              pushUndoSnapshot();
               interaction = {
                 mode: 'group-resize', corner: gcorner, startPointer: p,
                 center: { x: gb.cx, y: gb.cy },
@@ -496,6 +598,7 @@ window.ShadowLayoutReceiver = (function () {
               return;
             }
             if (pointInBox(gb, p)){
+              pushUndoSnapshot();
               interaction = {
                 mode: 'group-move', startPointer: p,
                 startSlots: selectedIds.map(function(id){ return { id:id, x:slots[id].x, y:slots[id].y }; })
@@ -506,15 +609,26 @@ window.ShadowLayoutReceiver = (function () {
           }
         }
 
-        // 單選狀態：拖角縮放／拖曳移動（原本的行為）
+        // 單選狀態：旋轉把手／拖角縮放／拖曳移動
         if (activeSlotId && slots[activeSlotId] && enabledIds.indexOf(activeSlotId)!==-1){
+          if (hitTestRotateHandle(activeSlotId, p)){
+            var b = itemBounds(activeSlotId);
+            var center = { x: (b.left+b.right)/2, y: (b.top+b.bottom)/2 }; // 旋轉樞紐＝選取框幾何中心，要跟 shadow-plugin.js 的 pivot 定義一致
+            var startAngle = Math.atan2(p.y-center.y, p.x-center.x) * 180/Math.PI;
+            pushUndoSnapshot();
+            interaction = { mode:'rotate', slotId: activeSlotId, center: center, startAngle: startAngle, baseRot: slots[activeSlotId].rot || 0 };
+            canvas.setPointerCapture(e.pointerId);
+            return;
+          }
           var corner = hitTestHandle(activeSlotId, p);
           if (corner){
+            pushUndoSnapshot();
             interaction = { mode:'resize', corner: corner, startPointer: p, startSlot: Object.assign({}, slots[activeSlotId]) };
             canvas.setPointerCapture(e.pointerId);
             return;
           }
           if (hitTestBody(activeSlotId, p)){
+            pushUndoSnapshot();
             interaction = { mode:'move', startPointer: p, startSlot: Object.assign({}, slots[activeSlotId]) };
             canvas.setPointerCapture(e.pointerId);
             return;
@@ -526,6 +640,7 @@ window.ShadowLayoutReceiver = (function () {
         var hit = candidates.find(function(id){ return hitTestBody(id, p); });
         if (hit){
           setSelection([hit]);
+          pushUndoSnapshot();
           interaction = { mode:'move', startPointer: p, startSlot: Object.assign({}, slots[hit]) };
           canvas.setPointerCapture(e.pointerId);
           parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: [hit] }, '*');
@@ -536,10 +651,39 @@ window.ShadowLayoutReceiver = (function () {
         if (redraw) redraw();
       });
       window.addEventListener('pointerup', function(){ interaction = null; });
+      // Ctrl+Z／Cmd+Z：復原上一步位置/縮放/旋轉調整（輸入框打字時不要誤觸發）
+      document.addEventListener('keydown', function(e){
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')){
+          e.preventDefault();
+          undo(redraw);
+        }
+      });
+      // 雙擊旋轉把手：角度歸零
+      canvas.addEventListener('dblclick', function(e){
+        if (!activeSlotId || !slots[activeSlotId]) return;
+        var p = pos(e);
+        if (hitTestRotateHandle(activeSlotId, p)){
+          slots[activeSlotId].rot = 0;
+          if (redraw) redraw();
+        }
+      });
       canvas.addEventListener('pointermove', function(e){
         if (!interaction) return;
         e.preventDefault();
         var p = pos(e);
+
+        if (interaction.mode === 'rotate'){
+          var active0 = slots[interaction.slotId];
+          if (!active0) return;
+          var curAngle = Math.atan2(p.y-interaction.center.y, p.x-interaction.center.x) * 180/Math.PI;
+          var next = normalizeDeg(interaction.baseRot + (curAngle - interaction.startAngle));
+          if (e.shiftKey) next = Math.round(next / ROT_SNAP_DEG) * ROT_SNAP_DEG;
+          active0.rot = next;
+          if (redraw) redraw();
+          return;
+        }
 
         if (interaction.mode === 'group-move'){
           var dx = p.x - interaction.startPointer.x, dy = p.y - interaction.startPointer.y;
@@ -612,7 +756,17 @@ window.ShadowLayoutReceiver = (function () {
       /* 目前生效中的疊放順序（陣列前面＝後方，後面＝前方），拖曳排序清單可以拿這個當初始值 */
       getEnabledOrder: function(){ return enabledIds.slice(); },
       /* 目前排序好、可直接丟給 ShadowPlugin.renderScene / renderPhotosOnly 的狀態陣列（給匯出分層合成用） */
-      getOrderedStates: function(){ return enabledIds.map(getState).filter(Boolean); }
+      getOrderedStates: function(){ return enabledIds.map(getState).filter(Boolean); },
+      /* 給外部程式化設定旋轉角度用（例如之後想加「輸入角度數字」的介面） */
+      setRotation: function(slotId, deg, redraw){
+        if (!slots[slotId]) return;
+        slots[slotId].rot = normalizeDeg(deg);
+        if (redraw) redraw();
+      },
+      getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; },
+      /* 復原（Ctrl+Z）：見上方 pushUndoSnapshot()/undo() 的註解，只涵蓋位置/縮放/旋轉，最多5步 */
+      undo: undo,
+      peekUndoTs: peekUndoTs
     };
   }
 

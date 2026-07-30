@@ -359,7 +359,7 @@ function previewLayout(file){
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單將重設）')) return;
   localStorage.removeItem('bn_admin_mcn_live_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem('bn_hosts_mcn_live_v1');
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }
@@ -431,7 +431,7 @@ function initFromIndexJS(){
 initFromIndexJS();
 
 /* ── 主持人圖庫 ── */
-var HOST_LIST_KEY = 'bn_hosts_star_studio_v1';
+var HOST_LIST_KEY = 'bn_hosts_mcn_live_v1';
 
 function getHostList(){
   try{ return JSON.parse(localStorage.getItem(HOST_LIST_KEY)||'[]'); }

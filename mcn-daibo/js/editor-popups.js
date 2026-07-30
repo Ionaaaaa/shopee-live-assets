@@ -62,7 +62,7 @@ function buildHostPopup(){
   function renderHosts(hosts){
     /* 合併 localStorage 的圖（如有）*/
     var libStored = [];
-    try{ libStored = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]'); }catch(e){}
+    try{ libStored = JSON.parse(localStorage.getItem('bn_hosts_mcn_live_v1')||'[]'); }catch(e){}
     var allHosts = hosts.slice();
     libStored.forEach(function(h){
       var hname = h.name.replace(/\.[^.]+$/,'');

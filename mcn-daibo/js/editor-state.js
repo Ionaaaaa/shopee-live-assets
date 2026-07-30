@@ -256,14 +256,20 @@ function applyState(data){
   }
 }
 
-document.getElementById('btn-save').addEventListener('click',function(){
-  pm.show('儲存暫存');
-  pm.update(10, '收集狀態…');
+function buildFullSnapshot(cb){
   saveCurrentTabState(function(){
-    pm.update(50, '產生檔案…');
     var state = collectState();
     state.tabs = TABS;
     state.activeTab = ACTIVE_TAB;
+    cb(state);
+  });
+}
+
+document.getElementById('btn-save').addEventListener('click',function(){
+  pm.show('儲存暫存');
+  pm.update(10, '收集狀態…');
+  buildFullSnapshot(function(state){
+    pm.update(50, '產生檔案…');
     var blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
@@ -277,8 +283,8 @@ document.getElementById('btn-save').addEventListener('click',function(){
 
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單、主持人圖庫將重設）')) return;
-  localStorage.removeItem('bn_admin_star_studio_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem('bn_admin_mcn_live_v1');
+  localStorage.removeItem('bn_hosts_mcn_live_v1');
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }

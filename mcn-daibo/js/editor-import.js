@@ -7,6 +7,8 @@ function openImportModal(){
   _importState = { excelFile:null, assetFiles:[] };
   resetImportZoneText('import-zone-excel', '點擊上傳 Excel 工單', '支援 .xlsx 格式');
   resetImportZoneText('import-zone-assets', '上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
+  markImportZoneSuccess('import-zone-excel', false);
+  markImportZoneSuccess('import-zone-assets', false);
   document.getElementById('popup-import').classList.add('open');
 }
 
@@ -17,15 +19,24 @@ function resetImportZoneText(zoneId, title, sub){
   var s = zone.querySelector('.import-zone-sub'); if(s) s.textContent = sub;
 }
 
+function markImportZoneSuccess(zoneId, success){
+  var zone = document.getElementById(zoneId);
+  if(!zone) return;
+  zone.dataset.success = success ? '1' : '';
+  zone.style.borderStyle = success ? 'solid' : 'dashed';
+  zone.style.borderColor = success ? 'var(--accent)' : 'var(--border2)';
+  zone.style.background  = success ? 'rgba(238,77,45,.06)' : '';
+}
+
 function onImportFilePicked(e, kind){
   if(kind === 'excel'){
     var f = e.target.files[0];
     _importState.excelFile = f || null;
-    if(f) resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇');
+    if(f){ resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇'); markImportZoneSuccess('import-zone-excel', true); }
   } else if(kind === 'assets'){
     var files = Array.prototype.slice.call(e.target.files).filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
     _importState.assetFiles = files;
-    if(files.length) resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾');
+    if(files.length){ resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾'); markImportZoneSuccess('import-zone-assets', true); }
   }
 }
 
@@ -158,6 +169,9 @@ function confirmImport(){
     return;
   }
 
+  pm.show('匯入工單');
+  pm.update(5, '準備中…');
+
   function afterExcel(groupData){
     groupData = groupData || {};
     /* 先進入暫存模式：版型/素材的變更先不廣播給畫布，等使用者在確認 popup 按下按鈕才 commit() */
@@ -176,8 +190,13 @@ function confirmImport(){
     if(hostNameEl && brandNameVal)  hostNameEl.value  = stripNamePrefix(brandNameVal);
     if(brandNameVal && typeof broadcast === 'function') broadcast();
 
+    pm.update(70, '比對主持人／商品圖片…');
     var hostMatched = matchAndApplyHostFiles(st.assetFiles, groupData);
+    pm.update(85, '比對 Logo…');
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched){
+      pm.update(100, '完成');
+      pm.done('匯入完成');
+      pm.hide();
       closePopup('import');
       var msgParts = [];
       if(st.excelFile) msgParts.push('Excel 已匯入');
@@ -194,13 +213,16 @@ function confirmImport(){
   }
 
   if(st.excelFile){
+    pm.update(15, '讀取 Excel 檔案…');
     processExcelFile(st.excelFile, function(err, groups){
-      if(err){ toast('Excel 解析失敗：'+err.message,'err'); return; }
+      if(err){ pm.hide(); toast('Excel 解析失敗：'+err.message,'err'); return; }
       if(!groups.length){
+        pm.hide();
         toast('Excel 找不到分頁資料，請確認工單格式','err');
         afterExcel(null); // Excel 沒讀到東西，還是繼續處理已選的圖片資料夾
         return;
       }
+      pm.update(40, '建立分頁…');
       var tabs = groups.map(function(g, i){
         return { id:'tab-'+(i+1), label: tabLabelFor(g, i), data: g };
       });
@@ -208,6 +230,7 @@ function confirmImport(){
       afterExcel(groups[0] || null);
     });
   } else {
+    pm.update(50, '比對素材資料夾…');
     afterExcel(null);
   }
 }
@@ -528,7 +551,7 @@ function importZip(file){
       /* 1. 比對圖庫 */
       if(hostName){
         try{
-          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]');
+          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_mcn_live_v1')||'[]');
           var nameNoExt = hostName.replace(/\.[^.]+$/,'');
           var match = hostLib.find(function(h){
             var hn = h.name.replace(/\.[^.]+$/,'');
