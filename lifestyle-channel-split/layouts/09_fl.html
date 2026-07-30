@@ -88,7 +88,7 @@ window.addEventListener('message', function(e){
      背景資料夾裡實際檔名是 09_FL.png（大寫 FL、副檔名是 png 不是 jpg，
      這張背景本身就是透明底，所以用 png 才留得住透明度） */
   if(p.bgBase!==undefined){
-    var bgUrl = p.bgBase ? p.bgBase + '09_FL.png' : null;
+    var bgUrl = p.bgBase ? p.bgBase + '09_fl.png' : null;
     loadBg(bgUrl);
   } else if(p.bgUrl!==undefined){
     loadBg(p.bgUrl||null);

@@ -7,6 +7,8 @@ function openImportModal(){
   _importState = { excelFile:null, assetFiles:[] };
   resetImportZoneText('import-zone-excel', '點擊上傳 Excel 工單', '支援 .xlsx 格式');
   resetImportZoneText('import-zone-assets', '上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
+  markImportZoneSuccess('import-zone-excel', false);
+  markImportZoneSuccess('import-zone-assets', false);
   document.getElementById('popup-import').classList.add('open');
 }
 
@@ -17,15 +19,24 @@ function resetImportZoneText(zoneId, title, sub){
   var s = zone.querySelector('.import-zone-sub'); if(s) s.textContent = sub;
 }
 
+function markImportZoneSuccess(zoneId, success){
+  var zone = document.getElementById(zoneId);
+  if(!zone) return;
+  zone.dataset.success = success ? '1' : '';
+  zone.style.borderStyle = success ? 'solid' : 'dashed';
+  zone.style.borderColor = success ? 'var(--accent)' : 'var(--border2)';
+  zone.style.background  = success ? 'rgba(238,77,45,.06)' : '';
+}
+
 function onImportFilePicked(e, kind){
   if(kind === 'excel'){
     var f = e.target.files[0];
     _importState.excelFile = f || null;
-    if(f) resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇');
+    if(f){ resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇'); markImportZoneSuccess('import-zone-excel', true); }
   } else if(kind === 'assets'){
     var files = Array.prototype.slice.call(e.target.files).filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
     _importState.assetFiles = files;
-    if(files.length) resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾');
+    if(files.length){ resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾'); markImportZoneSuccess('import-zone-assets', true); }
   }
 }
 

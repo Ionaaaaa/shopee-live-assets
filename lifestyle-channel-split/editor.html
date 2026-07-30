@@ -254,14 +254,13 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -419,9 +418,9 @@ input[type="file"] { display:none; }
     <div style="padding:24px;display:flex;flex-direction:column;gap:14px;">
 
       <div id="import-zone-excel" class="import-dropzone"
-        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
+        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor='var(--border2)'">
         <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
         <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
@@ -429,9 +428,9 @@ input[type="file"] { display:none; }
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="onImportFilePicked(event,'excel')">
 
       <div id="import-zone-assets" class="import-dropzone"
-        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:22px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
+        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:22px 16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importAssetsFolder').click()"
-        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor='var(--border2)'">
         <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:6px;"><path d="M1.5 3.5h4l1.2 1.6H14.5v8.4h-13z"/></svg>
         <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">上傳素材資料夾（Logo＋主持人／商品，可選）</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對</div>

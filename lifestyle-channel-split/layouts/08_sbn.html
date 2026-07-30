@@ -249,7 +249,7 @@ if(!msg||msg.type!=='BN_UPDATE') return;
   /* bgBase 是資料夾路徑，自己補上版位檔名──
      背景資料夾裡實際檔名是 08_SBN.jpg（大寫 SBN），已對應正確 */
   if(p.bgBase!==undefined){
-    var bgUrl = p.bgBase ? p.bgBase + '08_SBN.jpg' : null;
+    var bgUrl = p.bgBase ? p.bgBase + '08_sbn.jpg' : null;
     loadBg(bgUrl);
   } else if(p.bgUrl!==undefined){
     loadBg(p.bgUrl||null); /* 向下相容 */

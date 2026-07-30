@@ -192,17 +192,27 @@ function _downloadAll(){
 
   function processTab(ti){
     if(ti >= TABS.length){
-      pm.update(95, '打包 zip…');
-      zip.generateAsync({type:'blob'}).then(function(blob){
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = zipName+'.zip';
-        a.click();
-        setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-        applyTabData(TABS[ACTIVE_TAB], true);
-        pm.done('已下載：'+zipName+'.zip');
-        pm.hide();
-      });
+      /* 先還原目前分頁畫面，等 postMessage/DOM 還原穩定後再存暫存檔，
+         避免存到還原到一半、或還停在最後一個截圖分頁的過渡狀態；
+         暫存檔跟各分頁製作物一起塞進同一個 zip，只觸發一次下載，
+         避免另開一個下載視窗互相衝突。 */
+      applyTabData(TABS[ACTIVE_TAB], true);
+      pm.update(92, '整理暫存檔…');
+      setTimeout(function(){
+        buildFullSnapshot(function(state){
+          zip.file(zipName+'_暫存.json', JSON.stringify(state,null,2));
+          pm.update(95, '打包 zip…');
+          zip.generateAsync({type:'blob'}).then(function(blob){
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = zipName+'.zip';
+            a.click();
+            setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+            pm.done('已下載：'+zipName+'.zip（含暫存檔）');
+            pm.hide();
+          });
+        });
+      }, 500);
       return;
     }
     var tab = TABS[ti];
