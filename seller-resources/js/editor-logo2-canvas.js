@@ -153,6 +153,16 @@ function initLogo2BigCanvasOnce(){
   document.addEventListener('mousemove', logo2CanvasMouseMove);
   document.addEventListener('mouseup', function(){ _logo2DragData = null; _logo2ResizeData = null; });
 
+  // 滾輪縮放：往上滾放大、往下滾縮小，跟拖角縮放共用同一個 _logo2Scale，
+  // 效果完全一致（跟拖角縮放同樣沒有硬性上限，這裡另外夾一個0.1~6的合理範圍避免滾過頭）
+  _logo2BigCanvas.addEventListener('wheel', function(e){
+    if(!_logo2Img) return;
+    e.preventDefault();
+    var delta = -e.deltaY * 0.0015;
+    _logo2Scale = Math.max(0.1, Math.min(6, _logo2Scale + delta));
+    drawLogo2BigCanvas();
+  }, { passive:false });
+
   document.addEventListener('keydown', function(e){
     if(!_logo2Selected || !_logo2Img) return;
     var tag = (e.target && e.target.tagName) || '';
