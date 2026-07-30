@@ -12,14 +12,14 @@
   <div id="overlay"></div>
 </div>
 
-<script src="../js/shadow-plugin.js?v=20260730"></script>
-<script src="../js/shadow-layout-defaults.js?v=20260730"></script>
-<script src="../js/shadow-scene-scale.js?v=20260730"></script>
-<script src="../js/ground-shadow-defaults.js?v=20260730"></script>
+<script src="../js/shadow-plugin.js?v=20260730f"></script>
+<script src="../js/shadow-layout-defaults.js?v=20260730f"></script>
+<script src="../js/shadow-scene-scale.js?v=20260730f"></script>
+<script src="../js/ground-shadow-defaults.js?v=20260730f"></script>
 
-<script src="../js/logo-row-defaults.js?v=20260730"></script>
-<script src="../js/host-scene-scale.js?v=20260730"></script>
-<script src="../js/layout-common.js?v=20260730"></script>
+<script src="../js/logo-row-defaults.js?v=20260730f"></script>
+<script src="../js/host-scene-scale.js?v=20260730f"></script>
+<script src="../js/layout-common.js?v=20260730f"></script>
 <script>
 'use strict';
 
@@ -269,20 +269,33 @@ function drawCTA(){
 function initHostPos(){
   D.hostBounds = calcTightBounds(D.host);
   if(D.hostBounds){
-    var scH = ZONE.h / D.hostBounds.h;
-    var scW = ZONE.w / D.hostBounds.w;
-
     if(D.combo === 'C'){
-      /* C：純商品，完整置中塞進作圖區，留5%安全邊界，不會超出作圖區任何一邊 */
+      /* C：純商品，水平置中，垂直改成「以底部為基準點」貼齊作圖區底部再往上留
+         一段固定空白（BOTTOM_MARGIN_RATIO，作圖區高度的比例），不要整個垂直置中
+         （置中會讓商品浮在正中間、下方留白比例不固定，商品擺放/比例不同時，
+         有時候幾乎貼底、有時候留一大截，很不一致）。用比例而不是寫死px，
+         這樣不同版位（ZONE.h不同）套用同一個比例，视覺留白比例才會一致。
+         這裡是刻意跟A/B組合（貼齊頂部）相反的方向對齊，商品組合沒有頭部
+         位置一致性的問題，改成貼齊底部比較符合「商品放在地上」的視覺直覺。
+         留白算進縮放公式本身（scH 用扣掉留白後的可用高度去算），不是縮放完
+         再硬加margin——不然商品本身偏高時，加了margin反而可能把上緣推出
+         作圖區上緣。想要留更多/更少空白，直接調 BOTTOM_MARGIN_RATIO 這個
+         數字就好——數字越大，下方留白越多。 */
+      var BOTTOM_MARGIN_RATIO = 0.08;
+      var bottomMargin = ZONE.h * BOTTOM_MARGIN_RATIO;
+      var scH = (ZONE.h - bottomMargin) / D.hostBounds.h;
+      var scW = ZONE.w / D.hostBounds.w;
       D.imgScale = Math.min(scH, scW) * 0.95;
       var dw = D.host.naturalWidth  * D.imgScale;
       var dh = D.host.naturalHeight * D.imgScale;
       var bcX = D.hostBounds.x * D.imgScale + D.hostBounds.w * D.imgScale / 2;
-      var bcY = D.hostBounds.y * D.imgScale + D.hostBounds.h * D.imgScale / 2;
-      D.imgX = ZONE.x + ZONE.w/2 - bcX + dw/2; // 水平置中
-      D.imgY = ZONE.y + ZONE.h/2 - bcY + dh/2; // 垂直也置中（不再貼齊頂部）
+      D.imgX = ZONE.x + ZONE.w/2 - bcX + dw/2; // 水平置中，維持原樣
+      var boundsBottom = (D.hostBounds.y + D.hostBounds.h) * D.imgScale; // 有色範圍下緣，相對「整張圖左上角=(0,0)」縮放後的座標
+      D.imgY = ZONE.y + ZONE.h - bottomMargin + dh/2 - boundsBottom; // 有色範圍下緣＝作圖區底部往上留 bottomMargin
     } else {
       /* A／B：含人物，有色範圍填滿作圖區＋放大20%，頂部貼齊作圖區頂部（結構上保證不會往上超出） */
+      var scH = ZONE.h / D.hostBounds.h;
+      var scW = ZONE.w / D.hostBounds.w;
       D.imgScale = Math.min(scH, scW) * 1.2;
       var dw = D.host.naturalWidth  * D.imgScale;
       var dh = D.host.naturalHeight * D.imgScale;

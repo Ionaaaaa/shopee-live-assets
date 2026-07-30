@@ -65,8 +65,8 @@ input[type="file"] { display:none; }
 .layout { display:grid;grid-template-columns:165px 1fr 216px;height:calc(100vh - 44px);margin-top:44px; }
 
 /* Sidebar */
-.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:220px;height:calc((100vh - 44px) / 0.75);zoom:0.75; }
-.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:288px;height:calc((100vh - 44px) / 0.75);zoom:0.75; }
+.sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:220px;height:calc(100vh - 44px); }
+.right-panel { background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;width:288px;height:calc(100vh - 44px); }
 #sidebar-scroll { flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 0 16px;scrollbar-width:thin;scrollbar-color:var(--border2) transparent; }
 #sidebar-scroll::-webkit-scrollbar { width:4px; }
 #sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border2);border-radius:2px; }
@@ -260,7 +260,6 @@ input[type="file"] { display:none; }
 .popup-overlay {
   position:fixed;inset:0;background:rgba(0,0,0,.7);
   display:none;align-items:center;justify-content:center;z-index:300;
-  zoom:0.75;
 }
 .popup-overlay.open { display:flex; }
 .popup-panel {
@@ -760,21 +759,21 @@ input[type="file"] { display:none; }
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <!-- JS Plugins -->
-<script src="js/banwords-engine-hbn.js?v=20260730d"></script>
-<script src="js/logo-editor-plugin.js?v=20260730d"></script>
-<script src="js/editor-plugin.js?v=20260730d"></script>
-<script src="js/bn-state-plugin.js?v=20260730d"></script>
+<script src="js/banwords-engine-hbn.js?v=20260730f"></script>
+<script src="js/logo-editor-plugin.js?v=20260730f"></script>
+<script src="js/editor-plugin.js?v=20260730f"></script>
+<script src="js/bn-state-plugin.js?v=20260730f"></script>
 
-<script src="js/editor-utils.js?v=20260730d"></script>
-<script src="js/themes.js?v=20260730d"></script>
-<script src="js/fl-b-theme.js?v=20260730d"></script>
-<script src="js/editor-state.js?v=20260730d"></script>
-<script src="js/editor-canvas-ui.js?v=20260730d"></script>
-<script src="js/editor-popups.js?v=20260730d"></script>
-<script src="js/editor-logo2-canvas.js?v=20260730d"></script>
-<script src="js/editor-shadow-canvas.js?v=20260730d"></script>
-<script src="js/editor-import.js?v=20260730d"></script>
-<script src="js/editor-export.js?v=20260730d"></script>
+<script src="js/editor-utils.js?v=20260730f"></script>
+<script src="js/themes.js?v=20260730f"></script>
+<script src="js/fl-b-theme.js?v=20260730f"></script>
+<script src="js/editor-state.js?v=20260730f"></script>
+<script src="js/editor-canvas-ui.js?v=20260730f"></script>
+<script src="js/editor-popups.js?v=20260730f"></script>
+<script src="js/editor-logo2-canvas.js?v=20260730f"></script>
+<script src="js/editor-shadow-canvas.js?v=20260730f"></script>
+<script src="js/editor-import.js?v=20260730f"></script>
+<script src="js/editor-export.js?v=20260730f"></script>
 <script>
 'use strict';
 
@@ -893,12 +892,12 @@ var pm=(function(){
 </script>
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
-<script src="js/shadow-plugin.js?v=20260730d"></script>
-<script src="js/frame-defaults.js?v=20260730d"></script>
-<script src="js/shadow-frame-plugin.js?v=20260730d"></script>
-<script src="js/shadow-layout-defaults.js?v=20260730d"></script>
-<script src="js/shadow-scene-scale.js?v=20260730d"></script>
-<script src="js/shadow-layout-receiver.js?v=20260730d"></script>
-<script src="js/shadow-editor-plugin.js?v=20260730d"></script>
+<script src="js/shadow-plugin.js?v=20260730f"></script>
+<script src="js/frame-defaults.js?v=20260730f"></script>
+<script src="js/shadow-frame-plugin.js?v=20260730f"></script>
+<script src="js/shadow-layout-defaults.js?v=20260730f"></script>
+<script src="js/shadow-scene-scale.js?v=20260730f"></script>
+<script src="js/shadow-layout-receiver.js?v=20260730f"></script>
+<script src="js/shadow-editor-plugin.js?v=20260730f"></script>
 </body>
 </html>
