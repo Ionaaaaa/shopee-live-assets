@@ -4,6 +4,14 @@
     <script src="js/shadow-editor-plugin.js"></script>
   （要放在 editor.html 自己內建那些 <script> 之後，這樣才抓得到 window.iframes）
 
+  ★ 2026-07-13 新增：商品 slot 可勾選「拍立得」，勾選後跳出 shadow-frame-plugin.js
+    的調整彈窗（水平/垂直/縮放/照片旋轉），套用後把框+照片壓平成一張 PNG，
+    直接取代這個 slot 的圖片──下游（ShadowPlugin 貼地陰影、1200 畫布縮放/旋轉、
+    匯出）完全不用改，因為壓平後就是一張普通的商品圖，跟去背 PNG 走同一條管線。
+    取消勾選會還原成套框之前的原圖（原圖存在 state.slotOriginal，只在第一次
+    勾選時記一次，之後重複開關不會被壓平圖覆蓋掉）。
+    依賴：shadow-frame-plugin.js 要在這支檔案「之前」載入。
+
   這支 plugin 會：
   1. 掛載到 #shadow-editor-mount（通常放在「商品／人物 陰影」確認 popup 裡）；
      找不到的話退回掛在 #sidebar-scroll，維持舊行為
@@ -20,7 +28,7 @@
 */
 (function () {
   'use strict';
-  console.log('%c[shadow-editor-plugin.js] 版本確認：2026-07-06-v2（含combo廣播＋商品比例功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+  console.log('%c[shadow-editor-plugin.js] 版本確認：2026-07-13-v3（含combo廣播＋商品比例＋拍立得框切換）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
 
   // 對應公版工單 M20:M24
   var SLOT_DEFS = [
@@ -44,6 +52,8 @@
     bgDataUrl: null,
     slots: {}, // slotId -> dataUrl
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
+    polaroid: {}, // slotId -> true/false，這個 slot 目前是不是「已套拍立得框」的狀態
+    slotOriginal: {}, // slotId -> dataUrl，套框之前的原圖（只在第一次勾選時記錄，取消勾選時拿來還原）
     order: []  // 手動疊放順序：陣列前面＝後方，後面＝前方；也是左側清單的顯示順序來源（清單上面＝最前面，所以顯示時要反過來）
   };
   var activeSlotId = null;
@@ -74,6 +84,8 @@
       bgDataUrl: state.bgDataUrl,
       slots: Object.assign({}, state.slots),
       slotRatios: Object.assign({}, state.slotRatios),
+      polaroid: Object.assign({}, state.polaroid),
+      slotOriginal: Object.assign({}, state.slotOriginal),
       enabled: currentCombo().enabled.slice(),
       order: state.order.slice(),
       activeSlotId: activeSlotId,
@@ -107,9 +119,13 @@
       '.lc-thumb{width:44px;height:44px;border-radius:6px;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center;flex-shrink:0;}' +
       '.lc-thumb img{width:100%;height:100%;object-fit:contain;}' +
       '.lc-thumb .lc-plus{font-size:18px;color:var(--text-dim);}' +
-      '.lc-meta{font-size:12px;color:var(--text);}' +
+      '.lc-meta{font-size:12px;color:var(--text);flex:1;min-width:0;}' +
       '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
-      '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}';
+      '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
+      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
+      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
+      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
+      '.lc-frame-row a:hover{text-decoration:underline;}';
     document.head.appendChild(style);
   }
 
@@ -133,7 +149,7 @@
             '</div>' +
           '</div>' +
           '<div class="lc-field">' +
-            '<label>素材（拖曳可移動，右上角 × 可刪除）</label>' +
+            '<label>素材（拖曳可移動，右上角 × 可刪除；商品可勾選「拍立得」套白框）</label>' +
             '<div class="lc-slotbar" id="lc-slotbar"></div>' +
           '</div>' +
         '</div>' +
@@ -196,7 +212,7 @@
     return inp;
   }
 
-  // 共用：把已經拿到的 dataURL 套進某個 slot（不管來源是檔案上傳、URL 抓圖、或外部 API 呼叫）
+  // 共用：把已經拿到的 dataURL 套進某個 slot（不管來源是檔案上傳、URL 抓圖、或拍立得壓平結果）
   // ratio：0~1 的比例（來自 Excel「(商品)比例」欄位），只在這個 slot 第一次被加入時生效；
   //        不是每次呼叫都要帶，沒有就維持原本行為（100%，不縮小）
   function applySlotDataUrl(slotId, dataUrl, ratio){
@@ -212,7 +228,13 @@
 
   function loadSlotFile(slotId, file, ratio){
     var reader = new FileReader();
-    reader.onload = function(ev){ applySlotDataUrl(slotId, ev.target.result, ratio); };
+    reader.onload = function(ev){
+      /* 換一張全新的圖時，之前記錄的「套框原圖」就不對應這張新圖了，要清掉，
+         不然下次取消勾選拍立得，會還原成上一張圖，而不是這次剛上傳的這張 */
+      delete state.polaroid[slotId];
+      delete state.slotOriginal[slotId];
+      applySlotDataUrl(slotId, ev.target.result, ratio);
+    };
     reader.readAsDataURL(file);
   }
 
@@ -226,10 +248,14 @@
         c.width = img.naturalWidth; c.height = img.naturalHeight;
         c.getContext('2d').drawImage(img, 0, 0);
         var dataUrl = c.toDataURL('image/png');
+        delete state.polaroid[slotId];
+        delete state.slotOriginal[slotId];
         applySlotDataUrl(slotId, dataUrl);
         if (cb) cb(true);
       } catch(e){
         // CORS 等問題：退回直接用路徑（本機同源資料夾通常不會遇到）
+        delete state.polaroid[slotId];
+        delete state.slotOriginal[slotId];
         applySlotDataUrl(slotId, url);
         if (cb) cb(true);
       }
@@ -238,8 +264,45 @@
     img.src = url;
   }
 
+  /* ── 拍立得框：勾選/取消勾選、重新調整 ──
+     依賴 window.ShadowFramePlugin（見 shadow-frame-plugin.js），沒載入的話會在
+     console 警告並直接跳過，不會噴錯讓整個 plugin 掛掉。 */
+  function togglePolaroid(slotId, on){
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl) return;
+    if (typeof window.ShadowFramePlugin === 'undefined' || !window.ShadowFramePlugin.open){
+      console.warn('shadow-editor-plugin: 找不到 ShadowFramePlugin，請確認 shadow-frame-plugin.js 已在這支檔案之前載入');
+      renderSlotBar(); // 把 checkbox 視覺狀態轉回目前實際的 state.polaroid（避免卡在使用者剛點的樣子）
+      return;
+    }
+    if (on){
+      if (!state.slotOriginal[slotId]) state.slotOriginal[slotId] = dataUrl; // 只在第一次勾選時記錄原圖
+      // 彈窗是非同步的（使用者可能取消），先把 checkbox 視覺復原成未勾選，
+      // 等使用者真的按下「套用」、flatten 完成後才正式把 state.polaroid 設成 true
+      renderSlotBar();
+      window.ShadowFramePlugin.open(state.slotOriginal[slotId], function(flatDataUrl){
+        state.polaroid[slotId] = true;
+        applySlotDataUrl(slotId, flatDataUrl); // 沿用既有管線：壓平後就是普通商品圖，可貼地陰影、可在1200畫布縮放/旋轉
+      });
+    } else {
+      state.polaroid[slotId] = false;
+      var original = state.slotOriginal[slotId];
+      if (original) applySlotDataUrl(slotId, original);
+      else renderSlotBar();
+    }
+  }
+  function openFrameAdjust(slotId){
+    var original = state.slotOriginal[slotId] || state.slots[slotId];
+    if (!original || typeof window.ShadowFramePlugin === 'undefined' || !window.ShadowFramePlugin.open) return;
+    window.ShadowFramePlugin.open(original, function(flatDataUrl){
+      applySlotDataUrl(slotId, flatDataUrl);
+    });
+  }
+
   function removeSlot(slotId){
     delete state.slots[slotId];
+    delete state.polaroid[slotId];
+    delete state.slotOriginal[slotId];
     broadcastToAllFrames({ type:'LC_REMOVE_SLOT', slotId: slotId });
     setSelection(selectedIds.filter(function(id){ return id !== slotId; }));
     renderSlotBar();
@@ -255,6 +318,8 @@
     if(saved.combo && COMBOS[saved.combo]) state.combo = saved.combo;
     state.slots = Object.assign({}, saved.slots || {});
     state.slotRatios = Object.assign({}, saved.slotRatios || {});
+    state.polaroid = Object.assign({}, saved.polaroid || {});
+    state.slotOriginal = Object.assign({}, saved.slotOriginal || {});
     if(saved.angle) state.angle = saved.angle;
 
     /* 疊放順序：優先用存檔裡記的順序，過濾掉目前版型不會用到的 id，
@@ -278,12 +343,12 @@
          sendFullStateTo() 只會針對「這次有值」的插槽送 LC_UPSERT_SLOT，
          不會主動清掉「上次留下來、這次沒提到」的舊插槽；而版位端的
          upsertSlot() 遇到「這個插槽已經存在」時，只會換圖片、刻意保留舊的
-         位置/大小（設計上是為了不要洗掉使用者手動拖曳調整過的結果）。
-         這兩個行為疊在一起，在「切分頁／上傳暫存／整包下載跑完復原」這種
-         整批換成另一份資料的情境下，就會變成：某個商品插槽的圖片換了，
-         但位置還停在『上一份資料』留下的舊位置，看起來像多了一套、或是
-         有商品卡在不該出現的地方。清空重建可以確保每次完整還原時，
-         套用的都是這份存檔本身該有的預設位置。 */
+         位置/大小（讓使用者手動拖曳調整過的結果不會被換圖沖掉）。
+         但這個「保留舊位置」的假設，只在『同一份資料裡換圖』時成立；換成
+         另一份完全不同的資料（切分頁／上傳暫存／整包下載跑完復原）時，
+         舊位置反而是錯的、對不上這份新資料，會變成插槽位置卡在
+         不該出現的地方，看起來像多了一套、或是有商品卡在不該出現的地方。
+         清空重建可以確保每次完整還原時，套用的都是這份存檔本身該有的預設位置。 */
       if(ifr && ifr.contentWindow) ifr.contentWindow.postMessage({ type:'LC_RESET_SLOTS' }, '*');
       sendFullStateTo(ifr);
     });
@@ -350,6 +415,37 @@
       var meta = document.createElement('div');
       meta.className = 'lc-meta';
       meta.innerHTML = def.label + '<span class="lc-tag">' + (def.type==='person' ? '人物・光暈陰影' : '商品・貼地陰影') + '</span>';
+
+      // 商品類、而且已經有圖：加「拍立得」勾選（人物類先不開放——人物走頭部定位邏輯，
+      // 套框後整張圖的形狀跟頭部偵測會對不上，之後真的有需求再另外處理）
+      if (def.type === 'product' && state.slots[def.id]){
+        var frameRow = document.createElement('div');
+        frameRow.className = 'lc-frame-row';
+        frameRow.addEventListener('click', function(e){ e.stopPropagation(); }); // 別讓點擊冒泡去觸發 box 的選取/上傳邏輯
+
+        var cbId = 'lc-polaroid-' + def.id;
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = cbId;
+        cb.checked = !!state.polaroid[def.id];
+        cb.addEventListener('change', function(){ togglePolaroid(def.id, cb.checked); });
+        frameRow.appendChild(cb);
+
+        var cbLabel = document.createElement('label');
+        cbLabel.setAttribute('for', cbId);
+        cbLabel.style.cursor = 'pointer';
+        cbLabel.textContent = '拍立得';
+        frameRow.appendChild(cbLabel);
+
+        if (state.polaroid[def.id]){
+          var adjustLink = document.createElement('a');
+          adjustLink.textContent = '調整';
+          adjustLink.addEventListener('click', function(e){ e.stopPropagation(); openFrameAdjust(def.id); });
+          frameRow.appendChild(adjustLink);
+        }
+        meta.appendChild(frameRow);
+      }
+
       box.appendChild(meta);
 
       box.addEventListener('click', function(e){
@@ -453,6 +549,10 @@
     setSlotFromUrl: loadSlotFromUrl,     // setSlotFromUrl(slotId, url, cb) → cb(found:boolean)
     removeSlot: removeSlot,
     refreshUI: renderSlotBar,
+    /* 拍立得框：給外部（例如匯入工單時想預設某些商品直接套框）呼叫 */
+    setPolaroid: togglePolaroid,         // setPolaroid(slotId, true|false)
+    isPolaroid: function(slotId){ return !!state.polaroid[slotId]; },
+    openFrameAdjust: openFrameAdjust,    // openFrameAdjust(slotId) → 重新打開調整彈窗
     /* 暫存模式：匯入工單時用，先比對／填格子但不廣播，等使用者在 popup 裡按確認才 commit() */
     enterPending: function(){ pendingMode = true; },
     isPending: function(){ return pendingMode; },

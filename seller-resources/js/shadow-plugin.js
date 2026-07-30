@@ -1,7 +1,16 @@
 /*
-  ShadowPlugin v3
+  ShadowPlugin v4
   - 商品(product)：貼地陰影（原本的斜切/擠壓效果），參數固定好，不對外開放調整，只留光源角度可切換
   - 代言人(person)：光暈陰影（不倒地、後方縮小微變形+模糊），允許超出畫布下緣
+
+  ★ 2026-07-13 新增：state.rot（旋轉角度，單位度，選填，預設0）
+    做法沿用阿謙 rotate-plugin.js 的「旋轉解耦」原則：旋轉只發生在「畫出來的視覺」，
+    不影響任何拖曳/縮放判定──shadow-layout-receiver.js 那邊的 itemBounds/控制點/
+    拖曳數學完全不用因為加了旋轉而改寫，一律照原本的軸對齊矩形算，只有真正呼叫
+    ctx.drawImage 之前才用 ctx.rotate() 把「陰影+照片」這個整體繞著自己的中心點轉過去。
+    影響範圍：drawGroundShadow / drawPersonGlow / renderPhotosOnly，
+    以及 renderScene 裡拿去算「誰擋住誰」的遮罩繪製（不轉的話，旋轉過的商品，
+    遮罩範圍會對不上實際畫出來的形狀，後面商品的陰影/光暈可能該被擋住的地方沒被擋住）。
 */
 window.ShadowPlugin = (function () {
   'use strict';
@@ -18,6 +27,7 @@ window.ShadowPlugin = (function () {
   var opts = { angle: ANGLE_PRESETS.left, topY: null, bottomY: null };
   var products = {}; // id -> { img, silhouette, tinted, trim, type }
   var shadowRGB = '90,90,90';
+  var rawBgRGB = null; // 未乘0.8的原始背景取樣色，供拍立得框底色使用；還沒 setBackground 過就是 null
   var fixedColor = false;
 
   function setAngle(preset) {
@@ -45,13 +55,17 @@ window.ShadowPlugin = (function () {
       var d = cctx.getImageData(0, 0, 40, 40).data;
       var r = 0, g = 0, b = 0, n = 0;
       for (var i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-      r = (r / n) * 0.8; g = (g / n) * 0.8; b = (b / n) * 0.8;
-      shadowRGB = Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b);
+      r = r / n; g = g / n; b = b / n;
+      /* 原始平均色（沒乘0.8）另外留一份給拍立得框底色用（getRawBackgroundRGB）——
+         shadowRGB 是刻意調暗過的貼地陰影顏色，直接拿來當拍立得的紙底色會髒髒暗暗的，不對。 */
+      rawBgRGB = Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b);
+      shadowRGB = Math.round(r * 0.8) + ',' + Math.round(g * 0.8) + ',' + Math.round(b * 0.8);
     } catch (e) {
       console.warn('ShadowPlugin.setBackground: 無法取樣背景顏色，改用預設色', e);
     }
     Object.keys(products).forEach(function (id) { tintProduct(id); });
   }
+  function getRawBackgroundRGB() { return rawBgRGB; }
 
   function buildSilhouette(img) {
     var c = document.createElement('canvas');
@@ -144,6 +158,18 @@ window.ShadowPlugin = (function () {
     targetCtx.restore();
   }
 
+  /* 旋轉輔助：繞 (cx,cy) 把 ctx 轉 rotDeg 度，執行 fn()，再還原。
+     rotDeg 為 0 或 undefined 時直接呼叫 fn()，不做多餘的 save/restore。 */
+  function withRotation(ctx, cx, cy, rotDeg, fn) {
+    if (!rotDeg) { fn(); return; }
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotDeg * Math.PI / 180);
+    ctx.translate(-cx, -cy);
+    fn();
+    ctx.restore();
+  }
+
   // ---- 商品：貼地陰影（原本效果，參數已固定） ----
   function drawGroundShadow(ctx, id, state, occluderMask, skipPhoto) {
     var p = products[id];
@@ -161,54 +187,63 @@ window.ShadowPlugin = (function () {
        壓扁後影子的可視範圍反而懸空浮在商品下方（PNG 留白比例小的圖幾乎看不出來，比例大的就會明顯脫開）。 */
     var shadowGroundY = state.y + trimBottomPad * squash;
 
-    var angle = opts.angle * Math.PI / 180;
-    var soft = FIXED.soft;
-    var fadeMul = FIXED.fade / 100;
-    var occludeStrength = FIXED.occlude / 100;
-    var shear = Math.tan(angle * 0.55);
-    var maxSpread = soft * 1.8;
+    /* 旋轉樞紐：整個item（陰影+照片）的視覺中心點，跟 shadow-layout-receiver.js
+       的軸對齊選取框中心一致（旋轉解耦：拖曳/縮放判定用的是不旋轉的框，
+       這裡只是「畫出來的時候」繞著同一個中心轉過去，兩邊的中心點定義要一致，
+       不然畫面上看到的旋轉中心會跟選取框/旋轉把手的視覺位置對不上） */
+    var pivotX = cx, pivotY = state.y - ph / 2;
+    var rot = state.rot || 0;
 
-    var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
-    var tempW = Math.ceil(halfW * 2);
-    var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
-    var anchorX = halfW;
-    var anchorY = Math.ceil(tempH * 0.5);
+    withRotation(ctx, pivotX, pivotY, rot, function () {
+      var angle = opts.angle * Math.PI / 180;
+      var soft = FIXED.soft;
+      var fadeMul = FIXED.fade / 100;
+      var occludeStrength = FIXED.occlude / 100;
+      var shear = Math.tan(angle * 0.55);
+      var maxSpread = soft * 1.8;
 
-    var tmp = document.createElement('canvas');
-    tmp.width = tempW; tmp.height = tempH;
-    var tctx = tmp.getContext('2d');
+      var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
+      var tempW = Math.ceil(halfW * 2);
+      var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
+      var anchorX = halfW;
+      var anchorY = Math.ceil(tempH * 0.5);
 
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
+      var tmp = document.createElement('canvas');
+      tmp.width = tempW; tmp.height = tempH;
+      var tctx = tmp.getContext('2d');
 
-    if (occludeStrength > 0 && occluderMask) {
-      tctx.save();
-      tctx.globalCompositeOperation = 'destination-out';
-      tctx.globalAlpha = occludeStrength;
-      tctx.drawImage(occluderMask, -(cx - anchorX), -(shadowGroundY - anchorY));
-      tctx.restore();
-    }
+      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
+      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
+      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
 
-    var tipX = -shear * ph * fadeMul;
-    var tipY = -squash * ph * fadeMul - soft * 0.6;
-    tctx.globalCompositeOperation = 'destination-in';
-    var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
-    grad.addColorStop(0, 'rgba(255,255,255,1)');
-    grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    tctx.fillStyle = grad;
-    tctx.fillRect(0, 0, tempW, tempH);
-    tctx.globalCompositeOperation = 'source-over';
+      if (occludeStrength > 0 && occluderMask) {
+        tctx.save();
+        tctx.globalCompositeOperation = 'destination-out';
+        tctx.globalAlpha = occludeStrength;
+        tctx.drawImage(occluderMask, -(cx - anchorX), -(shadowGroundY - anchorY));
+        tctx.restore();
+      }
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(tmp, cx - anchorX, shadowGroundY - anchorY);
-    ctx.restore();
+      var tipX = -shear * ph * fadeMul;
+      var tipY = -squash * ph * fadeMul - soft * 0.6;
+      tctx.globalCompositeOperation = 'destination-in';
+      var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
+      grad.addColorStop(0, 'rgba(255,255,255,1)');
+      grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      tctx.fillStyle = grad;
+      tctx.fillRect(0, 0, tempW, tempH);
+      tctx.globalCompositeOperation = 'source-over';
 
-    if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
-      ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
-    }
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(tmp, cx - anchorX, shadowGroundY - anchorY);
+      ctx.restore();
+
+      if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
+        ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
+      }
+    });
   }
 
   // ---- 代言人：光暈陰影（不倒地、後方縮小+微變形+模糊，可超出畫布下緣；跟隨主光源方向；碰到商品變透明） ----
@@ -221,41 +256,46 @@ window.ShadowPlugin = (function () {
     var trimBottomPad = p.trim ? p.trim.bottom * ph : 0;
     var py = state.y + trimBottomPad;
 
-    var angle = opts.angle * Math.PI / 180;
-    var shear = Math.tan(angle * 0.55);
+    var pivotX = cx, pivotY = state.y - ph / 2;
+    var rot = state.rot || 0;
 
-    var glowScale = 0.93;
-    var offsetX = -shear * ph * 0.08;  // 離人物更近一點
-    var offsetY = ph * 0.018 + Math.abs(shear) * ph * 0.008;
-    var deformX = 0.97, deformY = 1.03;
-    var blurPx = Math.max(6, Math.round(pw * 0.035)); // 更模糊
-    var alpha = 0.24; // 更淡
+    withRotation(ctx, pivotX, pivotY, rot, function () {
+      var angle = opts.angle * Math.PI / 180;
+      var shear = Math.tan(angle * 0.55);
 
-    var gw = pw * glowScale * deformX;
-    var gh = ph * glowScale * deformY;
-    var gx = cx + offsetX;
-    var gy = py + offsetY;
+      var glowScale = 0.93;
+      var offsetX = -shear * ph * 0.08;
+      var offsetY = ph * 0.018 + Math.abs(shear) * ph * 0.008;
+      var deformX = 0.97, deformY = 1.03;
+      var blurPx = Math.max(6, Math.round(pw * 0.035));
+      var alpha = 0.24;
 
-    var tmp = document.createElement('canvas');
-    tmp.width = ctx.canvas.width; tmp.height = ctx.canvas.height;
-    var tctx = tmp.getContext('2d');
-    tctx.filter = 'blur(' + blurPx + 'px)';
-    tctx.globalAlpha = alpha;
-    tctx.drawImage(p.silhouette, gx - gw / 2, gy - gh, gw, gh);
-    tctx.filter = 'none';
+      var gw = pw * glowScale * deformX;
+      var gh = ph * glowScale * deformY;
+      var gx = cx + offsetX;
+      var gy = py + offsetY;
 
-    if (occluderMask) {
-      tctx.globalAlpha = 1;
-      tctx.globalCompositeOperation = 'destination-out';
-      tctx.drawImage(occluderMask, 0, 0);
-      tctx.globalCompositeOperation = 'source-over';
-    }
+      var tmp = document.createElement('canvas');
+      tmp.width = ctx.canvas.width; tmp.height = ctx.canvas.height;
+      var tctx = tmp.getContext('2d');
+      tctx.filter = 'blur(' + blurPx + 'px)';
+      tctx.globalAlpha = alpha;
+      tctx.drawImage(p.silhouette, gx - gw / 2, gy - gh, gw, gh);
+      tctx.filter = 'none';
 
-    ctx.drawImage(tmp, 0, 0);
+      if (occluderMask) {
+        tctx.globalAlpha = 1;
+        tctx.globalCompositeOperation = 'destination-out';
+        tctx.drawImage(occluderMask, 0, 0);
+        tctx.globalCompositeOperation = 'source-over';
+      }
 
-    if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
-      ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
-    }
+      ctx.drawImage(tmp, 0, 0);
+
+      if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
+        ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
+      }
+    });
   }
 
   function drawItem(ctx, id, state, occluderMask, skipPhoto) {
@@ -268,6 +308,7 @@ window.ShadowPlugin = (function () {
   function renderScene(ctx, items, skipPhoto) {
     // 給「代言人光暈」用的完整遮罩：所有商品 + 所有代言人本身的輪廓都算進去，
     // 這樣不管是碰到商品、還是兩個代言人互相重疊，重疊處的光暈都會消失
+    // （旋轉過的 item 也要把輪廓畫在正確的旋轉後位置，遮罩才會準）
     var personGlowMask = document.createElement('canvas');
     personGlowMask.width = ctx.canvas.width;
     personGlowMask.height = ctx.canvas.height;
@@ -277,7 +318,10 @@ window.ShadowPlugin = (function () {
       if (p && p.silhouette) {
         var pad = p.trim ? p.trim.bottom * state.h : 0;
         var py = state.y + pad;
-        pgctx.drawImage(p.silhouette, state.x - state.w / 2, py - state.h, state.w, state.h);
+        var pivotY = state.y - state.h / 2;
+        withRotation(pgctx, state.x, pivotY, state.rot || 0, function () {
+          pgctx.drawImage(p.silhouette, state.x - state.w / 2, py - state.h, state.w, state.h);
+        });
       }
     });
 
@@ -298,7 +342,10 @@ window.ShadowPlugin = (function () {
       if (p && p.silhouette && !isPerson) {
         var pad = p.trim ? p.trim.bottom * state.h : 0;
         var py = state.y + pad;
-        rmctx.drawImage(p.silhouette, state.x - state.w / 2, py - state.h, state.w, state.h);
+        var pivotY = state.y - state.h / 2;
+        withRotation(rmctx, state.x, pivotY, state.rot || 0, function () {
+          rmctx.drawImage(p.silhouette, state.x - state.w / 2, py - state.h, state.w, state.h);
+        });
       }
     });
   }
@@ -313,7 +360,10 @@ window.ShadowPlugin = (function () {
       var cx = state.x;
       var trimBottomPad = p.trim ? p.trim.bottom * ph : 0;
       var py = state.y + trimBottomPad;
-      ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
+      var pivotY = state.y - ph / 2;
+      withRotation(ctx, cx, pivotY, state.rot || 0, function () {
+        ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
+      });
     });
   }
 
@@ -322,6 +372,7 @@ window.ShadowPlugin = (function () {
     setAngle: setAngle,
     configureZone: configureZone,
     setBackground: setBackground,
+    getRawBackgroundRGB: getRawBackgroundRGB,
     setShadowColorRGB: setShadowColorRGB,
     getShadowColorRGB: getShadowColorRGB,
     unlockShadowColor: unlockShadowColor,

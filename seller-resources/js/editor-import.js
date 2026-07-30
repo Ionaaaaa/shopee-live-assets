@@ -223,6 +223,7 @@ function confirmImport(){
     var flSlotEl = document.getElementById('fl-product-slot');
     if(flSlotEl) flSlotEl.value = groupData.flProductSlot || '';
     if(typeof ccFl === 'function') ccFl(); // 匯入完，字數上限/字數顯示要重新算一次
+    if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility(); // 「不製作」時要隱藏FL文案欄位＋畫布區的FL canvas
 
     var hostMatched = matchAndApplyHostFiles(st.assetFiles, groupData);
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched){
@@ -272,26 +273,63 @@ function tabLabelFor(g, i){
   return '第'+(i+1)+'天';
 }
 
+/* 直播間FL 版型對照表：動態掃整張表找「版型/商品/LOGO/案型」那一列表頭，
+   往下讀到M欄空白為止，建出「版型名稱 → 需不需要商品/LOGO/案型」的查表。
+   不寫死列號、不寫死版型清單——之後在Excel裡新增/修改版型列，這裡都自動吃得到，
+   不用再改程式碼（跟本專案「調一次、全部套用」原則一致）。 */
+function buildFlVariantMap(rows){
+  var map = {};
+  var skipRows = {}; // 版型對照表本身佔用的列號，這些列不能落到下面一般 fieldMap 處理
+  for(var i=0;i<rows.length;i++){
+    var row = rows[i];
+    if(row[12] === '版型' && row[13] === '商品' && row[14] === 'LOGO' && row[15] === '案型'){
+      skipRows[i] = true; // 表頭那一列
+      for(var j=i+1;j<rows.length;j++){
+        var r = rows[j];
+        var name = r[12];
+        if(name === undefined || name === null || String(name).trim() === '') break;
+        skipRows[j] = true;
+        /* 注意：對照表的版型名稱（例如「LOGO」）剛好會撞到上面 fieldMap 的
+           'LOGO':'logoName' 這種鍵值——如果不把這幾列標記起來提早跳過，
+           下面一般欄位解析會把這裡的 0/1 數字誤當成 logoName 寫進去，
+           把真正的 LOGO 欄位值（M13/N13）覆蓋掉 */
+        map[String(name).trim()] = {
+          needsProduct: Number(r[13]) === 1,
+          needsLogo:    Number(r[14]) === 1,
+          needsCaption: Number(r[15]) === 1
+        };
+      }
+      break;
+    }
+  }
+  return { map: map, skipRows: skipRows };
+}
+
 function parseWorkorderGroups(rows){
   var groups = [];
   /* 先放一個「隱含分組」：像「公版」這種格式沒有款式當開頭標記，
      整張表就是一組資料，最後如果完全沒填到任何欄位會被下面 filter 掉，不影響原本多天格式 */
   var current = {};
   groups.push(current);
+  var flVariantInfo = buildFlVariantMap(rows); // 整張表只需建一次查表
+  var flVariantMap = flVariantInfo.map;
+  var flTableSkipRows = flVariantInfo.skipRows;
   var fieldMap = {'主標':'main','副標':'sub','日期':'date','時間':'time','素材路徑':'hostPath','版型':'combo',
     '購物專家':'brandName',
     '人物1':'host1Name','人物2':'host2Name',
     '主持人':'host1Name','來賓':'host2Name',
     '商品1':'product1Name','商品2':'product2Name','商品3':'product3Name','LOGO':'logoName',
-    'FL文案':'flText','FL文案(6字)':'flText','FL文案(5字)':'flText',
-    'FL商品':'flProductSlot',
     '指定色號':'bgColor','指定色碼':'bgColor','背景色碼':'bgColor'};
 
-  rows.forEach(function(row){
-    var mVal = row[12]; // M 欄 index 12
-    var nVal = row[13]; // N 欄 index 13
-    var aVal = row[0];  // A 欄 index 0
-    /* 遇到「款式」，如果目前這組已經有資料了，代表是下一組新的開始 */
+  rows.forEach(function(row, idx){
+    /* 版型對照表（不製作/LOGO/商品+案型5字內/純案型6字內 那幾列）整段跳過，
+       不能讓它們落到下面「款式」判斷或一般 fieldMap 解析——
+       表裡剛好有一列 M欄='LOGO'，會撞到 fieldMap 的 'LOGO':'logoName'，
+       把真正的LOGO欄位值誤蓋成對照表裡的 0/1 數字 */
+    if(flTableSkipRows[idx]) return;
+    var mVal = row[12];
+    var nVal = row[13];
+    var aVal = row[0];
     if(mVal === '款式' && Object.keys(current).length > 0){
       current = {};
       groups.push(current);
@@ -305,58 +343,97 @@ function parseWorkorderGroups(rows){
     if(current && mVal === '版型' && aVal === '檔名'){
       return;
     }
-    /* ── 直播間FL：特殊格式，一列讀 N/O/P 三欄 ──
-       M欄 = 「直播間FL」
-       N欄 = 是否放商品（TRUE/FALSE 或 勾選 checkbox）
-       O欄 = 商品slot代號（「商品1」/「商品2」/「商品3」），版型P時才有意義
-       P欄 = 文案內容（「LOGO」→版型L；一般文案→版型T或P）
-       優先級：P欄填「LOGO」→ 永遠版型L，不管N欄有沒有勾商品
-               P欄是一般文案 + N欄=TRUE → 版型P
-               P欄是一般文案 + N欄=FALSE/空 → 版型T               */
+    /* ── 直播間FL：只看右側表單，左側「是否製作」(H欄)/數量(總製作內容列的數字) 已不採用 ──
+       這一列（M欄=「直播間FL」）：
+         O欄 = 版型，值是「不製作」／「LOGO」／「商品 + 案型5字內」／「純案型6字內」四選一，
+               對照 buildFlVariantMap() 建出的表，決定這次是否要做FL、做的話需不需要商品/LOGO/案型
+       下一列（M欄通常空白）：
+         N欄 = 商品(1/2/3)，只有查表結果 needsProduct 時才讀
+         O欄 = LOGO，這裡不用額外解析——LOGO本身已經由上面「LOGO」欄位（M13/N13）
+               寫進 current.logoName，這一格只是版型說明用的標籤
+         P欄 = 案型文字，只有查表結果 needsCaption 時才讀，字數上限依 needsProduct
+               決定是5字（商品+案型5字內）還是6字（純案型6字內），跟側欄 ccFl() 邏輯一致 */
     if(current && String(mVal||'').trim() === '直播間FL'){
-      var flRawN = row[13]; // N欄：是否放商品
-      var flRawO = row[14]; // O欄：商品slot（商品1/2/3）
-      var flRawP = row[15]; // P欄：文案
-      var flText = flRawP !== undefined && flRawP !== null ? String(flRawP).trim() : '';
-      var flIsLogoKeyword = flText.toLowerCase() === 'logo';
+      var variantName = row[14] !== undefined && row[14] !== null ? String(row[14]).trim() : '';
+      var variantDef = flVariantMap[variantName];
 
-      /* banwords規範（自動補$、補千分位逗號等）平常只在使用者手動輸入、
-         欄位blur時才會跑（見 bn-state-plugin.js 的 applyBanwordToInput）。
-         Excel匯入是直接把儲存格值寫進欄位，不會觸發blur，所以原本補上去的
-         逗號完全沒被算進字數——裸數字「5000」匯入時是4個半形字=2字，
-         但畫面上實際顯示、使用者手動輸入時都會變成「$5,000」（多一個$、
-         一個逗號，一樣是半形符號，各算0.5字，變成3字）。這裡在判斷字數上限
-         之前，先用同一套banwords引擎跑過一次，確保匯入當下算的字數，
-         跟最終實際顯示出來的字數一致，不會匯入時沒超標、一顯示卻超標。 */
-      if(flText && !flIsLogoKeyword && window.banwordEngine && typeof window.banwordEngine.transformText === 'function'){
-        try{
-          var bwResult = window.banwordEngine.transformText(flText, '文案', {});
-          if(bwResult && bwResult.text !== undefined) flText = bwResult.text;
-        }catch(e){}
-      }
-
-      /* 商品slot：只在版型P時有意義（文案不是LOGO、且N欄有勾選） */
-      var flHasProduct = flRawN === true || String(flRawN||'').trim().toUpperCase() === 'TRUE';
-      var willBeProductVariant = flHasProduct && !flIsLogoKeyword && flRawO;
-
-      /* 版型P（商品+文案）文案上限5字，跟側欄 ccFl() 的限制一致。
-         之前這裡完全沒做長度檢查，Excel填多長就整段吃進去，版位上其實是被
-         畫布裁切看不出來，等於「靜默截斷」使用者卻不知道──現在改成匯入當下
-         就直接裁到5個字，並跳toast提醒，問題在匯入那一刻就看得到，不用等
-         畫布上比對才發現跟工單填的不一樣。 */
-      if(willBeProductVariant && weightedTextLen(flText) > 5){
-        var _flTextFull = flText;
-        flText = truncateToWeightedLen(flText, 5);
-        if(typeof toast === 'function'){
-          toast('直播間FL文案「'+_flTextFull+'」超過5字上限，已自動截斷為「'+flText+'」', 'err', 4000);
+      /* 版型是「不製作」就直接跳過，不用特別提醒。
+         但如果版型名稱不在對照表裡（例如打成「案型6字內」，
+         跟對照表M35:P39正式名稱「純案型6字內」少一個字對不起來），
+         這種情況跟「不製作」在結果上一樣都是不產出FL，但成因完全不同——
+         前者是使用者刻意選擇，後者是打字/選錯，不該悄悄跳過讓人以為FL
+         「讀不到文案」，要跳toast講清楚是版型名稱對不上，才好debug */
+      if(!variantDef){
+        current.flSkip = true;
+        delete current.flText;
+        current.flProductSlot = 'skip'; // 讓側欄「FL ICON」下拉選單正確顯示「不製作」被選中
+        if(variantName && typeof toast === 'function'){
+          toast('直播間FL版型「'+variantName+'」在對照表裡找不到，已視為不製作，請確認跟對照表(M35:P39)的版型名稱完全一致', 'err', 5000);
         }
+        return;
+      }
+      if(variantName === '不製作'){
+        current.flSkip = true;
+        delete current.flText;
+        current.flProductSlot = 'skip';
+        return;
+      }
+      current.flSkip = false;
+
+      var nextRow = rows[idx+1] || [];
+
+      /* 版型需要LOGO時，把 txt-fl 寫成「logo」這個關鍵字——
+         畫布那邊（editor-utils.js 的 ccFl()、editor-logo2-canvas.js）
+         判斷「現在是不是純Logo版型」的方式，就是看 txt-fl 欄位文字是不是
+         剛好等於「logo」，沿用這個既有機制，不用去改下游程式碼。
+         同時也把 flProductSlot 設成 'logo'，讓匯入後側欄「FL ICON」下拉選單
+         正確顯示「LOGO」被選中（選單本身現在也認得這個值，見 editor.html/
+         editor-utils.js 的 handleFlSlotChange()），不會停在「純文案」看起來對不上 */
+      if(variantDef.needsLogo){
+        current.flText = 'logo';
+        current.flProductSlot = 'logo';
       }
 
-      if(flText) current.flText = flText;
-      if(willBeProductVariant){
-        var slotStr = String(flRawO).trim();
-        var slotNum = slotStr.replace(/[^123]/g,'').charAt(0); // 取第一個1/2/3數字
+      if(variantDef.needsProduct){
+        var slotStr = nextRow[13] !== undefined && nextRow[13] !== null ? String(nextRow[13]).trim() : '';
+        var slotNum = slotStr.replace(/[^123]/g,'').charAt(0);
         if(slotNum) current.flProductSlot = slotNum;
+      }
+
+      if(variantDef.needsCaption){
+        var flRawP = nextRow[15];
+        var flText = flRawP !== undefined && flRawP !== null ? String(flRawP).trim() : '';
+
+        /* banwords規範（自動補$、補千分位逗號等）平常只在使用者手動輸入、
+           欄位blur時才會跑（見 bn-state-plugin.js 的 applyBanwordToInput）。
+           Excel匯入是直接把儲存格值寫進欄位，不會觸發blur，所以原本補上去的
+           逗號完全沒被算進字數——裸數字「5000」匯入時是4個半形字=2字，
+           但畫面上實際顯示、使用者手動輸入時都會變成「$5,000」（多一個$、
+           一個逗號，一樣是半形符號，各算0.5字，變成3字）。這裡在判斷字數上限
+           之前，先用同一套banwords引擎跑過一次，確保匯入當下算的字數，
+           跟最終實際顯示出來的字數一致，不會匯入時沒超標、一顯示卻超標。 */
+        if(flText && window.banwordEngine && typeof window.banwordEngine.transformText === 'function'){
+          try{
+            var bwResult = window.banwordEngine.transformText(flText, '文案', {});
+            if(bwResult && bwResult.text !== undefined) flText = bwResult.text;
+          }catch(e){}
+        }
+
+        /* 商品+案型5字內 → 上限5字；純案型6字內 → 上限6字。
+           之前這裡完全沒做長度檢查，Excel填多長就整段吃進去，版位上其實是被
+           畫布裁切看不出來，等於「靜默截斷」使用者卻不知道──現在改成匯入當下
+           就直接裁到上限字數，並跳toast提醒，問題在匯入那一刻就看得到，不用等
+           畫布上比對才發現跟工單填的不一樣。 */
+        var capLimit = variantDef.needsProduct ? 5 : 6;
+        if(weightedTextLen(flText) > capLimit){
+          var _flTextFull = flText;
+          flText = truncateToWeightedLen(flText, capLimit);
+          if(typeof toast === 'function'){
+            toast('直播間FL文案「'+_flTextFull+'」超過'+capLimit+'字上限，已自動截斷為「'+flText+'」', 'err', 4000);
+          }
+        }
+
+        if(flText) current.flText = flText;
       }
       return;
     }

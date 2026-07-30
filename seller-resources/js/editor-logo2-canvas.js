@@ -389,8 +389,11 @@ function flPreviewRoundRect(ctx, x, y, w, h, r){
   ctx.closePath();
 }
 
-/* 目前這欄「直播間FL文案」是不是填 LOGO（不分大小寫、去頭尾空白） */
+/* 目前是不是LOGO模式：下拉選單選「LOGO」，或 txt-fl 文字打「logo」，兩種都算
+   （雙重保險，跟 editor-utils.js 的 ccFl() 用同一套判斷方式，不分大小寫、去頭尾空白） */
 function _flTextIsLogo(){
+  var slot = (document.getElementById('fl-product-slot') || {}).value || '';
+  if(slot === 'logo') return true;
   var raw = (document.getElementById('txt-fl') || {}).value || '';
   return raw.trim().toLowerCase() === 'logo';
 }

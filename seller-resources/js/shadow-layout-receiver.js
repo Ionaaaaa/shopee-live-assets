@@ -3,10 +3,19 @@
   給任何 layout 頁面（layouts/*.html）掛載用的共用模組。
 
   設計原則：這支模組「不」霸佔你的 canvas 或 draw()——它只負責：
-    1. 管理商品/主持人的素材狀態（上傳的圖、位置、縮放）
+    1. 管理商品/主持人的素材狀態（上傳的圖、位置、縮放、旋轉）
     2. 接收 editor 端 shadow-editor-plugin.js 廣播來的 postMessage
     3. 提供一個 drawItems(ctx) 函式，你在自己的 draw() 裡想畫的時候呼叫它
-    4. （選用）提供拖曳/縮放控制點互動，你決定要不要接上
+    4. （選用）提供拖曳/縮放/旋轉控制點互動，你決定要不要接上
+
+  ★ 2026-07-13 新增：旋轉功能（角落四個縮放控制點之外，選取單一項目時頂部會多一個
+    綠色旋轉把手）。設計沿用阿謙 rotate-plugin.js 的「旋轉解耦」原則：
+      旋轉「只」影響最後畫到 canvas 上的視覺效果（照片+貼地陰影/光暈一起轉），
+      完全不影響 itemBounds／拖曳／縮放控制點的判定邏輯──這些全部維持軸對齊矩形計算，
+      跟原本沒有旋轉功能時一模一樣。也就是說：先把商品縮放/擺到你要的大小位置，
+      再用旋轉把手轉角度，兩件事互不干擾，不會因為轉了角度之後縮放控制點就歪掉抓不準。
+    實際畫出旋轉效果的地方在 shadow-plugin.js（drawGroundShadow/drawPersonGlow 那邊
+    用 ctx.rotate 包起來），這支檔案只負責「使用者怎麼用滑鼠把角度轉出來、存到哪裡」。
 
   ── 全新的簡單版位（例如 lifestyle_lpbn.html）用法 ──
     <script src="../js/shadow-plugin.js"></script>
@@ -23,7 +32,7 @@
       }
 
       window.addEventListener('message', function(e){ receiver.handleMessage(e.data, draw); });
-      receiver.attachPointerEvents(draw); // 要拖曳/縮放控制點就接這行，不需要就不要呼叫
+      receiver.attachPointerEvents(draw); // 要拖曳/縮放/旋轉控制點就接這行，不需要就不要呼叫
       draw();
       parent.postMessage({ type:'LC_READY' }, '*');
     </script>
@@ -48,16 +57,25 @@
       var receiver = ShadowLayoutReceiver.create(canvas);
       window.addEventListener('message', function(e){ receiver.handleMessage(e.data, draw); });
 
-    是否要接拖曳/縮放控制點（attachPointerEvents）自行決定；如果這個版位的商品位置
+    是否要接拖曳/縮放/旋轉控制點（attachPointerEvents）自行決定；如果這個版位的商品位置
     是由「調一次、套用到全版位」的正規化座標機制決定、不需要使用者在這個版位上
     個別拖曳，就不用呼叫 attachPointerEvents。
 */
 window.ShadowLayoutReceiver = (function () {
   'use strict';
-  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-06-v2（含版型獨立位置＋商品比例功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-13-v3（含版型獨立位置＋商品比例＋旋轉功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+
+  var ROT_SNAP_DEG = 15; // 拖曳旋轉把手時按住 Shift 的吸附角度，跟阿謙 rotate-plugin.js 的 SNAP_DEG 一致
+
+  function normalizeDeg(deg){
+    deg = deg % 360;
+    if (deg > 180) deg -= 360;
+    if (deg <= -180) deg += 360;
+    return deg;
+  }
 
   function create(canvas){
-    var slots = {};        // slotId -> { x,y,w0,h0,scaleMul,tight:{tx,ty,tw,th}(0~1比例) }
+    var slots = {};        // slotId -> { x,y,w0,h0,scaleMul,rot,tight:{tx,ty,tw,th}(0~1比例) }
     var slotType = {};     // slotId -> 'person' | 'product'
     var enabledIds = [];   // 陣列順序＝手動疊放順序（前面＝後方，後面＝前方）
     var currentComboLetter = null; // 目前版型（A/B/C/D），來自 LC_SET_ENABLED 訊息的 combo 欄位，用來查 shadow-layout-defaults.js 裡對應版型的設定
@@ -174,9 +192,11 @@ window.ShadowLayoutReceiver = (function () {
     function getState(slotId){
       var s = slots[slotId];
       if (!s) return null;
-      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul };
+      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0 };
     }
     // 選取框／點擊判定用的範圍：優先用「有色部分」的緊密邊框，偵測失敗才退回整張圖範圍
+    // ★ 旋轉解耦：這裡永遠回傳「未旋轉」狀態下的軸對齊範圍，不管 s.rot 是多少都一樣，
+    //   拖曳/縮放/一般點擊判定全部沿用這個範圍，跟旋轉前完全一致
     function itemBounds(slotId){
       var s = slots[slotId];
       var fullW = s.w0*s.scaleMul, fullH = s.h0*s.scaleMul;
@@ -214,7 +234,8 @@ window.ShadowLayoutReceiver = (function () {
               x: cx + (s.x - cx) * scale,
               y: cy + (s.y - cy) * scale,
               w: s.w * scale,
-              h: s.h * scale
+              h: s.h * scale,
+              rot: s.rot // 旋轉角度不受縮放影響，原樣帶過去
             };
           });
         }
@@ -228,6 +249,12 @@ window.ShadowLayoutReceiver = (function () {
       } else if (validSelected.length > 1){
         drawGroupSelectionBox(ctx, validSelected);
       }
+    }
+
+    // 旋轉把手離選取框頂邊的距離、把手半徑，統一算式跟 hitTestRotateHandle 共用
+    function rotateHandlePos(b){
+      var offset = Math.max(24, canvas.width*0.03);
+      return { x: (b.left+b.right)/2, y: b.top - offset };
     }
 
     function drawSelectionBox(ctx, slotId){
@@ -249,10 +276,46 @@ window.ShadowLayoutReceiver = (function () {
         ctx.rect(c[0]-hs/2, c[1]-hs/2, hs, hs);
         ctx.fill(); ctx.stroke();
       });
+
+      // 旋轉把手：頂邊中點往上拉一段距離的綠色圓點 + 連接線（比照阿謙 rotate-plugin.js 的視覺語言）
+      var rp = rotateHandlePos(b);
+      ctx.beginPath();
+      ctx.moveTo((b.left+b.right)/2, b.top);
+      ctx.lineTo(rp.x, rp.y);
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
+      ctx.stroke();
+      var hr = Math.max(7, canvas.width*0.009);
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, hr, 0, Math.PI*2);
+      ctx.fillStyle = '#22c55e';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(1.5, canvas.width*0.0018);
+      ctx.stroke();
+
+      // 旋轉中即時顯示角度（拖曳旋轉把手時 interaction.mode === 'rotate' 才會有值）
+      if (interaction && interaction.mode === 'rotate' && interaction.slotId === slotId){
+        var deg = Math.round(slots[slotId].rot || 0);
+        ctx.font = Math.max(11, canvas.width*0.013) + 'px sans-serif';
+        ctx.fillStyle = 'rgba(13,16,24,.92)';
+        var label = deg + '°';
+        var tw = ctx.measureText(label).width;
+        var pad = 6;
+        ctx.fillRect(rp.x - tw/2 - pad, rp.y - hr - 26, tw + pad*2, 18);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, rp.x, rp.y - hr - 17);
+        ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+      }
+
       ctx.restore();
     }
 
     // 多選：每個選取項目畫細框標示，外面再加一個橘色聯集外框＋四角縮放控制點（縮放會以這個外框中心為準）
+    // 多選狀態不提供整組旋轉（每個項目各自的旋轉中心不同，整組轉在數學上要嘛失真、要嘛複雜到不划算，
+    // 需要整組轉的話目前請先取消多選、逐一調整單一項目的角度）
     function drawGroupSelectionBox(ctx, ids){
       var gb = groupBounds(ids);
       if (!gb) return;
@@ -395,9 +458,17 @@ window.ShadowLayoutReceiver = (function () {
             /* 商品比例（Excel「(商品)比例」欄位，0~1）：100% 或沒填就是 1（維持這裡算出來的最大尺寸），
                填了更小的比例，就從第一次貼合的當下直接縮小；之後使用者拖曳調整過，就照使用者調整的結果。 */
             var initScaleMul = (typeof ratio === 'number' && ratio > 0 && ratio <= 1) ? ratio : 1;
-            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, tight: tight };
+            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, rot: 0, tight: tight };
           } else {
-            slots[slotId].tight = tight; // 換圖時也要更新緊密邊框，位置/大小維持使用者調整過的結果
+            /* 換圖時（例如勾選/取消拍立得框，圖片從「原始照片」換成「壓平後的框+照片」，
+               長寬比通常會差很多——原圖可能是窄長的商品照，壓平後的拍立得卡片接近正方形）
+               一定要用「新圖片本身」的長寬比重算 w0，不能直接沿用舊的 w0！
+               舊寫法只更新 tight、完全不動 w0/h0，等於用舊照片的窄長比例框去套新的正方形圖片，
+               畫出來會被硬擠成細長形——這正是拍立得框換上去之後商品「變細變形」的原因。
+               這裡固定保留 h0（高度＝使用者原本調整過的視覺大小不變），
+               用新圖片的實際比例重新算 w0，兩者相除永遠等於新圖片真正的寬高比，不會拉伸。 */
+            slots[slotId].w0 = img.naturalWidth * (slots[slotId].h0 / img.naturalHeight);
+            slots[slotId].tight = tight;
           }
           if (redraw) redraw();
         });
@@ -460,7 +531,7 @@ window.ShadowLayoutReceiver = (function () {
       }
     }
 
-    // 選用：接上拖曳移動＋四角控制點縮放的滑鼠/觸控互動。
+    // 選用：接上拖曳移動＋四角控制點縮放＋頂部把手旋轉的滑鼠/觸控互動。
     // 不需要使用者在這個版位個別調整位置的話（例如座標是從別處正規化廣播過來），就不要呼叫這個。
     function attachPointerEvents(redraw){
       function pos(e){
@@ -475,6 +546,13 @@ window.ShadowLayoutReceiver = (function () {
         var corners = { tl:[b.left,b.top], tr:[b.right,b.top], bl:[b.left,b.bottom], br:[b.right,b.bottom] };
         for (var k in corners){ var c = corners[k]; if (Math.abs(p.x-c[0])<=hs && Math.abs(p.y-c[1])<=hs) return k; }
         return null;
+      }
+      // 頂部旋轉把手命中判定：獨立於四角控制點，半徑比角落 handle 稍大一點方便點擊
+      function hitTestRotateHandle(slotId, p){
+        var b = itemBounds(slotId);
+        var rp = rotateHandlePos(b);
+        var hr = Math.max(7, canvas.width*0.009) * 1.8;
+        return Math.hypot(p.x-rp.x, p.y-rp.y) <= hr;
       }
       function hitTestBody(slotId, p){
         var b = itemBounds(slotId);
@@ -494,7 +572,7 @@ window.ShadowLayoutReceiver = (function () {
       canvas.addEventListener('pointerdown', function(e){
         var p = pos(e);
 
-        // 多選狀態下：先檢查是不是要整組縮放／整組拖曳
+        // 多選狀態下：先檢查是不是要整組縮放／整組拖曳（多選不支援整組旋轉，見 drawGroupSelectionBox 註解）
         if (selectedIds.length > 1){
           var gb = groupBounds(selectedIds);
           if (gb){
@@ -520,8 +598,16 @@ window.ShadowLayoutReceiver = (function () {
           }
         }
 
-        // 單選狀態：拖角縮放／拖曳移動（原本的行為）
+        // 單選狀態：旋轉把手／拖角縮放／拖曳移動
         if (activeSlotId && slots[activeSlotId] && enabledIds.indexOf(activeSlotId)!==-1){
+          if (hitTestRotateHandle(activeSlotId, p)){
+            var b = itemBounds(activeSlotId);
+            var center = { x: (b.left+b.right)/2, y: (b.top+b.bottom)/2 }; // 旋轉樞紐＝選取框幾何中心，要跟 shadow-plugin.js 的 pivot 定義一致
+            var startAngle = Math.atan2(p.y-center.y, p.x-center.x) * 180/Math.PI;
+            interaction = { mode:'rotate', slotId: activeSlotId, center: center, startAngle: startAngle, baseRot: slots[activeSlotId].rot || 0 };
+            canvas.setPointerCapture(e.pointerId);
+            return;
+          }
           var corner = hitTestHandle(activeSlotId, p);
           if (corner){
             interaction = { mode:'resize', corner: corner, startPointer: p, startSlot: Object.assign({}, slots[activeSlotId]) };
@@ -549,11 +635,31 @@ window.ShadowLayoutReceiver = (function () {
         }
         if (redraw) redraw();
       });
+      // 雙擊旋轉把手：角度歸零（比照阿謙 rotate-plugin.js 的 dblclick 行為）
+      canvas.addEventListener('dblclick', function(e){
+        if (!activeSlotId || !slots[activeSlotId]) return;
+        var p = pos(e);
+        if (hitTestRotateHandle(activeSlotId, p)){
+          slots[activeSlotId].rot = 0;
+          if (redraw) redraw();
+        }
+      });
       window.addEventListener('pointerup', function(){ interaction = null; });
       canvas.addEventListener('pointermove', function(e){
         if (!interaction) return;
         e.preventDefault();
         var p = pos(e);
+
+        if (interaction.mode === 'rotate'){
+          var active0 = slots[interaction.slotId];
+          if (!active0) return;
+          var curAngle = Math.atan2(p.y-interaction.center.y, p.x-interaction.center.x) * 180/Math.PI;
+          var next = normalizeDeg(interaction.baseRot + (curAngle - interaction.startAngle));
+          if (e.shiftKey) next = Math.round(next / ROT_SNAP_DEG) * ROT_SNAP_DEG;
+          active0.rot = next;
+          if (redraw) redraw();
+          return;
+        }
 
         if (interaction.mode === 'group-move'){
           var dx = p.x - interaction.startPointer.x, dy = p.y - interaction.startPointer.y;
@@ -588,6 +694,10 @@ window.ShadowLayoutReceiver = (function () {
         if (interaction.mode === 'move'){
           active.x = s.x + dx2; active.y = s.y + dy2;
         } else if (interaction.mode === 'resize'){
+          /* ★ 旋轉解耦：resize 的角落控制點座標永遠用「未旋轉」的 itemBounds 算，
+             不管目前 rot 是多少，拖角縮放的手感都跟沒有旋轉時完全一樣──
+             跟阿謙的做法一致：先調好大小position，再用旋轉把手轉角度，兩件事分開處理，
+             不用去解「旋轉座標系下怎麼拖角」這種複雜很多、CP值很低的數學。 */
           var b0 = { left: s.x - (s.w0*s.scaleMul)/2, top: s.y - (s.h0*s.scaleMul), right: s.x + (s.w0*s.scaleMul)/2, bottom: s.y };
           var anchor;
           if (interaction.corner === 'br') anchor = [b0.left, b0.top];
@@ -626,7 +736,14 @@ window.ShadowLayoutReceiver = (function () {
       /* 目前生效中的疊放順序（陣列前面＝後方，後面＝前方），拖曳排序清單可以拿這個當初始值 */
       getEnabledOrder: function(){ return enabledIds.slice(); },
       /* 目前排序好、可直接丟給 ShadowPlugin.renderScene / renderPhotosOnly 的狀態陣列（給匯出分層合成用） */
-      getOrderedStates: function(){ return enabledIds.map(getState).filter(Boolean); }
+      getOrderedStates: function(){ return enabledIds.map(getState).filter(Boolean); },
+      /* 給外部程式化設定旋轉角度用（例如之後想加「輸入角度數字」的介面） */
+      setRotation: function(slotId, deg, redraw){
+        if (!slots[slotId]) return;
+        slots[slotId].rot = normalizeDeg(deg);
+        if (redraw) redraw();
+      },
+      getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; }
     };
   }
 

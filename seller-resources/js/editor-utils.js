@@ -137,10 +137,36 @@ var OVER_LIMIT_FIELDS = [
    用 _flWasLogo 記住上一次的狀態，只在「剛變成LOGO」那一次觸發一次，
    避免每次打字都彈出來、或使用者手動關掉後又被強制重新打開。 */
 var _flWasLogo = false;
+
+/* 下拉選單「FL ICON」切換時呼叫（取代原本inline的 window._flProductSlotValue=... 寫法）。
+   新增LOGO選項後，選單本身的值也要能代表LOGO模式，不能只靠 txt-fl 欄位文字，
+   所以這裡把兩邊同步起來：
+     切到LOGO → 自動把 txt-fl 填成「logo」（跟工單匯入、下游畫布判斷版型L的
+                機制保持一致，不用另外改 03_fl.html 那邊的判斷方式）
+     從LOGO切開 → 如果 txt-fl 裡還殘留「logo」這幾個字（使用者沒手動改過），
+                自動清空，讓使用者可以重新打真正的文案，避免文案欄位卡著
+                「logo」字樣卻選著商品1/2/3或純文案，兩邊看起來對不上 */
+function handleFlSlotChange(value){
+  window._flProductSlotValue = value || null;
+  var flEl = document.getElementById('txt-fl');
+  if(flEl){
+    if(value === 'logo'){
+      flEl.value = 'logo';
+    } else if(flEl.value.trim().toLowerCase() === 'logo'){
+      flEl.value = '';
+    }
+  }
+  ccFl();
+  if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility();
+  if(typeof broadcast === 'function') broadcast();
+}
+
 function ccFl(){
   var slot = (document.getElementById('fl-product-slot') || {}).value || '';
   var raw  = (document.getElementById('txt-fl') || {}).value || '';
-  var isLogo = raw.trim().toLowerCase() === 'logo';
+  /* LOGO判斷雙重保險：下拉選單選「LOGO」，或 txt-fl 文字打「logo」，兩種都算——
+     維持原本「打字」的相容行為，同時讓新的下拉選單也能觸發同一套邏輯 */
+  var isLogo = slot === 'logo' || raw.trim().toLowerCase() === 'logo';
   var max  = (slot && !isLogo) ? 5 : 6;
   cc('txt-fl', 'cc-fl', max);
   /* 選單切換時也要更新顯示的上限數字 */

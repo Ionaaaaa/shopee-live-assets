@@ -49,6 +49,27 @@ function buildCanvasArea(){
   });
   updateAssetList();
   renderTabBar();
+  if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility();
+}
+
+/* 「FL ICON」下拉選單選「不製作」時：
+   - 側欄「FL 文案」那個輸入框整塊隱藏，不用讓使用者對著一個不會被匯出的
+     欄位打字
+   - 畫布區裡的 03_fl 那個canvas-block也隱藏，不佔畫面空間
+   canvas-block-03_fl 只在 buildCanvasArea() 時建立一次（不會每次切分頁重建），
+   所以這裡只是切換 display，不用重新產生 iframe。
+   呼叫時機：下拉選單onchange（handleFlSlotChange）、Excel匯入完成後
+   （editor-import.js的afterExcel）、切換分頁後（editor-state.js的applyTabData）、
+   以及這裡的初次建立畫布之後。 */
+function updateFlCanvasVisibility(){
+  var slot = (document.getElementById('fl-product-slot') || {}).value || '';
+  var isSkip = (slot === 'skip');
+
+  var flTextField = document.getElementById('fl-text-field');
+  if(flTextField) flTextField.style.display = isSkip ? 'none' : '';
+
+  var flBlock = document.getElementById('canvas-block-03_fl');
+  if(flBlock) flBlock.style.display = isSkip ? 'none' : '';
 }
 
 function updateAssetList(){

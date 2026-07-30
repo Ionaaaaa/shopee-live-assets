@@ -27,6 +27,12 @@ function downloadSingle(id){
   });
 }
 function _downloadSingle(id){
+  /* 正常情況下這個按鈕所在的canvas-block本身就被隱藏了（見 updateFlCanvasVisibility），
+     點不到；這裡多一層防呆，避免萬一被觸發時還是匯出一張「不需要製作」的FL圖 */
+  if(id === '03_fl' && window._flProductSlotValue === 'skip'){
+    toast('這個分頁的FL ICON選擇「不製作」，不需要下載', 'err');
+    return;
+  }
   var ifr=iframes[id]; if(!ifr||!ifr.contentWindow) return;
   var api=ifr.contentWindow.BNExport;
   if(!api){ toast('畫布尚未就緒','err'); return; }
@@ -282,6 +288,16 @@ function _downloadAll(){
       function collectLayout(i){
         if(i >= layouts.length){ processTab(ti+1); return; }
         var layout = layouts[i];
+        /* 這個分頁的FL ICON選「不製作」時，03_fl版位整個跳過，不產生任何檔案。
+           這裡故意讀「即時狀態」（window._flProductSlotValue）而不是 d.flProductSlot——
+           單一分頁匯出時（下面 TABS.length===1 那個分支）完全不會重新套用
+           tab.data，直接讀畫面當下的狀態去截圖（避免拿可能沒同步的舊資料蓋掉
+           使用者正在編輯的畫面），所以這裡也要跟著讀即時狀態才會一致；
+           多分頁批次匯出時，上面重新套用tab.data那段已經把即時狀態同步成
+           這個分頁的 d.flProductSlot 了，兩種情況讀即時狀態結果都是對的。 */
+        if(layout.id === '03_fl' && window._flProductSlotValue === 'skip'){
+          doneUnits++; collectLayout(i+1); return;
+        }
         pm.update(Math.round(doneUnits/totalUnits*90), (dateFolder?dateFolder+' · ':'')+(layout.name||layout.id));
         var ifr = iframes[layout.id];
         if(!ifr||!ifr.contentWindow){ doneUnits++; collectLayout(i+1); return; }
@@ -339,6 +355,14 @@ function _downloadAll(){
     if(elDate) elDate.value = d.date || '';
     var elFl = document.getElementById('txt-fl');
     if(elFl) elFl.value = d.flText || '';
+    /* FL ICON 下拉選單的值（window._flProductSlotValue）之前這裡完全沒同步——
+       批次匯出多分頁時，_flProductSlot()（editor-state.js）判斷要不要放商品圖／
+       要不要當LOGO／要不要跳過FL，靠的就是這個全域變數，沒在這裡跟著切分頁
+       更新的話，後面每個分頁截圖時，FL版位會一直沿用「進入批次匯出之前」
+       殘留的那個值，不會照各分頁自己的設定跑。 */
+    window._flProductSlotValue = d.flProductSlot || null;
+    var flSlotEl = document.getElementById('fl-product-slot');
+    if(flSlotEl) flSlotEl.value = d.flProductSlot || '';
 
     if(d.hostImg){
       S.imgs.host = d.hostImg;

@@ -422,19 +422,23 @@ input[type="file"] { display:none; }
           <div class="field" style="border-top:1px solid var(--border);padding-top:var(--space-4);margin-top:var(--space-2);">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:var(--text-body);font-weight:700;color:var(--text);flex-shrink:0;">FL ICON</span>
-              <select class="fi" id="fl-product-slot" onchange="window._flProductSlotValue=this.value||null;ccFl();broadcast()" style="flex:1;">
+              <select class="fi" id="fl-product-slot" onchange="handleFlSlotChange(this.value)" style="flex:1;">
                 <option value="">純文案</option>
                 <option value="1">商品1</option>
                 <option value="2">商品2</option>
                 <option value="3">商品3</option>
+                <option value="logo">LOGO</option>
+                <option value="skip">不製作</option>
               </select>
             </div>
-            <div class="field-label" style="margin-top:10px;">
-              <span>FL 文案</span>
-              <span class="cc" id="cc-fl">0 / 6</span>
-            </div>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <input class="fi" id="txt-fl" type="text" value="" placeholder="文案 / logo（只放Logo時填）" oninput="ccFl();broadcast()" style="flex:1;">
+            <div id="fl-text-field">
+              <div class="field-label" style="margin-top:10px;">
+                <span>FL 文案</span>
+                <span class="cc" id="cc-fl">0 / 6</span>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input class="fi" id="txt-fl" type="text" value="" placeholder="文案 / logo（只放Logo時填）" oninput="ccFl();broadcast()" style="flex:1;">
+              </div>
             </div>
           </div>
         </div>
@@ -752,6 +756,8 @@ var pm=(function(){
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
 <script src="js/shadow-plugin.js"></script>
+<script src="js/frame-defaults.js"></script>
+<script src="js/shadow-frame-plugin.js"></script>
 <script src="js/shadow-layout-defaults.js"></script>
 <script src="js/shadow-scene-scale.js"></script>
 <script src="js/shadow-layout-receiver.js"></script>

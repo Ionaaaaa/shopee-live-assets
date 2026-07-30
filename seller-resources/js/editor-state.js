@@ -40,7 +40,7 @@ var DEFAULT_BG_COLOR = '#1E6EB4';
    這裡改名成 _flProductSlotValue 徹底避開撞名。 */
 function _flProductSlot(){
   var slot = window._flProductSlotValue;
-  if(!slot) return null;
+  if(!slot || slot === 'logo' || slot === 'skip') return null; // LOGO／不製作都沒有商品圖，不用查
   var slotId = 'product' + slot; // '1' → 'product1'
   if(window.ShadowEditor) return window.ShadowEditor.getSlotDataUrl(slotId) || null;
   return null;
@@ -189,6 +189,10 @@ function saveCurrentTabState(cb){
   tab.data.time  = v('txt-time')  || tab.data.time;
   tab.data.brand = v('txt-brand') || tab.data.brand;
   tab.data.flText = v('txt-fl') || tab.data.flText;
+  /* FL ICON 下拉選單目前選的值（''=純文案／'1'~'3'=商品／'logo'／'skip'=不製作），
+     之前只有 flText 有存，這顆選單本身的值完全沒存進分頁資料，切分頁再切回來
+     時選單會對不上實際狀態（尤其是「不製作」，會影響畫布/匯出要不要跳過FL）。 */
+  tab.data.flProductSlot = window._flProductSlotValue || '';
   tab.data.sellerName = S.sellerName;
   tab.data.flLogoBgMode = S.flLogoBgMode;
   tab.data.flLogoSampledColor = S.flLogoSampledColor;
@@ -257,6 +261,13 @@ function applyTabData(tab, loadHost){
   var elDate = document.getElementById('txt-date');
   if(elDate) elDate.value = d.date || '';
 
+  /* FL ICON 下拉選單：每次都直接同步（含清空），跟 txt-date 同樣道理——
+     不能只在有值時才覆蓋，不然切到「不製作」的分頁時，選單還停在上一個
+     分頁的值（例如「商品1」），畫布/匯出判斷是否要跳過FL就會跟著錯。 */
+  var flSlotEl = document.getElementById('fl-product-slot');
+  if(flSlotEl) flSlotEl.value = d.flProductSlot || '';
+  window._flProductSlotValue = d.flProductSlot || null;
+
   /* 陰影套件：還原這個分頁完整的素材/比例/疊放順序＋版型組合。
      shadowState 是新格式（包含素材圖片本身，不是只有版型代號），
      沒有的話（例如舊格式暫存檔）退回只還原版型代號 */
@@ -288,6 +299,9 @@ function applyTabData(tab, loadHost){
   } else {
     broadcast();
   }
+
+  if(typeof ccFl === 'function') ccFl();
+  if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility();
 }
 var iframes = {}; // id -> iframe element
 
@@ -299,6 +313,7 @@ function collectState(){
     version:1,ts:Date.now(),bgColor:S.seedHex,
     textColorManual: S.textColorManual,
     texts:{brand:v('txt-brand'),main:v('txt-main'),sub:v('txt-sub'),date:v('txt-date'),time:v('txt-time'),flText:v('txt-fl')},
+    flProductSlot: window._flProductSlotValue || '',
     colors:{cSub:v('cSub'),cMain:v('cMain'),cDate:v('cDate'),cSep:v('cSep')},
     fmt:'jpeg',
     imgs:{ host:S.imgs.host, logo1:S.imgs.logo1, logo2:S.imgs.logo2 },
@@ -317,6 +332,11 @@ function applyState(data){
   applySeedHex(data.bgColor || DEFAULT_BG_COLOR);
   function set(id,val){ var el=document.getElementById(id); if(el&&val!==undefined){el.value=val;} }
   if(data.texts){ set('txt-brand',data.texts.brand);set('txt-main',data.texts.main);set('txt-sub',data.texts.sub);set('txt-date',data.texts.date);set('txt-time',data.texts.time);set('txt-fl',data.texts.flText); }
+  var flSlotEl2 = document.getElementById('fl-product-slot');
+  if(flSlotEl2) flSlotEl2.value = data.flProductSlot || '';
+  window._flProductSlotValue = data.flProductSlot || null;
+  if(typeof ccFl === 'function') ccFl();
+  if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility();
   /* 手動覆蓋的主副標色：applySeedHex已算好自動配色，若有手動色則蓋掉 */
   if(data.colors){
     set('cSub',data.colors.cSub);set('cMain',data.colors.cMain);set('cDate',data.colors.cDate);set('cSep',data.colors.cSep);
