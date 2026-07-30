@@ -250,6 +250,17 @@
     notifyChange();
   }
 
+  // A/B/C 三個組合都至少包含一位主持人，遮罩（補主持人身體過短貼不到底部）
+  // 在這三組合下預設打開；D 是純商品組合沒有主持人，維持原本預設關閉，不自動開，
+  // 也不會因為切到 D 就強制把使用者已經打開的遮罩關掉
+  function maybeAutoEnableMaskForCombo(letter){
+    if (letter !== 'A' && letter !== 'B' && letter !== 'C') return;
+    if (typeof S === 'undefined' || S.maskOn) return;
+    var cb = document.getElementById('mask-toggle-input');
+    if (cb) cb.checked = true;
+    if (typeof onMaskToggleChange === 'function') onMaskToggleChange(true);
+  }
+
   function setCombo(letter){
     if (!COMBOS[letter]) return false;
     state.combo = letter;
@@ -262,6 +273,7 @@
     state.order = currentCombo().enabled.slice();
     renderSlotBar();
     broadcastEnabled();
+    maybeAutoEnableMaskForCombo(letter);
     notifyChange();
     return true;
   }
@@ -363,6 +375,7 @@
       setSelection(selectedIds.filter(function(id){ return currentCombo().enabled.indexOf(id) !== -1; }));
       renderSlotBar();
       broadcastEnabled();
+      maybeAutoEnableMaskForCombo(state.combo);
       notifyChange();
     });
     document.getElementById('lc-bg-file').addEventListener('change', function(e){
