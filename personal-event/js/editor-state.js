@@ -110,9 +110,12 @@ function renderThemeChips(){
 
 /* ── iframe 清單 ── */
 /* LAYOUTS 從後台 localStorage 讀取啟用的版位 */
-/* 專案改名為賣家資源後換一把新的 store key，避免瀏覽器裡舊 mcn-daibo 專案
-   殘留的 localStorage（含已刪除的 01_thumbnail 版位）被誤讀進來 */
-var STORE_KEY = 'bn_admin_seller_resources_v1';
+/* 專案各自獨立的 store key，不跟其他姊妹專案（賣家資源／star_studio系）共用，
+   避免瀏覽器裡其他專案殘留的 localStorage（含已刪除的版位）被誤讀進來 */
+var STORE_KEY = 'bn_admin_personal_event_v1';
+/* 主持人圖庫 key —— admin.html 是獨立單檔（沒有 <script src>），這裡沒辦法共用
+   同一份變數，只能手動保持字串跟 admin.html 的 HOST_LIST_KEY 完全一致 */
+var HOST_LIST_KEY = 'bn_hosts_personal_event_v1';
 var DEFAULT_LAYOUTS = [
   { id:'02_lpbn',  name:'直播大廳 LPBN（有/無CTA）2版',    file:'02_lpbn.html',  w:1125, h:360, enabled:true },
   { id:'03_fl',    name:'FL Icon 336×120',                 file:'03_fl.html',    w:336,  h:120, enabled:true },
@@ -564,7 +567,7 @@ document.getElementById('btn-save').addEventListener('click',function(){
     var blob = buildStateBlob();
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download='MCN代播_暫存_'+(v('txt-date')||'draft').replace(/\//g,'-')+'.json';
+    a.download='個人專場_暫存_'+(v('txt-date')||'draft').replace(/\//g,'-')+'.json';
     a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
     pm.done('暫存已下載');
     pm.hide();
@@ -574,8 +577,8 @@ document.getElementById('btn-save').addEventListener('click',function(){
 
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單、主持人圖庫將重設）')) return;
-  localStorage.removeItem('bn_admin_star_studio_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(HOST_LIST_KEY);
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }

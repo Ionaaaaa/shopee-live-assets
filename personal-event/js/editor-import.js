@@ -539,8 +539,17 @@ function confirmImport(){
     return;
   }
 
+  /* 匯入工單進度條：讀取Excel → 解析建立分頁 → 比對主持人／商品圖片 → 比對Logo → 完成，
+     五段進度。個人專場（A/B級公版格式）跟舊格式工單走不同分支，兩邊都要有進度顯示。
+     目前是「階段性」進度，matchAndApplyHostFiles()／prematchAllTabAssets() 對各欄位的
+     檔案讀取是各自獨立、不等彼此完成，沒有做到「已比對 n/5」這種逐檔進度——之後如果
+     素材資料夾檔案量變大、需要更細的進度，要把那段改成有回呼才能逐一累加。 */
+  pm.show('匯入工單中');
+  pm.update(5, '讀取 Excel…');
+
   function afterExcel(groupData){
     groupData = groupData || {};
+    pm.update(45, '解析建立分頁…');
     /* 先進入暫存模式：版型/素材的變更先不廣播給畫布，等使用者在確認 popup 按下按鈕才 commit() */
     if(window.ShadowEditor){
       window.ShadowEditor.enterPending();
@@ -601,6 +610,7 @@ function confirmImport(){
        屬於這個分頁自己的 logo2Edit／shadowState，單一資料來源，不會兜不起來。
        舊格式工單（沒有level）沒有跑過批次比對，維持原本呼叫方式。 */
     if(groupData.level === 'A' || groupData.level === 'B'){
+      pm.update(90, '套用比對結果…');
       /* 用 ACTIVE_TAB（buildTabs 已經指到「第一個A/B級分頁」，不一定是TABS[0]，
          如果Excel裡混雜了其他舊格式分頁，公版分頁排在後面，TABS[0]會是
          不相關的分頁），不要寫死套用 TABS[0]。 */
@@ -610,6 +620,8 @@ function confirmImport(){
       if(st.excelFile) msgParts0.push('Excel 已匯入');
       if(st.assetFiles.length) msgParts0.push('素材已依各分頁自動比對套用');
       toast(msgParts0.join('，')||'匯入完成','ok',3000);
+      pm.done(msgParts0.join('，')||'匯入完成');
+      pm.hide();
       /* 個人專場逐包確認：從第一包A級分頁開始，LOGO＋商品都已由 prematchAllTabAssets
          批次比對好，這裡自動接上確認彈窗，一路確認到底──A級全部確認完會自動接續
          B級（只有需要放LOGO的分頁才會跳出確認，純文案／不製作的分頁略過）。
@@ -619,12 +631,16 @@ function confirmImport(){
     }
 
     var hostMatched = matchAndApplyHostFiles(st.assetFiles, groupData);
+    pm.update(65, '比對主持人／商品圖片…');
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched){
+      pm.update(90, '比對 Logo…');
       closePopup('import');
       var msgParts = [];
       if(st.excelFile) msgParts.push('Excel 已匯入');
       if(st.assetFiles.length) msgParts.push('主持人/商品/Logo 比對到 '+(hostMatched+logoMatched)+' 個');
       toast(msgParts.join('，')||'匯入完成','ok',3000);
+      pm.done(msgParts.join('，')||'匯入完成');
+      pm.hide();
 
       /* 有素材可以確認，或有版型組合，就打開確認 popup；純文字匯入就不用彈出來 */
       if(st.assetFiles.length || groupData.combo){
@@ -637,9 +653,10 @@ function confirmImport(){
 
   if(st.excelFile){
     processExcelFile(st.excelFile, function(err, groups){
-      if(err){ toast('Excel 解析失敗：'+err.message,'err'); return; }
+      if(err){ toast('Excel 解析失敗：'+err.message,'err'); pm.hide(); return; }
       if(!groups.length){
         toast('Excel 找不到分頁資料，請確認工單格式','err');
+        pm.hide();
         afterExcel(null); // Excel 沒讀到東西，還是繼續處理已選的圖片資料夾
         return;
       }
@@ -663,6 +680,7 @@ function confirmImport(){
         if(groups[gi].level === 'A' || groups[gi].level === 'B'){ personalFirstIdx = gi; break; }
       }
       buildTabs(tabs, personalFirstIdx >= 0 ? personalFirstIdx : 0);
+      pm.update(60, '比對主持人／商品圖片…');
       prematchAllTabAssets(groups, st.assetFiles, function(){
         var personalFirst = personalFirstIdx >= 0 ? groups[personalFirstIdx] : null;
         afterExcel(personalFirst || groups[0] || null);

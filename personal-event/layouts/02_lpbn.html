@@ -12,14 +12,14 @@
   <div id="overlay"></div>
 </div>
 
-<script src="../js/shadow-plugin.js"></script>
-<script src="../js/shadow-layout-defaults.js"></script>
-<script src="../js/shadow-scene-scale.js"></script>
-<script src="../js/ground-shadow-defaults.js"></script>
+<script src="../js/shadow-plugin.js?v=20260730"></script>
+<script src="../js/shadow-layout-defaults.js?v=20260730"></script>
+<script src="../js/shadow-scene-scale.js?v=20260730"></script>
+<script src="../js/ground-shadow-defaults.js?v=20260730"></script>
 
-<script src="../js/logo-row-defaults.js"></script>
-<script src="../js/host-scene-scale.js"></script>
-<script src="../js/layout-common.js"></script>
+<script src="../js/logo-row-defaults.js?v=20260730"></script>
+<script src="../js/host-scene-scale.js?v=20260730"></script>
+<script src="../js/layout-common.js?v=20260730"></script>
 <script>
 'use strict';
 
@@ -415,15 +415,11 @@ window.BNExport = {
 /* ── Init ── */
 function loadDefaultLogos(cb){
   var done=0;
-  function tick(){ if(++done>=3) cb(); }
+  function tick(){ if(++done>=2) cb(); }
   var i1=new Image();
   i1.onload=function(){ D.logo1=i1; tick(); };
   i1.onerror=tick;
   i1.src='../logos/logo_shopee_live.png';
-  var i2=new Image();
-  i2.onload=function(){ D.logo2=i2; tick(); };
-  i2.onerror=tick;
-  i2.src='../logos/logo_star_studio.png';
   var i3=new Image();
   i3.onload=function(){ D.ctaBtn=i3; tick(); };
   i3.onerror=tick;

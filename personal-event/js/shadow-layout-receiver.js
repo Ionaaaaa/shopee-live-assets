@@ -63,7 +63,7 @@
 */
 window.ShadowLayoutReceiver = (function () {
   'use strict';
-  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-13-v3（含版型獨立位置＋商品比例＋旋轉功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-30-v4（含版型獨立位置＋商品比例＋旋轉＋選取框偏移修正＋畫布多選點擊＋Ctrl+Z復原）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
 
   var ROT_SNAP_DEG = 15; // 拖曳旋轉把手時按住 Shift 的吸附角度，跟阿謙 rotate-plugin.js 的 SNAP_DEG 一致
 
@@ -91,6 +91,35 @@ window.ShadowLayoutReceiver = (function () {
     var activeSlotId = null;
     var interaction = null;
     var bgImg = null;
+
+    /* ── 復原（Ctrl+Z）：只記錄「位置/縮放/旋轉」這幾個欄位的微調，不含
+       上傳/刪除素材、版型組合切換——範圍刻意縮小，最多存5步。每次開始一個新的
+       拖曳/縮放/旋轉動作之前（pointerdown 當下）就存一次快照，Ctrl+Z 復原到
+       「這個動作開始之前」的狀態。 */
+    var undoStack = [];
+    var UNDO_MAX = 5;
+    function pushUndoSnapshot(){
+      var snap = {};
+      Object.keys(slots).forEach(function(id){
+        var s = slots[id];
+        snap[id] = { x:s.x, y:s.y, scaleMul:s.scaleMul, rot:s.rot||0 };
+      });
+      undoStack.push({ slots:snap, ts:Date.now() });
+      if(undoStack.length > UNDO_MAX) undoStack.shift();
+    }
+    function peekUndoTs(){
+      return undoStack.length ? undoStack[undoStack.length-1].ts : 0;
+    }
+    function undo(redraw){
+      var snap = undoStack.pop();
+      if(!snap) return;
+      Object.keys(snap.slots).forEach(function(id){
+        if(!slots[id]) return; // 這個slot後來被刪掉了（刪除不在復原範圍內），跳過
+        var v = snap.slots[id];
+        slots[id].x = v.x; slots[id].y = v.y; slots[id].scaleMul = v.scaleMul; slots[id].rot = v.rot;
+      });
+      if(redraw) redraw();
+    }
 
     // 統一的選取狀態設定：selectedIds 是主要狀態，activeSlotId 在只選一個時同步更新（向下相容舊用法）
     function setSelection(ids){
@@ -205,10 +234,22 @@ window.ShadowLayoutReceiver = (function () {
     // 選取框／點擊判定用的範圍：優先用「有色部分」的緊密邊框，偵測失敗才退回整張圖範圍
     // ★ 旋轉解耦：這裡永遠回傳「未旋轉」狀態下的軸對齊範圍，不管 s.rot 是多少都一樣，
     //   拖曳/縮放/一般點擊判定全部沿用這個範圍，跟旋轉前完全一致
+    // 商品圖片下緣透明留白的補償量（跟 shadow-plugin.js 畫圖邏輯共用同一份 trim 資料，
+    // 不各自重新計算——避免選取框跟實際畫面位置對不上，詳見「選取框與陰影位移」問題報告）
+    function getTrimBottomPad(slotId){
+      var s = slots[slotId];
+      if (!s) return 0;
+      var fullH = s.h0*s.scaleMul;
+      var product = window.ShadowPlugin && window.ShadowPlugin._products && window.ShadowPlugin._products[slotId];
+      return (product && product.trim) ? product.trim.bottom * fullH : 0;
+    }
+
+    // 選取框／點擊判定用的範圍：優先用「有色部分」的緊密邊框，偵測失敗才退回整張圖範圍
     function itemBounds(slotId){
       var s = slots[slotId];
       var fullW = s.w0*s.scaleMul, fullH = s.h0*s.scaleMul;
-      var imgLeft = s.x - fullW/2, imgTop = s.y - fullH;
+      var trimBottomPad = getTrimBottomPad(slotId);
+      var imgLeft = s.x - fullW/2, imgTop = s.y + trimBottomPad - fullH;
       if (s.tight){
         var w = s.tight.tw * fullW, h = s.tight.th * fullH;
         var left = imgLeft + s.tight.tx * fullW, top = imgTop + s.tight.ty * fullH;
@@ -605,6 +646,7 @@ window.ShadowLayoutReceiver = (function () {
           if (gb){
             var gcorner = hitTestHandleBox(gb, p);
             if (gcorner){
+              pushUndoSnapshot();
               interaction = {
                 mode: 'group-resize', corner: gcorner, startPointer: p,
                 center: { x: gb.cx, y: gb.cy },
@@ -615,6 +657,7 @@ window.ShadowLayoutReceiver = (function () {
               return;
             }
             if (pointInBox(gb, p)){
+              pushUndoSnapshot();
               interaction = {
                 mode: 'group-move', startPointer: p,
                 startSlots: selectedIds.map(function(id){ return { id:id, x:slots[id].x, y:slots[id].y }; })
@@ -631,28 +674,46 @@ window.ShadowLayoutReceiver = (function () {
             var b = itemBounds(activeSlotId);
             var center = { x: (b.left+b.right)/2, y: (b.top+b.bottom)/2 }; // 旋轉樞紐＝選取框幾何中心，要跟 shadow-plugin.js 的 pivot 定義一致
             var startAngle = Math.atan2(p.y-center.y, p.x-center.x) * 180/Math.PI;
+            pushUndoSnapshot();
             interaction = { mode:'rotate', slotId: activeSlotId, center: center, startAngle: startAngle, baseRot: slots[activeSlotId].rot || 0 };
             canvas.setPointerCapture(e.pointerId);
             return;
           }
           var corner = hitTestHandle(activeSlotId, p);
           if (corner){
+            pushUndoSnapshot();
             interaction = { mode:'resize', corner: corner, startPointer: p, startSlot: Object.assign({}, slots[activeSlotId]) };
             canvas.setPointerCapture(e.pointerId);
             return;
           }
           if (hitTestBody(activeSlotId, p)){
+            pushUndoSnapshot();
             interaction = { mode:'move', startPointer: p, startSlot: Object.assign({}, slots[activeSlotId]) };
             canvas.setPointerCapture(e.pointerId);
             return;
           }
         }
 
-        // 點到畫布空白處或其他素材：重新做單選（會清掉多選狀態），並通知外部（左側清單）同步
+        // 點到畫布空白處或其他素材：
+        // 有按shift/ctrl/cmd＝多選切換（跟左側清單同一套規則，已選取就移除、沒選取就加入）；
+        // 沒按＝重新做單選（會清掉多選狀態）。並通知外部（左側清單）同步。
         var candidates = enabledIds.filter(function(id){ return slots[id]; }).slice().reverse(); // enabledIds 陣列後面＝前景，反轉後優先檢查最上層
         var hit = candidates.find(function(id){ return hitTestBody(id, p); });
+        var multiKey = e.shiftKey || e.ctrlKey || e.metaKey;
+
+        if (hit && multiKey){
+          var idx = selectedIds.indexOf(hit);
+          var next = selectedIds.slice();
+          if (idx === -1) next.push(hit); else next.splice(idx, 1);
+          setSelection(next);
+          parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: selectedIds.slice() }, '*');
+          if (redraw) redraw();
+          return; // 這次mousedown只切換選取狀態，不順便開始拖曳，避免手勢衝突
+        }
+
         if (hit){
           setSelection([hit]);
+          pushUndoSnapshot();
           interaction = { mode:'move', startPointer: p, startSlot: Object.assign({}, slots[hit]) };
           canvas.setPointerCapture(e.pointerId);
           parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: [hit] }, '*');
@@ -672,6 +733,15 @@ window.ShadowLayoutReceiver = (function () {
         }
       });
       window.addEventListener('pointerup', function(){ interaction = null; });
+      // Ctrl+Z／Cmd+Z：復原上一步位置/縮放/旋轉調整（輸入框打字時不要誤觸發）
+      document.addEventListener('keydown', function(e){
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')){
+          e.preventDefault();
+          undo(redraw);
+        }
+      });
       canvas.addEventListener('pointermove', function(e){
         if (!interaction) return;
         e.preventDefault();
@@ -781,7 +851,11 @@ window.ShadowLayoutReceiver = (function () {
         slots[slotId].rot = normalizeDeg(deg);
         if (redraw) redraw();
       },
-      getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; }
+      getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; },
+      /* Ctrl+Z 復原：外部（例如工具列想加一個復原按鈕）也可以直接呼叫 undo()，
+         不一定要透過鍵盤事件；peekUndoTs() 給 UI 顯示「上次復原時間」用，非必要 */
+      undo: undo,
+      peekUndoTs: peekUndoTs
     };
   }
 

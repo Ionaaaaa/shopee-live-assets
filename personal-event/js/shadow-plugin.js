@@ -99,26 +99,34 @@ window.ShadowPlugin = (function () {
     c.width = w; c.height = h;
     var cctx = c.getContext('2d');
     cctx.drawImage(img, 0, 0, w, h);
-    var top = 0, bottom = 0;
+    var top = 0, bottom = 0, left = 0, right = 0;
     try {
       var d = cctx.getImageData(0, 0, w, h).data;
-      var minY = h, maxY = -1;
+      var minY = h, maxY = -1, minX = w, maxX = -1;
       var alphaThresh = 10;
+      /* 2026-07-28 跟 Iona 確認新增：左右也一併偵測（不再像原本只找 y 就 break），
+         算法比照 shadow-layout-receiver.js 的 calcTightBoundsRatio()，只是這裡回傳的是
+         上下左右各自的留白比例，不是單一個緊密框物件——drawGroundShadow() 只需要
+         left/right 拿來算水平置中修正，不需要完整的 tight bounds。 */
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
           var a = d[(y * w + x) * 4 + 3];
           if (a > alphaThresh) {
             if (y < minY) minY = y;
             if (y > maxY) maxY = y;
-            break;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
           }
         }
       }
-      if (maxY >= 0) { top = minY / h; bottom = (h - 1 - maxY) / h; }
+      if (maxY >= 0) {
+        top = minY / h; bottom = (h - 1 - maxY) / h;
+        left = minX / w; right = (w - 1 - maxX) / w;
+      }
     } catch (e) {
-      console.warn('ShadowPlugin: 無法偵測透明留白，影子支點改用圖片原始底邊', e);
+      console.warn('ShadowPlugin: 無法偵測透明留白，影子支點改用圖片原始邊界', e);
     }
-    return { top: top, bottom: bottom };
+    return { top: top, bottom: bottom, left: left, right: right };
   }
 
   // type: 'product'（貼地陰影，預設） 或 'person'（光暈陰影，可超出畫布下緣）
@@ -187,63 +195,100 @@ window.ShadowPlugin = (function () {
        壓扁後影子的可視範圍反而懸空浮在商品下方（PNG 留白比例小的圖幾乎看不出來，比例大的就會明顯脫開）。 */
     var shadowGroundY = state.y + trimBottomPad * squash;
 
-    /* 旋轉樞紐：整個item（陰影+照片）的視覺中心點，跟 shadow-layout-receiver.js
-       的軸對齊選取框中心一致（旋轉解耦：拖曳/縮放判定用的是不旋轉的框，
-       這裡只是「畫出來的時候」繞著同一個中心轉過去，兩邊的中心點定義要一致，
-       不然畫面上看到的旋轉中心會跟選取框/旋轉把手的視覺位置對不上） */
+    /* 2026-07-28 跟 Iona 確認新增：水平置中修正——只影響「影子」的水平支點，
+       商品照片本身的位置（py、cx - pw/2 那段）完全不動。如果商品PNG左右留白不對稱
+       （例如商品整個偏在圖片左邊、右邊留白比較多），影子的傾斜支點原本是抓整張
+       原圖的中心，會跟商品視覺上的真正中心對不齊，讓斜切看起來像整個偏移，不只是
+       刻意的斜切角度而已。這裡用 trim.left/trim.right 算出偏移量，只套用在
+       shadowCx（下面畫影子用），pivotX／cx（商品照片、旋轉樞紐）維持原樣。 */
+    var trimCenterOffsetX = p.trim ? (p.trim.left - p.trim.right) * pw / 2 : 0;
+    var shadowCx = cx + trimCenterOffsetX;
+
+    /* 2026-07-28 跟 Iona 確認新增：陰影不跟著商品旋轉。
+       原本 withRotation() 包住整段（補強陰影＋主陰影＋照片），旋轉商品時陰影會
+       跟著轉。現在改成：陰影（補強陰影、主斜切陰影）直接畫在未旋轉的 ctx 上，
+       只有商品照片本身包在 withRotation() 裡面旋轉。旋轉樞紐 pivotX/pivotY 只
+       給照片旋轉用，不影響陰影的錨點計算（shadowCx/shadowGroundY 維持原樣）。 */
     var pivotX = cx, pivotY = state.y - ph / 2;
     var rot = state.rot || 0;
 
-    withRotation(ctx, pivotX, pivotY, rot, function () {
-      var angle = opts.angle * Math.PI / 180;
-      var soft = FIXED.soft;
-      var fadeMul = FIXED.fade / 100;
-      var occludeStrength = FIXED.occlude / 100;
-      var shear = Math.tan(angle * 0.55);
-      var maxSpread = soft * 1.8;
-
-      var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
-      var tempW = Math.ceil(halfW * 2);
-      var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
-      var anchorX = halfW;
-      var anchorY = Math.ceil(tempH * 0.5);
-
-      var tmp = document.createElement('canvas');
-      tmp.width = tempW; tmp.height = tempH;
-      var tctx = tmp.getContext('2d');
-
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
-      stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
-
-      if (occludeStrength > 0 && occluderMask) {
-        tctx.save();
-        tctx.globalCompositeOperation = 'destination-out';
-        tctx.globalAlpha = occludeStrength;
-        tctx.drawImage(occluderMask, -(cx - anchorX), -(shadowGroundY - anchorY));
-        tctx.restore();
-      }
-
-      var tipX = -shear * ph * fadeMul;
-      var tipY = -squash * ph * fadeMul - soft * 0.6;
-      tctx.globalCompositeOperation = 'destination-in';
-      var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      tctx.fillStyle = grad;
-      tctx.fillRect(0, 0, tempW, tempH);
-      tctx.globalCompositeOperation = 'source-over';
-
+    /* 2026-07-28 跟 Iona 確認新增／調整：接地補強陰影，改成固定 3px（原本試過
+       用比例、5px、都覺得太厚，最後定案固定 3px）。
+       做法：把商品去背輪廓整張稍微「往下拉長」3px，上緣固定不動、只有下緣往外
+       延伸，這樣多出來的部分才會從商品照片底下露出來，形成補強陰影；商品照片
+       畫在最上層蓋掉其餘部分，不影響原本外觀。
+       2026-07-28 再跟 Iona 確認：商品一旦旋轉，這層補強陰影就不畫——它是貼著
+       商品「未旋轉」的原始輪廓算的，旋轉之後商品實際角度變了，這層陰影不會
+       跟著轉，位置會兜不起來，乾脆直接跳過，只保留原本的主斜切陰影。 */
+    if (!rot) {
+      var CONTACT_GROW_PX = 3;
+      var contactH = ph + CONTACT_GROW_PX;
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
-      ctx.drawImage(tmp, cx - anchorX, shadowGroundY - anchorY);
+      ctx.globalAlpha = 0.55; // 2026-07-28 跟 Iona 確認：從 0.4 加深一點
+      ctx.drawImage(p.tinted, cx - pw / 2, py - ph, pw, contactH);
       ctx.restore();
+    }
 
-      if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
+    var angle = opts.angle * Math.PI / 180;
+    var soft = FIXED.soft;
+    var fadeMul = FIXED.fade / 100;
+    var occludeStrength = FIXED.occlude / 100;
+    var shear = Math.tan(angle * 0.55);
+    var maxSpread = soft * 1.8;
+
+    var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
+    var tempW = Math.ceil(halfW * 2);
+    var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
+    var anchorX = halfW;
+    var anchorY = Math.ceil(tempH * 0.5);
+
+    var tmp = document.createElement('canvas');
+    tmp.width = tempW; tmp.height = tempH;
+    var tctx = tmp.getContext('2d');
+
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
+
+    if (occludeStrength > 0 && occluderMask) {
+      tctx.save();
+      tctx.globalCompositeOperation = 'destination-out';
+      tctx.globalAlpha = occludeStrength;
+      tctx.drawImage(occluderMask, -(shadowCx - anchorX), -(shadowGroundY - anchorY));
+      tctx.restore();
+    }
+
+    var tipX = -shear * ph * fadeMul;
+    var tipY = -squash * ph * fadeMul - soft * 0.6;
+    tctx.globalCompositeOperation = 'destination-in';
+    var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    tctx.fillStyle = grad;
+    tctx.fillRect(0, 0, tempW, tempH);
+    tctx.globalCompositeOperation = 'source-over';
+
+    /* 柔化用的「霧化取樣」（stampLayer 裡的 spread 抖動）本來就會讓陰影邊緣稍微
+       超出接地線一點點，商品底部以下超過約5px的部分裁掉，避免陰影明顯滲到商品
+       下緣之外。裁切範圍用畫布寬度*3當左右保險值（涵蓋斜切後可能跑到很旁邊的
+       情況），不影響左右延伸，只切掉下緣。 */
+    ctx.save();
+    ctx.beginPath();
+    var clipMarginBelow = 5;
+    var clipSpanX = ctx.canvas.width * 3;
+    ctx.rect(shadowCx - clipSpanX, shadowGroundY - clipSpanX, clipSpanX * 2, clipSpanX + clipMarginBelow);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(tmp, shadowCx - anchorX, shadowGroundY - anchorY);
+    ctx.restore();
+
+    if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
+      withRotation(ctx, pivotX, pivotY, rot, function () {
         ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
-      }
-    });
+      });
+    }
   }
 
   // ---- 代言人：光暈陰影（不倒地、後方縮小+微變形+模糊，可超出畫布下緣；跟隨主光源方向；碰到商品變透明） ----
@@ -264,11 +309,11 @@ window.ShadowPlugin = (function () {
       var shear = Math.tan(angle * 0.55);
 
       var glowScale = 0.93;
-      var offsetX = -shear * ph * 0.08;
+      var offsetX = -shear * ph * 0.08;  // 離人物更近一點
       var offsetY = ph * 0.018 + Math.abs(shear) * ph * 0.008;
       var deformX = 0.97, deformY = 1.03;
-      var blurPx = Math.max(6, Math.round(pw * 0.035));
-      var alpha = 0.24;
+      var blurPx = Math.max(6, Math.round(pw * 0.035)); // 更模糊
+      var alpha = 0.24; // 更淡
 
       var gw = pw * glowScale * deformX;
       var gh = ph * glowScale * deformY;

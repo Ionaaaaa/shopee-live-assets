@@ -338,14 +338,13 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2 · build 20260717-1</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -595,7 +594,7 @@ input[type="file"] { display:none; }
 
 <!-- 商品／人物 陰影：確認 popup（匯入後自動比對出的內容先在這裡確認，按下確認才會套用到所有畫布） -->
 <div class="popup-overlay" id="popup-logo2">
-  <div class="popup-panel" style="width:min(96vw,1400px);max-height:none;overflow:visible;">
+  <div class="popup-panel" style="width:min(96vw,1600px);max-height:none;overflow:visible;">
     <div class="popup-header" style="padding:8px 18px;">
       <span class="popup-title">廠商LOGO ＋ 曝品區</span>
       <button class="popup-close" onclick="closePopup('logo2')">×</button>
@@ -622,7 +621,7 @@ input[type="file"] { display:none; }
     <div style="padding:8px 20px 2px;display:flex;gap:24px;flex-wrap:wrap;">
 
       <!-- 左區塊：LOGO -->
-      <div style="flex:0 1 440px;min-width:320px;display:grid;grid-template-columns:200px 1fr;grid-template-rows:auto 1fr;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
+      <div style="flex:0 1 560px;min-width:400px;display:grid;grid-template-columns:200px 1fr;grid-template-rows:auto 1fr;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
 
         <!-- 左上：上傳CTA -->
         <div style="grid-column:1;grid-row:1;display:flex;flex-direction:column;gap:12px;">
@@ -661,13 +660,13 @@ input[type="file"] { display:none; }
              不然畫布本身比欄位矮，置中會把畫布往下推、看起來像跟左邊
              不同排） -->
         <div style="grid-column:2;grid-row:1 / span 2;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
-          <canvas id="logo2-compose-canvas" width="1200" height="540" style="width:100%;max-width:340px;background:#444;border-radius:4px;touch-action:none;"></canvas>
+          <canvas id="logo2-compose-canvas" width="1200" height="540" style="width:100%;max-width:460px;background:#444;border-radius:4px;touch-action:none;"></canvas>
         </div>
 
       </div>
 
       <!-- 右區塊：陰影編輯器面板＋1200曝品區畫布，同一排並排 -->
-      <div id="logo2-shadow-block" style="flex:1 1 560px !important;min-width:420px !important;display:grid !important;grid-template-columns:200px minmax(0,1fr) !important;grid-template-rows:auto !important;gap:10px !important;align-items:start !important;background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:12px !important;padding:10px !important;">
+      <div id="logo2-shadow-block" style="flex:1 1 680px !important;min-width:480px !important;display:grid !important;grid-template-columns:200px minmax(0,1fr) !important;grid-template-rows:auto !important;gap:10px !important;align-items:start !important;background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:12px !important;padding:10px !important;">
 
         <div id="logo2-shadow-mount-col" style="grid-column:1 !important;grid-row:1 !important;width:auto !important;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
           <div id="shadow-editor-mount"></div>
@@ -678,7 +677,7 @@ input[type="file"] { display:none; }
         </div>
 
         <div id="logo2-shadow-canvas-col" style="grid-column:2 !important;grid-row:1 !important;min-width:0 !important;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
-          <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:auto;height:auto;max-width:100%;max-height:480px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
+          <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:auto;height:auto;max-width:100%;max-height:540px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
         </div>
 
       </div>
@@ -761,21 +760,21 @@ input[type="file"] { display:none; }
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <!-- JS Plugins -->
-<script src="js/banwords-engine-hbn.js?v=20260717a"></script>
-<script src="js/logo-editor-plugin.js?v=20260717a"></script>
-<script src="js/editor-plugin.js?v=20260717a"></script>
-<script src="js/bn-state-plugin.js?v=20260717a"></script>
+<script src="js/banwords-engine-hbn.js?v=20260730d"></script>
+<script src="js/logo-editor-plugin.js?v=20260730d"></script>
+<script src="js/editor-plugin.js?v=20260730d"></script>
+<script src="js/bn-state-plugin.js?v=20260730d"></script>
 
-<script src="js/editor-utils.js?v=20260717a"></script>
-<script src="js/themes.js?v=20260717a"></script>
-<script src="js/fl-b-theme.js?v=20260717a"></script>
-<script src="js/editor-state.js?v=20260717a"></script>
-<script src="js/editor-canvas-ui.js?v=20260717a"></script>
-<script src="js/editor-popups.js?v=20260717a"></script>
-<script src="js/editor-logo2-canvas.js?v=20260717a"></script>
-<script src="js/editor-shadow-canvas.js?v=20260717a"></script>
-<script src="js/editor-import.js?v=20260717a"></script>
-<script src="js/editor-export.js?v=20260717a"></script>
+<script src="js/editor-utils.js?v=20260730d"></script>
+<script src="js/themes.js?v=20260730d"></script>
+<script src="js/fl-b-theme.js?v=20260730d"></script>
+<script src="js/editor-state.js?v=20260730d"></script>
+<script src="js/editor-canvas-ui.js?v=20260730d"></script>
+<script src="js/editor-popups.js?v=20260730d"></script>
+<script src="js/editor-logo2-canvas.js?v=20260730d"></script>
+<script src="js/editor-shadow-canvas.js?v=20260730d"></script>
+<script src="js/editor-import.js?v=20260730d"></script>
+<script src="js/editor-export.js?v=20260730d"></script>
 <script>
 'use strict';
 
@@ -894,12 +893,12 @@ var pm=(function(){
 </script>
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
-<script src="js/shadow-plugin.js?v=20260717a"></script>
-<script src="js/frame-defaults.js?v=20260717a"></script>
-<script src="js/shadow-frame-plugin.js?v=20260717a"></script>
-<script src="js/shadow-layout-defaults.js?v=20260717a"></script>
-<script src="js/shadow-scene-scale.js?v=20260717a"></script>
-<script src="js/shadow-layout-receiver.js?v=20260717a"></script>
-<script src="js/shadow-editor-plugin.js?v=20260717a"></script>
+<script src="js/shadow-plugin.js?v=20260730d"></script>
+<script src="js/frame-defaults.js?v=20260730d"></script>
+<script src="js/shadow-frame-plugin.js?v=20260730d"></script>
+<script src="js/shadow-layout-defaults.js?v=20260730d"></script>
+<script src="js/shadow-scene-scale.js?v=20260730d"></script>
+<script src="js/shadow-layout-receiver.js?v=20260730d"></script>
+<script src="js/shadow-editor-plugin.js?v=20260730d"></script>
 </body>
 </html>
