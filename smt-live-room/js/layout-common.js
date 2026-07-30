@@ -277,11 +277,8 @@ function updateOverlay(){
   var bar=document.createElement('div');
   bar.className='sel-bar';
   bar.innerHTML=
-    '<button class="sel-bar-btn" onclick="doAction(\'edit\')">'
-    +'<svg viewBox="0 0 16 16"><path d="M2 14l2-5L12 1l3 3-8 8-5 2z"/><path d="M10 3l3 3"/></svg>去背編輯</button>'
-    +'<div class="sel-bar-sep"></div>'
-    +'<button class="sel-bar-btn" onclick="doAction(\'replace\')">'
-    +'<svg viewBox="0 0 16 16"><path d="M1 8a7 7 0 1 0 14 0"/><path d="M8 1v5l3-3M8 1l-3 2"/></svg>更換</button>'
+    '<button class="sel-bar-btn" onclick="doAction(\'editShadow\')">'
+    +'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M11 2l3 3-8 8H3v-3z"/></svg>編輯</button>'
     +'<div class="sel-bar-sep"></div>'
     +'<button class="sel-bar-btn danger" onclick="doAction(\'delete\')">'
     +'<svg viewBox="0 0 16 16"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 9h8l1-9"/></svg>刪除</button>';
@@ -301,11 +298,17 @@ function updateOverlay(){
 /* ── Action handler ── */
 
 function doAction(action){
-  if(action==='edit'){
+  if(action==='editShadow'){
+    if(window.parent!==window){
+      window.parent.postMessage({type:'BN_OPEN_SHADOW_EDITOR', key:'host'}, '*');
+    }
+  } else if(action==='edit'){
+    // 舊的「去背編輯」動作，已經沒有按鈕會呼叫到這裡，保留給舊訊息格式相容用
     if(window.parent!==window){
       window.parent.postMessage({type:'BN_OPEN_EDITOR', key:'host', src:D.host.src}, '*');
     }
   } else if(action==='replace'){
+    // 舊的「更換」動作，已經沒有按鈕會呼叫到這裡，保留給舊訊息格式相容用
     if(window.parent!==window){
       window.parent.postMessage({type:'BN_REPLACE_IMG', key:'host'}, '*');
     }

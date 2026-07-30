@@ -1,7 +1,7 @@
 'use strict';
 
 /* ── 活動名稱：顯示在左上角，也是「店家名稱」讀不到時的保底值 ── */
-var ACTIVITY_NAME = 'lifestyle-channel';
+var ACTIVITY_NAME = 'SMT直播間';
 
 /* 匯出檔名用的店家名稱：優先用工單「LOGO」欄位吸出來的賣家名稱
    （S.sellerName，例如「Cerave適樂膚」）——那才是真正的賣家/品牌識別；
@@ -15,11 +15,11 @@ function getExportStoreName(){
   return v;
 }
 
-/* 統一組出「日期(補0)_店家名稱_賣家資源」這個檔名前綴，單張下載／整頁下載／
+/* 統一組出「日期(補0)_店家名稱_SMT直播間」這個檔名前綴，單張下載／整頁下載／
    整包下載都呼叫這裡，不要各自拼一份，格式才會保證三個地方永遠一致。
    datePrefix 可以是空字串（例如整包下載橫跨多天、日期已經另外處理過）。 */
 function getExportNamePrefix(datePrefix){
-  return (datePrefix ? datePrefix + '_' : '') + getExportStoreName() + '_賣家資源';
+  return (datePrefix ? datePrefix + '_' : '') + getExportStoreName() + '_SMT直播間';
 }
 
 /* 日期格式化：抓 M/D，兩邊補0成4碼 MMDD（檔名用，補0後長度固定、好排序） */

@@ -273,6 +273,14 @@ window.addEventListener('message', function(e){
       }
     });
   }
+  else if(msg.type === 'BN_OPEN_SHADOW_EDITOR'){
+    /* 版位懸浮 icon「編輯」按鈕現在改開 1200 畫布（跟側欄「曝品區」按鈕同一個入口），
+       去背功能已經收進 1200 畫布素材清單裡（見 shadow-editor-plugin.js 的「去背」連結），
+       不用像舊的 BN_OPEN_EDITOR 那樣另外開一個獨立的去背編輯器 */
+    if(typeof window.openShadowPopup === 'function'){
+      window.openShadowPopup();
+    }
+  }
   else if(msg.type === 'BN_REPLACE_IMG' && msg.key === 'host'){
     /* 取代主持人：直接開啟右側圖庫 popup */
     openPopup('host');

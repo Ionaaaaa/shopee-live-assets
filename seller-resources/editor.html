@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCN代播 編輯器</title>
+<title>賣家資源 編輯器</title>
 <style>
 @font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
 @font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
@@ -293,14 +293,13 @@ input[type="file"] { display:none; }
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
-    <a class="tbtn" href="admin.html">⚙️ 後台管理</a>
     <input type="file" id="zipFile" accept=".zip,.xlsx">
     <button class="tbtn" onclick="openImportModal()" style="border-color:#3d9970;color:#3d9970;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>匯入工單
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -624,20 +623,20 @@ input[type="file"] { display:none; }
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <!-- JS Plugins -->
-<script src="js/banwords-engine-hbn.js"></script>
-<script src="js/logo-editor-plugin.js"></script>
-<script src="js/editor-plugin.js"></script>
-<script src="js/bn-state-plugin.js"></script>
+<script src="js/banwords-engine-hbn.js?v=20260730b"></script>
+<script src="js/logo-editor-plugin.js?v=20260730b"></script>
+<script src="js/editor-plugin.js?v=20260730b"></script>
+<script src="js/bn-state-plugin.js?v=20260730b"></script>
 
-<script src="js/editor-utils.js"></script>
-<script src="js/color-theme-engine.js"></script>
-<script src="js/editor-state.js"></script>
-<script src="js/editor-canvas-ui.js"></script>
-<script src="js/editor-popups.js"></script>
-<script src="js/editor-logo2-canvas.js"></script>
-<script src="js/editor-shadow-canvas.js"></script>
-<script src="js/editor-import.js"></script>
-<script src="js/editor-export.js"></script>
+<script src="js/editor-utils.js?v=20260730b"></script>
+<script src="js/color-theme-engine.js?v=20260730b"></script>
+<script src="js/editor-state.js?v=20260730b"></script>
+<script src="js/editor-canvas-ui.js?v=20260730b"></script>
+<script src="js/editor-popups.js?v=20260730b"></script>
+<script src="js/editor-logo2-canvas.js?v=20260730b"></script>
+<script src="js/editor-shadow-canvas.js?v=20260730b"></script>
+<script src="js/editor-import.js?v=20260730b"></script>
+<script src="js/editor-export.js?v=20260730b"></script>
 <script>
 'use strict';
 
@@ -755,12 +754,12 @@ var pm=(function(){
 </script>
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
-<script src="js/shadow-plugin.js"></script>
-<script src="js/frame-defaults.js"></script>
-<script src="js/shadow-frame-plugin.js"></script>
-<script src="js/shadow-layout-defaults.js"></script>
-<script src="js/shadow-scene-scale.js"></script>
-<script src="js/shadow-layout-receiver.js"></script>
-<script src="js/shadow-editor-plugin.js"></script>
+<script src="js/shadow-plugin.js?v=20260730b"></script>
+<script src="js/frame-defaults.js?v=20260730b"></script>
+<script src="js/shadow-frame-plugin.js?v=20260730b"></script>
+<script src="js/shadow-layout-defaults.js?v=20260730b"></script>
+<script src="js/shadow-scene-scale.js?v=20260730b"></script>
+<script src="js/shadow-layout-receiver.js?v=20260730b"></script>
+<script src="js/shadow-editor-plugin.js?v=20260730b"></script>
 </body>
 </html>

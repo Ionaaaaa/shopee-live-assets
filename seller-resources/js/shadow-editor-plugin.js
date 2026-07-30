@@ -149,7 +149,7 @@
             '</div>' +
           '</div>' +
           '<div class="lc-field">' +
-            '<label>素材（拖曳可移動，右上角 × 可刪除；商品可勾選「拍立得」套白框）</label>' +
+            '<label>素材（拖曳可移動，右上角 × 可刪除；商品可去背、可勾選「拍立得」套白框）</label>' +
             '<div class="lc-slotbar" id="lc-slotbar"></div>' +
           '</div>' +
         '</div>' +
@@ -224,6 +224,41 @@
     setSelection([slotId]);
     renderSlotBar();
     notifyChange();
+  }
+
+  /* 商品類素材清單新增的「去背」連結，沿用既有的去背編輯器外掛（window.openEraseEditor，
+     見 editor-plugin.js）。只開放商品類型（product1/2/3）——人物（host1/host2）不開放，
+     人物走頭部定位邏輯，去背後形狀可能跟頭部偵測對不上。
+     openEraseEditor 原本是設計給一個真正的 <img> DOM 元素用（會攔截它的 .src setter
+     來取得編輯完成的結果），這裡素材存的是 dataURL 字串，所以先建一個離屏 <img> 元素
+     載入這個 dataURL，再用同一套攔截機制把編輯結果寫回 state.slots。 */
+  function openEraseEditorForSlot(slotId){
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl) return;
+    if (typeof window.openEraseEditor !== 'function'){
+      if (typeof toast === 'function') toast('去背編輯器尚未載入，請稍後再試','err');
+      return;
+    }
+    var imgEl = new Image();
+    imgEl.onload = function(){
+      var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      var origSetter = origDescriptor.set;
+      var _patched = false;
+      Object.defineProperty(imgEl, 'src', {
+        set: function(val){
+          origSetter.call(this, val);
+          if (!_patched && val && val.indexOf('data:') === 0){
+            _patched = true;
+            applySlotDataUrl(slotId, val);
+            if (typeof toast === 'function') toast('去背完成','ok');
+          }
+        },
+        get: function(){ return origDescriptor.get.call(this); },
+        configurable: true
+      });
+      window.openEraseEditor(imgEl);
+    };
+    imgEl.src = dataUrl;
   }
 
   function loadSlotFile(slotId, file, ratio){
@@ -416,12 +451,17 @@
       meta.className = 'lc-meta';
       meta.innerHTML = def.label + '<span class="lc-tag">' + (def.type==='person' ? '人物・光暈陰影' : '商品・貼地陰影') + '</span>';
 
-      // 商品類、而且已經有圖：加「拍立得」勾選（人物類先不開放——人物走頭部定位邏輯，
-      // 套框後整張圖的形狀跟頭部偵測會對不上，之後真的有需求再另外處理）
+      // 商品類、而且已經有圖：加「去背」連結＋「拍立得」勾選（人物類先不開放——人物走頭部
+      // 定位邏輯，去背/套框後整張圖的形狀跟頭部偵測會對不上，之後真的有需求再另外處理）
       if (def.type === 'product' && state.slots[def.id]){
         var frameRow = document.createElement('div');
         frameRow.className = 'lc-frame-row';
         frameRow.addEventListener('click', function(e){ e.stopPropagation(); }); // 別讓點擊冒泡去觸發 box 的選取/上傳邏輯
+
+        var eraseLink = document.createElement('a');
+        eraseLink.textContent = '去背';
+        eraseLink.addEventListener('click', function(e){ e.stopPropagation(); openEraseEditorForSlot(def.id); });
+        frameRow.appendChild(eraseLink);
 
         var cbId = 'lc-polaroid-' + def.id;
         var cb = document.createElement('input');

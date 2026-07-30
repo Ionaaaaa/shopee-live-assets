@@ -173,8 +173,16 @@ function confirmImport(){
     return;
   }
 
+  /* 匯入工單進度條：讀取Excel → 解析建立分頁 → 比對主持人／商品圖片 → 比對Logo → 完成，
+     五段進度。目前是「階段性」進度，matchAndApplyHostFiles() 對各欄位的檔案讀取是
+     各自獨立、不等彼此完成（fire-and-forget），沒有做到「已比對 n/5」這種逐檔進度——
+     之後如果素材資料夾檔案量變大、需要更細的進度，要把那段改成有回呼才能逐一累加。 */
+  pm.show('匯入工單中');
+  pm.update(5, '讀取 Excel…');
+
   function afterExcel(groupData){
     groupData = groupData || {};
+    pm.update(45, '解析建立分頁…');
     /* 先進入暫存模式：版型/素材的變更先不廣播給畫布，等使用者在確認 popup 按下按鈕才 commit() */
     if(window.ShadowEditor){
       window.ShadowEditor.enterPending();
@@ -226,12 +234,16 @@ function confirmImport(){
     if(typeof updateFlCanvasVisibility === 'function') updateFlCanvasVisibility(); // 「不製作」時要隱藏FL文案欄位＋畫布區的FL canvas
 
     var hostMatched = matchAndApplyHostFiles(st.assetFiles, groupData);
+    pm.update(65, '比對主持人／商品圖片…');
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched){
+      pm.update(90, '比對 Logo…');
       closePopup('import');
       var msgParts = [];
       if(st.excelFile) msgParts.push('Excel 已匯入');
       if(st.assetFiles.length) msgParts.push('主持人/商品/Logo 比對到 '+(hostMatched+logoMatched)+' 個');
       toast(msgParts.join('，')||'匯入完成','ok',3000);
+      pm.done(msgParts.join('，')||'匯入完成');
+      pm.hide();
 
       /* 有素材可以確認，或有版型組合，就打開確認 popup；純文字匯入就不用彈出來 */
       if(st.assetFiles.length || groupData.combo){
@@ -244,9 +256,10 @@ function confirmImport(){
 
   if(st.excelFile){
     processExcelFile(st.excelFile, function(err, groups){
-      if(err){ toast('Excel 解析失敗：'+err.message,'err'); return; }
+      if(err){ toast('Excel 解析失敗：'+err.message,'err'); pm.hide(); return; }
       if(!groups.length){
         toast('Excel 找不到分頁資料，請確認工單格式','err');
+        pm.hide();
         afterExcel(null); // Excel 沒讀到東西，還是繼續處理已選的圖片資料夾
         return;
       }

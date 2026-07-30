@@ -502,6 +502,20 @@ function initFlPreviewDragOnce(){
   var cv = document.getElementById('logo2-fl-preview-canvas');
   if(!cv || cv._flDragBound) return;
   cv._flDragBound = true;
+  /* 滾輪縮放：跟旁邊「FL 額外放大」滑桿（fl-logo-extra-scale，min=1 max=3 step=0.05）
+     共用同一個 setFlLogoExtraScale()，滾輪只是另一種輸入方式，數值/上下限完全一致，
+     不用另外維護一套縮放邏輯。往上滾放大、往下滾縮小，跟大部分繪圖軟體手感一致。 */
+  cv.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var slider = document.getElementById('fl-logo-extra-scale');
+    var min = slider ? parseFloat(slider.min) : 1;
+    var max = slider ? parseFloat(slider.max) : 3;
+    var step = slider ? parseFloat(slider.step) || 0.05 : 0.05;
+    var cur = S.flLogoExtraScale || 1;
+    var next = cur + (e.deltaY < 0 ? step : -step);
+    next = Math.max(min, Math.min(max, next));
+    setFlLogoExtraScale(next);
+  }, { passive:false });
   cv.addEventListener('mousedown', function(e){
     if(!_logo2Img) return;
     _flPreviewDrag = { sx:e.clientX, sy:e.clientY, ox:S.flLogoExtraOffX||0, oy:S.flLogoExtraOffY||0 };

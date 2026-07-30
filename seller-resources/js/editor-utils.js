@@ -1,7 +1,7 @@
 'use strict';
 
 /* ── 活動名稱：顯示在左上角，也是「店家名稱」讀不到時的保底值 ── */
-var ACTIVITY_NAME = 'lifestyle-channel';
+var ACTIVITY_NAME = '賣家資源';
 
 /* 匯出檔名用的店家名稱：優先用工單「LOGO」欄位吸出來的賣家名稱
    （S.sellerName，例如「Cerave適樂膚」）——那才是真正的賣家/品牌識別；

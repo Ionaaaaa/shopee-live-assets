@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCN代播 後台管理</title>
+<title>SMT直播間 後台管理</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -187,7 +187,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <div class="topbar-logo">
       <svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg>
     </div>
-    <span class="topbar-title">MCN代播</span>
+    <span class="topbar-title">SMT直播間</span>
     <span class="topbar-badge">後台管理</span>
   </div>
   <div class="nav-tabs">
@@ -233,11 +233,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;">
       <div style="display:flex;gap:8px;align-items:center;">
         <span style="font-size:11px;color:var(--text-muted);width:80px;">專案名稱</span>
-        <span style="font-size:13px;">MCN代播</span>
+        <span style="font-size:13px;">SMT直播間</span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span style="font-size:11px;color:var(--text-muted);width:80px;">layouts/ 路徑</span>
-        <code style="font-size:11px;color:var(--text-muted);">mcn-live/layouts/</code>
+        <code style="font-size:11px;color:var(--text-muted);">smt-live-room/layouts/</code>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span style="font-size:11px;color:var(--text-muted);width:80px;">啟用畫布數</span>
@@ -268,7 +268,7 @@ function toast(msg, type, duration){
 }
 
 /* ── Storage key ── */
-var STORE_KEY = 'bn_admin_seller_resources_v1';
+var STORE_KEY = 'bn_admin_smt_live_room_v1';
 
 /* ── Load / Save layout list ── */
 function loadList(){
@@ -357,8 +357,8 @@ function previewLayout(file){
 /* ── Scan（重新讀取 js/index.js） ── */
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單將重設）')) return;
-  localStorage.removeItem('bn_admin_mcn_live_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(HOST_LIST_KEY);
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }
@@ -430,7 +430,8 @@ function initFromIndexJS(){
 initFromIndexJS();
 
 /* ── 主持人圖庫 ── */
-var HOST_LIST_KEY = 'bn_hosts_star_studio_v1';
+/* 專案各自獨立的 key，不跟其他姊妹專案（star_studio系）共用，避免圖庫互相污染 */
+var HOST_LIST_KEY = 'bn_hosts_smt_live_room_v1';
 
 function getHostList(){
   try{ return JSON.parse(localStorage.getItem(HOST_LIST_KEY)||'[]'); }
