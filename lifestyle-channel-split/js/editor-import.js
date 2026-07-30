@@ -528,7 +528,7 @@ function importZip(file){
       /* 1. 比對圖庫 */
       if(hostName){
         try{
-          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]');
+          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_lifestyle_channel_split_v1')||'[]');
           var nameNoExt = hostName.replace(/\.[^.]+$/,'');
           var match = hostLib.find(function(h){
             var hn = h.name.replace(/\.[^.]+$/,'');

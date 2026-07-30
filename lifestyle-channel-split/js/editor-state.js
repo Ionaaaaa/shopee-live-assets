@@ -16,7 +16,7 @@ var BG_TEXT_DEF={ // 主標/日期/副標顏色已固定，三個款式都用同
 
 /* ── iframe 清單 ── */
 /* LAYOUTS 從後台 localStorage 讀取啟用的版位 */
-var STORE_KEY = 'bn_admin_star_studio_v1';
+var STORE_KEY = 'bn_admin_lifestyle_channel_split_v1';
 var DEFAULT_LAYOUTS = [
   { id:'01_thumbnail', name:'直播時縮圖',                  file:'01_thumbnail.html', w:720,  h:720,  enabled:true },
   { id:'02_lpbn',      name:'直播大廳 LPBN（有/無CTA）2版', file:'02_lpbn.html',      w:1125, h:360,  enabled:true },
@@ -266,8 +266,8 @@ document.getElementById('btn-save').addEventListener('click',function(){
 
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單、主持人圖庫將重設）')) return;
-  localStorage.removeItem('bn_admin_star_studio_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem('bn_admin_lifestyle_channel_split_v1');
+  localStorage.removeItem('bn_hosts_lifestyle_channel_split_v1');
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }
