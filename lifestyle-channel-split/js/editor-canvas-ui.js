@@ -215,6 +215,11 @@ window.addEventListener('message', function(e){
     /* 取代主持人：直接開啟右側圖庫 popup */
     openPopup('host');
   }
+  else if(msg.type === 'BN_OPEN_SHADOW_EDITOR' && msg.key === 'host'){
+    /* 2026-07-30 新增：版位上的「編輯」按鈕改開 1200 畫布（商品／主持人 陰影編輯），
+       去背／更換都收進那個 popup 統一處理，不再各版位各自一套。 */
+    if(typeof openShadowPopup === 'function') openShadowPopup();
+  }
   else if(msg.type === 'BN_DELETE_IMG' && msg.key === 'host'){
     /* 刪除主持人 */
     S.imgs.host = null;

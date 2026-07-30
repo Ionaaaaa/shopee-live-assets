@@ -222,6 +222,43 @@
     notifyChange();
   }
 
+  var _eraseScratchImg = null;
+  /* 商品去背：沿用既有的外掛去背編輯器（window.openEraseEditor，原本只給
+     主持人圖片用），透過攔截一次性的 img.src 寫入，把去背結果收回這個 slot。 */
+  function openEraseForSlot(slotId){
+    if (typeof window.openEraseEditor !== 'function'){
+      toast('去背編輯器尚未載入，請稍後再試','err');
+      return;
+    }
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl){ toast('這個欄位還沒有圖片','err'); return; }
+
+    if (!_eraseScratchImg){
+      _eraseScratchImg = document.createElement('img');
+      _eraseScratchImg.style.display = 'none';
+      document.body.appendChild(_eraseScratchImg);
+    }
+    var scratchImg = _eraseScratchImg;
+    scratchImg.src = dataUrl; // 一般寫入，先把「輸入」放好，這次不用被攔截
+
+    var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    var origSetter = origDescriptor.set;
+    Object.defineProperty(scratchImg, 'src', {
+      set: function(val){
+        origSetter.call(this, val);
+        if (val && val.indexOf('data:') === 0){
+          delete scratchImg.src; // 還原成 prototype 預設的 setter，只攔這一次
+          applySlotDataUrl(slotId, val);
+          toast('去背結果已套用','ok');
+        }
+      },
+      get: function(){ return origDescriptor.get.call(this); },
+      configurable: true
+    });
+
+    window.openEraseEditor(scratchImg);
+  }
+
   function loadSlotFile(slotId, file, ratio){
     var reader = new FileReader();
     reader.onload = function(ev){
@@ -418,6 +455,11 @@
           adjustLink.addEventListener('click', function(e){ e.stopPropagation(); openFrameAdjust(def.id); });
           frameRow.appendChild(adjustLink);
         }
+
+        var eraseLink = document.createElement('a');
+        eraseLink.textContent = '去背';
+        eraseLink.addEventListener('click', function(e){ e.stopPropagation(); openEraseForSlot(def.id); });
+        frameRow.appendChild(eraseLink);
 
         meta.appendChild(frameRow);
       }
