@@ -197,7 +197,7 @@ input[type="file"] { display:none; }
     </button>
     <input type="file" id="loadFile" accept=".json">
     <button class="tbtn" onclick="document.getElementById('loadFile').click()">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 10v3h12v-3M8 2v8M5 7l3 3 3-3"/></svg>載入暫存
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>載入暫存
     </button>
     <button class="tbtn" id="btn-save">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 14H3a1 1 0 01-1-1V3a1 1 0 011-1h8l3 3v9a1 1 0 01-1 1z"/><path d="M5 14V9h6v5M10 2v4H5"/></svg>儲存暫存
@@ -311,11 +311,11 @@ input[type="file"] { display:none; }
       <button class="popup-close" onclick="closePopup('import')">×</button>
     </div>
     <div style="padding:24px;display:flex;flex-direction:column;gap:12px;">
-      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:border-color .15s;"
+      <div id="import-excel-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor='var(--border2)'">
         <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:10px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
         <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式 ・ 自動建立 BAU / 快閃日兩個分頁</div>
       </div>
       <div style="font-size:11px;color:var(--text-dim);line-height:1.7;padding:0 4px;">
@@ -667,7 +667,12 @@ function setRefLayer(id, input){
 }
 
 /* ── Popup ── */
-function openImportModal(){ document.getElementById('popup-import').classList.add('open'); }
+function openImportModal(){
+  var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
+  if(z){z.dataset.success='';z.style.borderStyle='dashed';z.style.borderColor='var(--border2)';z.style.background='';}
+  if(l){l.textContent='點擊上傳 Excel 工單';l.style.color='var(--text-muted)';}
+  document.getElementById('popup-import').classList.add('open');
+}
 function closePopup(type){ document.getElementById('popup-'+type).classList.remove('open'); }
 
 document.getElementById('popup-import').addEventListener('click', function(e){
@@ -703,6 +708,10 @@ function handleImportExcel(file){
         { id:'tab-bau',   label:'BAU',  type:'bau',   data: bauData },
         { id:'tab-flash', label:'快閃日', type:'flash', data: flashData }
       ];
+
+      var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
+      if(z){z.dataset.success='1';z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+      if(l){l.textContent='✓ '+file.name;l.style.color='var(--accent)';}
 
       closePopup('import');
       buildTabs(tabs);
@@ -959,21 +968,27 @@ function collectCanvasStates(cb){
   }, 1500);
 }
 
-document.getElementById('btn-save').addEventListener('click', function(){
+function buildFullSnapshot(cb){
   saveCurrentTabState(function(){
     collectCanvasStates(function(canvasStates){
       var state = collectState();
       state.tabs = TABS;
       state.activeTab = ACTIVE_TAB;
       state.canvasStates = canvasStates; // 各版位的 canvas state（含券樣位置）
-      var blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'ENG_LIVE_暫存.json';
-      a.click();
-      setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-      toast('暫存已下載','ok');
+      cb(state);
     });
+  });
+}
+
+document.getElementById('btn-save').addEventListener('click', function(){
+  buildFullSnapshot(function(state){
+    var blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ENG_LIVE_暫存.json';
+    a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    toast('暫存已下載','ok');
   });
 });
 
@@ -1099,11 +1114,19 @@ function _downloadAll(){
 
   function processTab(ti){
     if(ti >= TABS.length){
-      zip.generateAsync({type:'blob'}).then(function(blob){
-        dl(blob,zipName);
-        applyTabData(TABS[ACTIVE_TAB], false);
-        toast('整包下載完成！','ok',3000);
-      });
+      /* 全部截圖完畢，先還原目前分頁畫面，等 postMessage 還原穩定後
+         再存一份全分頁暫存檔，跟各分頁製作物一起塞進同一個 zip，
+         只觸發一次下載，避免另開一個下載視窗互相衝突。 */
+      applyTabData(TABS[ACTIVE_TAB], false);
+      setTimeout(function(){
+        buildFullSnapshot(function(state){
+          zip.file(zipName.replace(/\.zip$/,'')+'_暫存.json', JSON.stringify(state,null,2));
+          zip.generateAsync({type:'blob'}).then(function(blob){
+            dl(blob,zipName);
+            toast('整包下載完成！（含暫存檔）','ok',3000);
+          });
+        });
+      }, 500);
       return;
     }
     var tab = TABS[ti];
