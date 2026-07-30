@@ -336,54 +336,14 @@
   }
 
   /* ══════════════════════════════════════
-     3. 下載 / 上傳 暫存按鈕
-  ══════════════════════════════════════ */
-  function insertSaveLoadBar(){
-    var sidebar=document.getElementById('sidebar');
-    if(!sidebar||document.getElementById('_bn_save_bar')) return;
-
-    var bar=document.createElement('div');
-    bar.id='_bn_save_bar';
-    bar.style.cssText='padding:8px 14px;border-top:1px solid var(--border,#30363d);display:flex;gap:6px;flex-shrink:0;';
-
-    var bs='flex:1;padding:7px 6px;background:var(--bg2,#1c2333);border:1px solid var(--border,#30363d);border-radius:7px;color:var(--text2,#8b949e);font-size:11px;cursor:pointer;transition:.12s;text-align:center;';
-
-    var dlBtn=document.createElement('button');
-    dlBtn.textContent='⬇ 下載暫存'; dlBtn.style.cssText=bs;
-    dlBtn.addEventListener('click',function(){
-      var blob=new Blob([JSON.stringify(collectState(),null,2)],{type:'application/json'});
-      var a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);
-      a.download='bn-state-'+new Date().toISOString().slice(0,16).replace('T','_')+'.json';
-      a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-      showToast('暫存已下載','ok');
-    });
-
-    var ulWrap=document.createElement('label');
-    ulWrap.style.cssText=bs+'cursor:pointer;display:block;';
-    ulWrap.textContent='⬆ 上傳暫存';
-    var ulInp=document.createElement('input');
-    ulInp.type='file'; ulInp.accept='.json'; ulInp.style.display='none';
-    ulInp.addEventListener('change',function(){
-      var file=this.files[0]; if(!file) return;
-      var reader=new FileReader();
-      reader.onload=function(e){
-        try{
-          applyState(JSON.parse(e.target.result));
-          autoSave();
-          showToast('暫存已載入','ok');
-        }catch(_){ showToast('暫存格式錯誤','err'); }
-      };
-      reader.readAsText(file);
-      ulInp.value='';
-    });
-    ulWrap.appendChild(ulInp);
-
-    bar.appendChild(dlBtn); bar.appendChild(ulWrap);
-    var dlBar=document.getElementById('bn-download-bar');
-    if(dlBar&&dlBar.nextSibling) sidebar.insertBefore(bar,dlBar.nextSibling);
-    else sidebar.appendChild(bar);
-  }
+     3.（已移除）下載 / 上傳 暫存按鈕
+     這組按鈕原本會在左側素材清單欄底部插入「⬇下載暫存／⬆上傳暫存」，
+     跟頂部工具列既有的「整包下載／儲存暫存／載入暫存」功能重複（後者是
+     editor-state.js／editor-export.js 那套完整涵蓋所有分頁的機制），
+     是從共用架構複製時一起帶過來、沒清掉的舊功能，左下角因此出現兩顆
+     重複的下載/上傳暫存 icon。這裡改成空函式，不再插入這排按鈕，
+     但保留函式名稱／呼叫點不動，避免影響下面 tryInsert() 的呼叫順序。 */
+  function insertSaveLoadBar(){}
 
   /* ══════════════════════════════════════
      初始化
