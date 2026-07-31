@@ -114,9 +114,10 @@
       '.lc-meta{font-size:12px;color:var(--text);flex:1;min-width:0;}' +
       '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
       '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
-      '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
-      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
-      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
+      '.lc-frame-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
+      '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;flex-shrink:0;}' +
+      '.lc-frame-row label{white-space:nowrap;flex-shrink:0;}' +
+      '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;white-space:nowrap;flex-shrink:0;}' +
       '.lc-frame-row a:hover{text-decoration:underline;}';
     document.head.appendChild(style);
   }
@@ -220,6 +221,55 @@
     setSelection([slotId]);
     renderSlotBar();
     notifyChange();
+  }
+
+  /* ── 商品去背：沿用 editor-plugin.js 的外掛去背編輯器（window.openEraseEditor）──
+     那個編輯器原本是設計給側欄「主持人」那顆固定的 <img> 用的：讀 imgEl.src 當輸入，
+     使用者按「套用」後改寫同一個 imgEl.src 當輸出（見 editor-plugin.js applyToTarget()）。
+     1200畫布這邊的商品是畫在 canvas 上的（state.slots[id] 存 dataURL，不是一個活的
+     <img> DOM元素），所以借用時用一個共用的隱藏 <img> 當「介面」：
+       1) 隱藏img.src 先設成目前這個slot的圖（一般寫入，不攔截）
+       2) 用 Object.defineProperty 暫時攔截這個img的 src setter，只攔下一次寫入
+          （對應使用者按下「套用」的那一刻），攔到之後立刻還原成原本的setter，
+          不會影響下次重複使用這顆隱藏img
+       3) 攔到的新dataURL餵回 applySlotDataUrl()，跟直接重新上傳圖片走同一條路
+          （會自動更新縮圖、重新廣播給1200畫布）
+     注意：外掛編輯器本身另外附了一個「加陰影」工具（跟這個專案的貼地陰影系統
+     是兩回事）——去背/裁切完直接按套用就好，不要另外用外掛裡的加陰影功能，
+     不然商品會被烤進一層外掛自己的陰影，跟畫布上原本的貼地陰影疊在一起。 */
+  var _eraseScratchImg = null;
+  function openEraseForSlot(slotId){
+    if (typeof window.openEraseEditor !== 'function'){
+      toast('去背編輯器尚未載入，請稍後再試','err');
+      return;
+    }
+    var dataUrl = state.slots[slotId];
+    if (!dataUrl){ toast('這個欄位還沒有圖片','err'); return; }
+
+    if (!_eraseScratchImg){
+      _eraseScratchImg = document.createElement('img');
+      _eraseScratchImg.style.display = 'none';
+      document.body.appendChild(_eraseScratchImg);
+    }
+    var scratchImg = _eraseScratchImg;
+    scratchImg.src = dataUrl; // 一般寫入，先把「輸入」放好，這次不用被攔截
+
+    var origDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    var origSetter = origDescriptor.set;
+    Object.defineProperty(scratchImg, 'src', {
+      set: function(val){
+        origSetter.call(this, val);
+        if (val && val.indexOf('data:') === 0){
+          delete scratchImg.src; // 還原成 prototype 預設的 setter，只攔這一次
+          applySlotDataUrl(slotId, val);
+          toast('去背結果已套用','ok');
+        }
+      },
+      get: function(){ return origDescriptor.get.call(this); },
+      configurable: true
+    });
+
+    window.openEraseEditor(scratchImg);
   }
 
   function loadSlotFile(slotId, file, ratio, cb){
@@ -387,6 +437,14 @@
            （這個坑之前在空格子的上傳觸發區也踩過一次，同一套解法。） */
         frameRow.draggable = false;
         frameRow.addEventListener('click', function(e){ e.stopPropagation(); }); // 別讓點擊冒泡去觸發 box 的選取/上傳邏輯
+
+        /* 2026-07-29 跟 Iona 確認新增：商品去背，沿用既有的外掛去背編輯器
+           （editor-plugin.js 的 window.openEraseEditor，原本只給主持人圖片用），
+           見上面 openEraseForSlot() 的說明。 */
+        var eraseLink = document.createElement('a');
+        eraseLink.textContent = '去背';
+        eraseLink.addEventListener('click', function(e){ e.stopPropagation(); openEraseForSlot(def.id); });
+        frameRow.appendChild(eraseLink);
 
         var cbId = 'lc-polaroid-' + def.id;
         var cb = document.createElement('input');

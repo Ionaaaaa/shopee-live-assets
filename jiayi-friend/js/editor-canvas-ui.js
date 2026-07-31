@@ -282,6 +282,15 @@ window.addEventListener('message', function(e){
     broadcastFull();
     toast('主持人已移除','ok');
   }
+  else if(msg.type === 'BN_OPEN_SHADOW'){
+    /* layout 懸浮 action bar 的「編輯」按鈕：跟側欄「陰影」按鈕開同一個 popup，
+       取代原本的「去背編輯／更換」兩顆按鈕（見 layout-common.js） */
+    if(typeof openShadowPopup === 'function'){
+      openShadowPopup();
+    } else {
+      toast('陰影編輯器尚未載入，請稍後再試','err');
+    }
+  }
   else if(msg.type === 'BN_OPEN_EDITOR' && msg.key === 'host'){
     /* 開啟去背/影子編輯器 */
     var hostImg = document.getElementById('host-img');

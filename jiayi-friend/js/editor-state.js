@@ -312,8 +312,8 @@ document.getElementById('btn-save').addEventListener('click',function(){
 
 function clearAllStorage(){
   if(!confirm('確定清除所有暫存？\n（版位清單、主持人圖庫將重設）')) return;
-  localStorage.removeItem('bn_admin_star_studio_v1');
-  localStorage.removeItem('bn_hosts_star_studio_v1');
+  localStorage.removeItem('bn_admin_jiayi_friend_v1');
+  localStorage.removeItem('bn_hosts_jiayi_friend_v1');
   toast('暫存已清除，重新整理中...','ok',2000);
   setTimeout(function(){ location.reload(); }, 1200);
 }

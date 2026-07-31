@@ -191,6 +191,9 @@ function confirmImport(){
     return;
   }
 
+  pm.show('匯入工單中');
+  pm.update(5, '讀取 Excel…');
+
   function afterExcel(groupData){
     groupData = groupData || {};
     console.log('[import] afterExcel 收到的 groupData：', JSON.stringify(groupData));
@@ -217,6 +220,8 @@ function confirmImport(){
       if(normalizedBg) applySeedHex(normalizedBg);
     }
 
+    pm.update(50, '比對 Logo…');
+
     /* 2026-07-28 跟 Iona 確認的bug：LOGO/商品/主持人比對原本各自獨立掃「同一包」檔案，
        同一個檔案有可能同時被LOGO比對跟商品/主持人比對搶到（例如只上傳一張LOGO圖，
        檔名剛好也模糊符合某個商品/主持人的別名），結果LOGO圖跑去套用成商品/主持人，
@@ -224,9 +229,12 @@ function confirmImport(){
        改成：LOGO先比對，比對到的檔案從池子裡排除，商品/主持人只在「剩下的檔案」裡找，
        保證同一個檔案不會同時被兩邊用掉。 */
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched, consumedByLogo){
+      pm.update(80, '比對主持人／商品圖片…');
       var remainingFiles = st.assetFiles.filter(function(f){ return consumedByLogo.indexOf(f) === -1; });
       var hostMatched = matchAndApplyHostFiles(remainingFiles, groupData);
 
+      pm.done('完成');
+      pm.hide();
       closePopup('import');
       var msgParts = [];
       if(st.excelFile) msgParts.push('Excel 已匯入');
@@ -244,12 +252,14 @@ function confirmImport(){
 
   if(st.excelFile){
     processExcelFile(st.excelFile, function(err, groups){
-      if(err){ toast('Excel 解析失敗：'+err.message,'err'); return; }
+      if(err){ pm.hide(); toast('Excel 解析失敗：'+err.message,'err'); return; }
       if(!groups.length){
+        pm.update(35, 'Excel 沒有分頁資料，繼續比對素材…');
         toast('Excel 找不到分頁資料，請確認工單格式','err');
         afterExcel(null); // Excel 沒讀到東西，還是繼續處理已選的圖片資料夾
         return;
       }
+      pm.update(30, '解析建立分頁…');
       var tabs = groups.map(function(g, i){
         return { id:'tab-'+(i+1), label: tabLabelFor(g, i), data: g };
       });
@@ -257,6 +267,7 @@ function confirmImport(){
       afterExcel(groups[0] || null);
     });
   } else {
+    pm.update(30, '沒有 Excel，直接比對素材…');
     afterExcel(null);
   }
 }

@@ -179,6 +179,9 @@ function confirmImport(){
     return;
   }
 
+  pm.show('匯入工單中');
+  pm.update(5, '讀取 Excel…');
+
   function afterExcel(groupData){
     groupData = groupData || {};
     /* 先進入暫存模式：版型/素材的變更先不廣播給畫布，等使用者在確認 popup 按下按鈕才 commit() */
@@ -197,8 +200,12 @@ function confirmImport(){
     if(guestNameEl && groupData.host2Name) guestNameEl.value = stripNamePrefix(groupData.host2Name);
     if((groupData.host1Name || groupData.host2Name) && typeof broadcast === 'function') broadcast();
 
+    pm.update(55, '比對主持人／商品圖片…');
     var hostMatched = matchAndApplyHostFiles(st.assetFiles, groupData);
+    pm.update(80, '比對 Logo…');
     matchAndApplyLogoFiles(st.assetFiles, groupData, function(logoMatched){
+      pm.done('完成');
+      pm.hide();
       closePopup('import');
       var msgParts = [];
       if(st.excelFile) msgParts.push('Excel 已匯入');
@@ -216,12 +223,14 @@ function confirmImport(){
 
   if(st.excelFile){
     processExcelFile(st.excelFile, function(err, groups){
-      if(err){ toast('Excel 解析失敗：'+err.message,'err'); return; }
+      if(err){ pm.hide(); toast('Excel 解析失敗：'+err.message,'err'); return; }
       if(!groups.length){
+        pm.update(35, 'Excel 沒有分頁資料，繼續比對素材…');
         toast('Excel 找不到分頁資料，請確認工單格式','err');
         afterExcel(null); // Excel 沒讀到東西，還是繼續處理已選的圖片資料夾
         return;
       }
+      pm.update(30, '解析建立分頁…');
       var tabs = groups.map(function(g, i){
         return { id:'tab-'+(i+1), label: tabLabelFor(g, i), data: g };
       });
@@ -229,6 +238,7 @@ function confirmImport(){
       afterExcel(groups[0] || null);
     });
   } else {
+    pm.update(30, '沒有 Excel，直接比對素材…');
     afterExcel(null);
   }
 }
@@ -574,7 +584,7 @@ function importZip(file){
       /* 1. 比對圖庫 */
       if(hostName){
         try{
-          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_star_studio_v1')||'[]');
+          var hostLib = JSON.parse(localStorage.getItem('bn_hosts_jiayi_friend_v1')||'[]');
           var nameNoExt = hostName.replace(/\.[^.]+$/,'');
           var match = hostLib.find(function(h){
             var hn = h.name.replace(/\.[^.]+$/,'');
