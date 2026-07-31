@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>蝦殺二選一 編輯器</title>
+<title>毛孩衝蝦米 編輯器</title>
 <style>
 @font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
 @font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
@@ -15,124 +15,6 @@
   --border2:#444; --text:#f0f0f0; --text-muted:#999; --text-dim:#666;
   --accent:#EE4D2D; --accent-dim:rgba(238,77,45,0.12); --success:#3d9970; --radius:15px;
   --panel:#303030;
-  --accent-orange:#EE4D2D; /* Iona指定的橘色，跟原本Shopee的--accent同一個值——上次誤用FF8A00（偏黃）已修正 */
-  --accent-orange-dim:rgba(238,77,45,0.12);
-  --radius-field:8px; /* 文字輸入框用的圓角，比按鈕的--radius(15px)小一點 */
-  --canvas-frame:#262626; /* 畫布外框深灰底色，比對personal-event editor.html的同名調整 */
-}
-
-/* ── 開關（switch） ── */
-.switch { position:relative;width:44px;height:24px;flex-shrink:0;display:inline-block;cursor:pointer; }
-.switch input { opacity:0;width:0;height:0;position:absolute; }
-.switch-track {
-  position:absolute;inset:0;border-radius:999px;background:var(--surface);
-  border:1px solid var(--border2);transition:background .3s;
-}
-.switch.on .switch-track { background:var(--accent-orange); border-color:var(--accent-orange); }
-.switch-knob {
-  position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
-  background:#fff;transition:transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
-              background 0.3s;
-}
-.switch.on .switch-knob { transform:translateX(20px); } /* 軌道44px、knob 18px+2px邊距＝往右移20px才會貼齊右邊 */
-
-/* ── Loading 轉圈圈（spinner） ── */
-.spinner {
-  width: 44px; height: 44px;
-  border-radius: 50%;
-  border: 4px solid #232326;
-  border-top-color: var(--accent-orange);
-  border-right-color: var(--accent-orange);
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(1turn); } }
-
-/* ── 案型字卡：換頁用的純icon button（無外框無圓圈，只有箭頭本身，預設就是橘色）
-   ＋張數±用灰色icon（不是橘色，主/次動作用顏色區分）＋數字跳動效果 ── */
-.icon-btn {
-  width:22px;height:22px;border:none;background:transparent;flex-shrink:0;
-  color:var(--accent-orange);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  transition:opacity .15s,transform .15s;padding:0;
-}
-.icon-btn:hover:not(:disabled) { opacity:.7; }
-.icon-btn:active:not(:disabled) { transform: scale(0.85); }
-.icon-btn:disabled { opacity:.25;cursor:default; }
-.step-btn-secondary {
-  width:26px;height:26px;border-radius:50%;flex-shrink:0;
-  background:transparent;border:1px solid var(--text-muted);color:var(--text-muted);
-  font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  transition:transform .15s,opacity .15s,background .15s,border-color .15s,color .15s;font-family:inherit;
-}
-.step-btn-secondary:hover { background:rgba(255,255,255,.06);border-color:var(--text);color:var(--text); }
-.step-btn-secondary:active { transform: scale(0.9); }
-.step-btn-secondary:disabled { opacity:.3;cursor:default; }
-.step-val {
-  display: inline-block;
-  min-width: 2ch; text-align: center;
-  font-variant-numeric: tabular-nums;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  font-size:12px;color:var(--text-muted);
-}
-.step-val.bump { transform: scale(1.3); }
-
-/* ── 一般用的次級button（outline，例如popup裡的「上一頁」）── */
-.btn-secondary {
-  padding:9px 16px;background:transparent;border:1px solid var(--accent-orange);
-  border-radius:var(--radius);color:var(--accent-orange);font-size:13px;font-weight:700;
-  cursor:pointer;transition:background .15s,opacity .15s;font-family:inherit;
-}
-.btn-secondary:hover { background:var(--accent-orange-dim); }
-.btn-secondary:disabled { opacity:.35;cursor:default; }
-
-/* ── 案型字卡：切換張數時的翻頁效果——只用scaleX做2D的「翻」，不用3D perspective ── */
-.card-panel-flip { transition: transform .18s cubic-bezier(0.34,1.56,0.64,1); transform-origin:center; }
-.card-panel-flip.flipping { transform: scaleX(0.05); }
-
-/* ── 案型字卡：文案輸入框（單欄位，如樣式1/2/5）——內容比較長/使用者正在打字時，
-   用彈簧感的高度動畫展開，收合時只留一行 ── */
-.spring-field {
-  width:100%;height:34px;padding:7px 10px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--radius-field);color:var(--text);
-  font-size:12px;font-family:inherit;resize:none;overflow:hidden;
-  transition:height 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),border-color .15s;
-}
-.spring-field:focus { outline:none;border-color:#444;box-shadow:0 0 0 3px rgba(255,255,255,.04); }
-.spring-field.expanded { height:72px; }
-
-/* ── 案型字卡：文案輸入框（雙欄位，如樣式3/4）——展開後上下兩段中間隔一條淺灰色
-   直線，用:focus-within自動展開/收合（不用JS切class，兩個input之間切換tab焦點時
-   不會誤收合）。收合狀態下，第一段輸入框固定佔滿整個收合高度（完整露出第一行，
-   不會被切一半），第二段輸入框跟分隔線 flex-basis:0 完全不佔空間、也不可見，
-   展開後才長出來、淡入——兩個input都給flex:1會equal-split收合的34px，
-   兩邊都只分到一半高度、文字看起來像被切掉一截，這是之前的bug。
-   第二段（小字/次要文案）沒打字時用淺色斜體placeholder提示要填什麼。 ── */
-.spring-group {
-  width:100%;height:34px;background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-field);overflow:hidden;display:flex;flex-direction:column;
-  transition:height 0.5s cubic-bezier(0.34, 1.56, 0.64, 1),border-color .15s;
-}
-.spring-group:focus-within { height:78px;border-color:#444;box-shadow:0 0 0 3px rgba(255,255,255,.04); }
-.sf-input {
-  width:100%;border:none;background:transparent;color:var(--text);font-size:12px;
-  font-family:inherit;resize:none;padding:7px 10px;flex-shrink:0;
-}
-.sf-input:nth-of-type(1) { flex:0 0 34px; } /* 收合／展開狀態下都固定滿高一行，永遠完整露出 */
-.sf-input:nth-of-type(2) {
-  flex:0 0 0;opacity:0;padding-top:0;padding-bottom:0;overflow:hidden;
-  transition:opacity .15s,flex-basis .35s cubic-bezier(0.34,1.56,0.64,1),padding .35s;
-}
-.sf-input:focus { outline:none; }
-.sf-input::placeholder { color:var(--text-dim);font-style:italic; }
-.spring-divider {
-  flex:0 0 0;overflow:hidden;margin:0 10px;background:var(--border2);
-  opacity:0;transition:opacity .15s,flex-basis .35s cubic-bezier(0.34,1.56,0.64,1);
-}
-.spring-group:focus-within .sf-input:nth-of-type(2) {
-  flex:0 0 42px;opacity:1;padding-top:7px;padding-bottom:7px;
-  transition:opacity .25s ease .2s,flex-basis .35s cubic-bezier(0.34,1.56,0.64,1),padding .35s;
-}
-.spring-group:focus-within .spring-divider {
-  flex:0 0 1px;opacity:1;transition:opacity .25s ease .2s,flex-basis .35s cubic-bezier(0.34,1.56,0.64,1);
 }
 html,body { height:100%;overflow:hidden; }
 body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);font-size:13px; }
@@ -144,7 +26,7 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
   padding:0 16px 0 20px;position:fixed;top:0;left:0;right:0;z-index:200;
 }
 .topbar-left { display:flex;align-items:center;gap:10px; }
-.topbar-logo { width:20px;height:20px;background:var(--accent-orange);border-radius:4px;display:flex;align-items:center;justify-content:center; }
+.topbar-logo { width:20px;height:20px;background:var(--accent);border-radius:4px;display:flex;align-items:center;justify-content:center; }
 .topbar-logo svg { width:12px;height:12px;fill:white; }
 .topbar-title { font-size:13px;font-weight:600; }
 .topbar-badge { font-size:10px;font-weight:600;color:var(--text-muted);background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:3px;letter-spacing:.5px; }
@@ -155,42 +37,13 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
   display:flex;align-items:center;gap:6px;transition:all .15s;white-space:nowrap;text-decoration:none;
 }
 .tbtn:hover { color:var(--text);background:#2e2e2e; }
-.tbtn.primary { background:var(--accent-orange);border-color:var(--accent-orange);color:white; }
+.tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
 .tbtn.primary:hover { background:#d4442a; }
 .tbtn svg { width:13px;height:13px;flex-shrink:0; }
-
-/* 雙logo（共播）疊放順序：拖曳排序清單，比照商品/主持人清單(.lc-slot)的做法。
-   現在單張/雙logo共用同一份清單UI：永遠顯示2個項目，沒放素材的顯示虛線＋加號
-   （點了觸發上傳），放了的顯示縮圖＋刪除×——不再區分「單張模式」跟「雙logo模式」
-   兩套不同的操作介面。 */
-.logo2-order-list{display:flex;flex-direction:column;gap:6px;}
-.logo2-order-item{position:relative;display:flex;align-items:center;gap:8px;padding:6px 26px 6px 8px;border:2px solid var(--border2);border-radius:var(--radius);background:var(--surface);}
-.logo2-order-item.active{border-color:var(--accent-orange);}
-.logo2-order-item.multi{border-color:#ff9800;}
-.logo2-order-item.dragging{opacity:.5;}
-.logo2-order-drag{opacity:.5;font-size:13px;flex-shrink:0;cursor:grab;}
-.logo2-order-label{flex:1;font-size:12px;color:var(--text);}
-.logo2-order-del{position:absolute;top:6px;right:6px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}
-.logo2-order-del:hover{background:#c33;}
-.logo2-order-thumb{width:36px;height:36px;border-radius:6px;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.logo2-order-thumb img{width:100%;height:100%;object-fit:contain;}
-.logo2-order-thumb.logo2-order-add{background:transparent;border:2px dashed var(--border2);cursor:pointer;}
-.logo2-order-thumb.logo2-order-add:hover{border-color:var(--accent-orange);}
-.logo2-order-plus{font-size:16px;color:var(--text-dim);}
-
-/* Logo2 懸浮 action bar：點選其中一個logo時，畫布下方浮出的icon按鈕列，
-   視覺比照 shared.css 裡主持人素材用的 .sel-bar（同一套風格，不同素材各自維護一份，
-   因為Logo2這裡是在主編輯頁面而不是版位iframe裡，沒辦法直接共用同一份CSS）。 */
-.logo2-float-bar{display:flex;align-items:center;gap:2px;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,0.4);}
-.logo2-float-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:5px;border:none;background:transparent;color:#cbd5e1;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;font-family:inherit;transition:background .12s,color .12s;}
-.logo2-float-btn:hover{background:#334155;color:#fff;}
-.logo2-float-btn.danger:hover{background:rgba(239,68,68,0.2);color:#f87171;}
-.logo2-float-icon{font-size:13px;flex-shrink:0;}
-.logo2-float-sep{width:1px;align-self:stretch;background:#334155;margin:2px 0;}
 input[type="file"] { display:none; }
 
 /* Layout */
-.layout { display:grid;grid-template-columns:240px 1fr 280px;height:calc(100vh - 44px);margin-top:44px; }
+.layout { display:grid;grid-template-columns:220px 1fr 288px;height:calc(100vh - 44px);margin-top:44px; }
 
 /* Sidebar */
 .sidebar { background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden; }
@@ -212,7 +65,7 @@ input[type="file"] { display:none; }
   display:flex;align-items:center;justify-content:center;gap:6px;
   transition:all .15s;user-select:none;background:var(--surface);
 }
-.theme-chip.active { border-color:var(--accent-orange);color:white;background:var(--accent-orange-dim); }
+.theme-chip.active { border-color:var(--accent);color:white;background:var(--accent-dim); }
 .theme-chip:not(.active):hover { border-color:var(--border2);color:var(--text);background:var(--border); }
 .chip-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
 
@@ -228,23 +81,23 @@ input[type="file"] { display:none; }
 .upload-row:hover .upload-label { color:var(--text); }
 .edit-btn { display:none;height:22px;padding:0 8px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0; }
 .upload-row.done .edit-btn { display:block; }
-.edit-btn:hover { color:var(--accent-orange);border-color:var(--accent-orange); }
+.edit-btn:hover { color:var(--accent);border-color:var(--accent); }
 
 /* Fields */
 .field { margin-bottom:14px; }
 .field-label { display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-muted);margin-bottom:4px; }
 .cc { font-size:10px;color:var(--text-dim);font-variant-numeric:tabular-nums; }
 .cc.over { color:var(--accent); }
-.fi { width:100%;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-field);color:var(--text);font-size:12px;font-family:inherit;transition:border-color .15s;-webkit-appearance:none; }
+.fi { width:100%;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;font-family:inherit;transition:border-color .15s;-webkit-appearance:none; }
 .fi::placeholder { color:var(--text-dim); }
 .fi:focus { outline:none;border-color:#444;box-shadow:0 0 0 3px rgba(255,255,255,.04); }
 .fi-row { display:grid;grid-template-columns:1fr 1fr;gap:6px; }
-.fi-compact { width:auto;min-width:60px;padding:7px 6px;text-align:center; } /* 不需要打字的選框（如下拉選單）用，不用撐滿整行寬度 */
-.select-fi {
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%23999' fill='none' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat:no-repeat;background-position:right 10px center;padding-right:26px;
-}
-.fi-compact.select-fi { padding-right:20px;background-position:right 6px center; }
+
+/* 所有 <select> 都會有 .fi.select-fi 這兩個class：.fi 用 -webkit-appearance:none
+   拿掉了原生的下拉箭頭，這裡補一個自訂的箭頭圖示（SVG data URI），不然選單看起來
+   會像個普通文字框，使用者看不出來可以點開選 */
+.select-fi { background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" stroke="%23999" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'); background-repeat:no-repeat; background-position:right 10px center; background-size:11px 7px; padding-right:30px; cursor:pointer; }
+
 
 /* Color rows */
 .color-row { display:flex;align-items:center;height:32px;padding:0 4px;border-radius:var(--radius); }
@@ -262,18 +115,18 @@ input[type="file"] { display:none; }
 .sw input { opacity:0;width:0;height:0;position:absolute; }
 .sw-track { position:absolute;inset:0;background:var(--border2);border-radius:18px;transition:background .2s;cursor:pointer; }
 .sw-track::after { content:'';position:absolute;width:12px;height:12px;background:var(--text-muted);border-radius:50%;top:3px;left:3px;transition:transform .2s,background .2s; }
-.sw input:checked + .sw-track { background:var(--accent-orange-dim); }
-.sw input:checked + .sw-track::after { transform:translateX(14px);background:var(--accent-orange); }
+.sw input:checked + .sw-track { background:var(--accent-dim); }
+.sw input:checked + .sw-track::after { transform:translateX(14px);background:var(--accent); }
 
 /* Pills */
 .pill-row { display:flex;gap:4px; }
 .pill { flex:1;height:28px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;user-select:none; }
 .pill:hover { border-color:var(--border2);color:var(--text); }
-.pill.active { background:var(--accent-orange-dim);border-color:var(--accent-orange);color:var(--accent-orange);font-weight:600; }
+.pill.active { background:var(--accent-dim);border-color:var(--accent);color:var(--accent);font-weight:600; }
 
 /* Download bar */
 #bn-download-bar { padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0; }
-.dl-btn { width:100%;padding:9px;background:var(--accent-orange);border:none;border-radius:var(--radius);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;font-family:inherit; }
+.dl-btn { width:100%;padding:9px;background:var(--accent);border:none;border-radius:var(--radius);color:white;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s;font-family:inherit; }
 .dl-btn:hover { background:#d4442a; }
 
 /* Canvas area */
@@ -287,8 +140,9 @@ input[type="file"] { display:none; }
 .canvas-nav {
   height:48px;background:var(--panel);border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:4px;padding:0 16px;flex-shrink:0;
-  overflow:hidden;
+  overflow-x:auto;scrollbar-width:none;
 }
+.canvas-nav::-webkit-scrollbar { display:none; }
 .nav-btn {
   height:32px;padding:0 16px;border-radius:var(--radius);
   border:1.5px solid transparent;background:transparent;
@@ -296,45 +150,19 @@ input[type="file"] { display:none; }
   cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;
 }
 .nav-btn:hover { color:var(--text);background:var(--surface); }
-.nav-btn.active { border-color:var(--accent-orange);color:var(--accent-orange);background:var(--accent-orange-dim);font-weight:600; }
-/* 分頁列「更多」按鈕：分頁塞不下時出現在最右邊（margin-left:auto 自動推到底） */
-.nav-more-btn {
-  height:32px;padding:0 14px;border-radius:var(--radius);border:1.5px solid var(--border2);
-  background:transparent;color:var(--text-muted);font-size:12px;font-weight:500;
-  cursor:pointer;white-space:nowrap;flex-shrink:0;margin-left:auto;
-  display:flex;align-items:center;gap:4px;
-}
-.nav-more-btn:hover { color:var(--text);background:var(--surface); }
-/* 分頁下拉選單：純攤平清單，由左到右自動換行（沒有A級/B級分組，
-   蝦殺這邊的廠商分頁不分級，跟個人專場那份的分組版不一樣） */
-.nav-dropdown-panel {
-  display:none;background:var(--sidebar);border-bottom:1px solid var(--border);
-  padding:14px 20px;flex-shrink:0;max-height:280px;overflow-y:auto;
-}
-.nav-dropdown-grid { display:flex;flex-wrap:wrap;gap:6px 8px; }
-/* 分頁列切換到「原本不在可見範圍」的分頁時，整批可見分頁滑入一次，
-   提示使用者「畫面換了一批」，不是憑空跳掉。 */
-@keyframes navSlideIn { from{ transform:translateX(-14px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
-.nav-sliding { animation: navSlideIn .25s ease; }
+.nav-btn.active { border-color:var(--accent);color:var(--accent);background:var(--accent-dim);font-weight:600; }
 .nav-add-btn {
   height:28px;width:28px;border-radius:var(--radius);border:1.5px solid var(--border2);
   background:transparent;color:var(--text-dim);font-size:16px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:4px;
 }
 .nav-add-btn:hover { color:var(--text);border-color:#555; }
-.canvas-block { width:100%;max-width:1125px;text-align:center; }
-/* 畫布外框：包住「標題列 + 畫布本體」整組的圓角深灰框，比對personal-event editor.html的同項調整 */
-.canvas-frame {
-  display:inline-block;
-  background:var(--canvas-frame);
-  border-radius:calc(var(--radius) + 6px);
-  padding:14px;
-}
+.canvas-block { width:100%;max-width:1125px; }
 .canvas-meta { display:flex;align-items:center;gap:10px;margin-bottom:10px; }
-.canvas-name { font-size:11px;font-weight:600;color:var(--text); }
+.canvas-name { font-size:12px;font-weight:600;color:var(--text); }
 .canvas-size { font-size:11px;color:var(--text-dim); }
 .canvas-dl-btn { margin-left:auto;height:22px;padding:0 10px;background:var(--surface);border:1px solid var(--border2);border-radius:4px;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all .15s; }
-.canvas-dl-btn:hover { color:var(--accent-orange);border-color:var(--accent-orange); }
+.canvas-dl-btn:hover { color:var(--accent);border-color:var(--accent); }
 
 /* iframe wrapper */
 .iframe-wrap {
@@ -346,20 +174,6 @@ input[type="file"] { display:none; }
   display:block;border:none;
   transform-origin:top left;
 }
-/* 案型字卡橫向strip：目前正在編輯的那張畫布加一圈白色outline，一眼看出對應右側編輯欄的是哪張
-   （橘色跟畫布本身的橘紅色背景太接近，選取感不明顯，改白色對比更清楚） */
-.card-canvas-active {
-  box-shadow:0 0 0 3px #ffffff,0 8px 32px rgba(0,0,0,.5) !important;
-}
-/* 標題列裡的加減張數——比張數本身更不重要，縮到比.step-btn-secondary更小、更淡的icon-only */
-.icon-btn-mini {
-  width:16px;height:16px;border:none;background:transparent;flex-shrink:0;
-  color:var(--text-dim);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  font-size:11px;line-height:1;transition:color .15s,transform .15s,opacity .15s;padding:0;
-}
-.icon-btn-mini:hover:not(:disabled) { color:var(--text-muted); }
-.icon-btn-mini:active:not(:disabled) { transform: scale(0.85); }
-.icon-btn-mini:disabled { opacity:.25;cursor:default; }
 
 /* editor-item for editor-plugin */
 .editor-item { position:relative;display:inline-block; }
@@ -375,7 +189,7 @@ input[type="file"] { display:none; }
   width:min(90vw,600px);background:var(--sidebar);
   border:1px solid var(--border2);border-radius:15px;
   box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;
-  max-height:80vh;display:flex;flex-direction:column;
+  max-height:90vh;display:flex;flex-direction:column;
 }
 .popup-header {
   padding:14px 18px;border-bottom:1px solid var(--border);
@@ -396,8 +210,8 @@ input[type="file"] { display:none; }
   border:2px solid var(--border);transition:border-color .15s;
   background:var(--surface);
 }
-.popup-card:hover { border-color:var(--accent-orange); }
-.popup-card.selected { border-color:var(--accent-orange);box-shadow:0 0 0 3px var(--accent-orange-dim); }
+.popup-card:hover { border-color:var(--accent); }
+.popup-card.selected { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim); }
 .popup-card img { width:100%;display:block;object-fit:cover; }
 .popup-card-label {
   padding:5px 8px;font-size:11px;color:var(--text-muted);
@@ -414,15 +228,15 @@ input[type="file"] { display:none; }
 .asset-list { padding:8px 0; }
 .asset-item { display:flex;align-items:center;gap:10px;padding:8px 16px;border-radius:0;transition:background .12s;cursor:pointer; }
 .asset-item:hover { background:var(--surface); }
-.asset-item.active { background:var(--surface);border-left:2px solid var(--accent-orange); }
+.asset-item.active { background:var(--surface);border-left:2px solid var(--accent); }
 .asset-icon { width:32px;height:32px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0; }
 .asset-icon svg { width:14px;height:14px;stroke:var(--text-muted);fill:none;stroke-width:1.5; }
 .asset-info { flex:1;min-width:0; }
-.asset-name { font-size:10px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.asset-name { font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
 .asset-meta { font-size:10px;color:var(--text-dim);margin-top:1px; }
 .asset-dl { height:22px;padding:0 8px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);font-size:11px;cursor:pointer;transition:all .15s;flex-shrink:0; }
-.asset-dl:hover { color:var(--accent-orange);border-color:var(--accent-orange); }
-.panel-section { padding:12px 16px 6px;font-size:12px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border); }
+.asset-dl:hover { color:var(--accent);border-color:var(--accent); }
+.panel-section { padding:12px 16px 6px;font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border); }
 .canvas-ref-btn {
   font-size:11px; padding:3px 8px; border-radius:4px;
   border:1px solid var(--border2); cursor:pointer;
@@ -430,6 +244,25 @@ input[type="file"] { display:none; }
   transition:all .15s; white-space:nowrap;
 }
 .canvas-ref-btn:hover { border-color:#888; color:var(--text); }
+
+/* Logo2 素材 slot：跟畫布素材清單（.lc-slot）同一套「有圖/無圖兩態」邏輯——
+   有圖顯示縮圖＋右上角×刪除；沒有圖顯示虛線框＋「+」，點下去觸發上傳。 */
+.logo2-slot-item{position:relative;display:flex;align-items:center;gap:8px;padding:8px 26px 8px 8px;border:2px dashed var(--border2);border-radius:var(--radius);background:var(--surface);}
+.logo2-slot-item.filled{border-style:solid;border-color:var(--accent);}
+.logo2-slot-item.empty{cursor:pointer;}
+.logo2-slot-item.empty:hover{border-color:var(--accent);}
+.logo2-slot-thumb{width:44px;height:44px;border-radius:6px;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo2-slot-thumb img{width:100%;height:100%;object-fit:contain;}
+.logo2-slot-thumb.add{background:transparent;}
+.logo2-slot-plus{font-size:18px;color:var(--text-dim);}
+.logo2-slot-label{flex:1;font-size:12px;color:var(--text);}
+.logo2-slot-del{position:absolute;top:6px;right:6px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}
+.logo2-slot-del:hover{background:#c33;}
+
+</style>
+.color-swatch { width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;padding:0;-webkit-appearance:none;flex-shrink:0; }
+.color-swatch::-webkit-color-swatch-wrapper { padding:0; }
+.color-swatch::-webkit-color-swatch { border:none;border-radius:4px; }
 </style>
 </head>
 <body>
@@ -438,7 +271,7 @@ input[type="file"] { display:none; }
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-logo"><svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg></div>
-    <span class="topbar-title">蝦殺二選一</span>
+    <span class="topbar-title">毛孩衝蝦米</span>
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
@@ -477,10 +310,6 @@ input[type="file"] { display:none; }
         <span style="font-size:12px;color:var(--text-dim);">點 + 匯入工單，自動建立分頁</span>
       </div>
     </div>
-    <!-- 分頁下拉選單：分頁列放不下的部分收在這裡，純攤平清單橫向換行排列（不分級）。
-         用一般文件流（不是position:absolute蓋在上面），展開時會把下面的畫布區往下推，
-         不用處理z-index/遮擋的問題。 -->
-    <div class="nav-dropdown-panel" id="nav-dropdown-panel"></div>
     <div class="canvas-area" id="canvas-area">
       <!-- 動態產生 iframe 畫布 -->
     </div>
@@ -493,11 +322,8 @@ input[type="file"] { display:none; }
       <div class="sg">
         <div class="sg-label">商品／主持人 陰影</div>
         <div class="sg-body" style="display:flex;flex-direction:column;gap:10px;">
-          <!-- 原本這裡是「編輯 Logo2」「編輯商品／主持人陰影」兩顆按鈕，但兩顆
-               點下去都是開同一個彈窗（popup-logo2 早就是Logo2＋商品/主持人陰影
-               合併後的單一彈窗，見 editor-logo2-canvas.js／editor-shadow-canvas.js
-               的相關註解），分兩顆按鈕反而讓人誤以為是兩個不同功能，合併成一顆。 -->
-          <button class="dl-btn" style="font-size:12px;padding:8px;" onclick="openLogo2Popup()">商品／LOGO編輯</button>
+          <button class="dl-btn" style="font-size:12px;padding:8px;" onclick="openLogo2Popup()">編輯 Logo2</button>
+          <button class="dl-btn" style="font-size:12px;padding:8px;" onclick="openShadowPopup()">編輯商品／主持人陰影</button>
           <label class="toggle-row">
             <span class="toggle-label">底部遮罩（補主持人身體過短）</span>
             <span class="sw">
@@ -521,7 +347,7 @@ input[type="file"] { display:none; }
             </div>
             <span id="host-preview-label" style="font-size:12px;color:var(--text-muted);flex:1;">尚未套用</span>
           </div>
-          <div onclick="openPopup('host')" style="height:32px;border-radius:var(--radius);border:1px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);font-size:12px;color:var(--text-muted);transition:all .15s;" onmouseenter="this.style.borderColor='var(--accent-orange)';this.style.color='var(--accent-orange)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text-muted)'">
+          <div onclick="openPopup('host')" style="height:32px;border-radius:var(--radius);border:1px solid var(--border2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--surface);font-size:12px;color:var(--text-muted);transition:all .15s;" onmouseenter="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)';this.style.color='var(--text-muted)'">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
             從圖庫選擇主持人
           </div>
@@ -532,77 +358,75 @@ input[type="file"] { display:none; }
       </div>
 
       <div class="sg">
+        <div class="sg-label">背景顏色（底色吸取）</div>
+        <div class="sg-body">
+          <input type="color" id="seed-hex-swatch" value="#0D3165"
+            title="背景顏色：點一下開調色盤，選色後LPBN/縮圖/開播字卡/FL Icon/Tab的背景、主副標文字色會自動重新計算；也可以由Excel工單「背景色碼」欄位自動帶入"
+            style="width:100%;height:44px;padding:0;border:none;border-radius:6px;cursor:pointer;display:block;"
+            oninput="document.getElementById('seed-hex-input').value=this.value;applySeedHex(this.value);">
+          <input class="fi" id="seed-hex-input" type="text" maxlength="7" value="#0D3165" placeholder="#0D3165"
+            title="背景顏色 hex 色碼，也可以直接輸入"
+            style="width:100%;font-family:monospace;margin-top:8px;"
+            onchange="applySeedHex(this.value)">
+        </div>
+      </div>
+
+      <div class="sg">
         <div class="sg-label">文案</div>
         <div class="sg-body">
           <div class="field">
             <div class="field-label"><span>主標（小字）</span><span class="cc" id="cc-sub">0 / 9</span></div>
             <div style="display:flex;gap:6px;align-items:center;">
               <input class="fi" id="txt-main" type="text" value="主標文案$9字內" oninput="cc('txt-main','cc-sub',9);broadcast()" style="flex:1;">
-              <input type="color" class="color-swatch" id="cSub" value="#ffffff" oninput="broadcast()" title="主標顏色（固定）" style="display:none;">
+              <input type="color" class="color-swatch" id="cSub" value="#0074b3" oninput="broadcast()" title="主標顏色（可手動調整，下次換底色會被自動配色洗掉）">
             </div>
           </div>
           <div class="field">
             <div class="field-label"><span>副標（大字）</span><span class="cc" id="cc-main">0 / 8</span></div>
             <div style="display:flex;gap:6px;align-items:center;">
               <input class="fi" id="txt-sub" type="text" value="副標文案$8字內" oninput="cc('txt-sub','cc-main',8);broadcast()" style="flex:1;">
-              <input type="color" class="color-swatch" id="cMain" value="#ffe933" oninput="broadcast()" title="副標顏色（固定）" style="display:none;">
+              <input type="color" class="color-swatch" id="cMain" value="#ce3775" oninput="broadcast()" title="副標顏色（可手動調整，下次換底色會被自動配色洗掉）">
             </div>
           </div>
           <div class="field">
             <div class="field-label"><span>日期/時間</span></div>
             <div style="display:flex;gap:6px;align-items:center;">
-              <input class="fi" id="txt-date" type="text" value="6/15" placeholder="6/15" oninput="broadcast()" style="flex:1;">
-              <input class="fi" id="txt-time" type="text" value="19:00" placeholder="19:00" oninput="broadcast()" style="flex:1;">
-              <input type="color" class="color-swatch" id="cDate" value="#ffffff" oninput="broadcast()" title="日期／時間顏色（固定）" style="display:none;">
+              <input class="fi" id="txt-time" type="text" value="6/15 19:00" placeholder="6/15 19:00" oninput="broadcast()" style="flex:1;">
+              <input type="color" class="color-swatch" id="cDate" value="#0074b3" oninput="broadcast()" title="日期／時間顏色（可手動調整，下次換底色會被自動配色洗掉）">
             </div>
           </div>
-          <div class="field" id="field-brand" style="display:none;">
+          <div class="field">
             <div class="field-label"><span>主持人名稱</span></div>
             <input class="fi" id="txt-brand" type="text" value="XXX" oninput="broadcast()">
           </div>
-          <div class="field" style="display:none;">
+          <div class="field">
             <div class="field-label"><span>來賓名稱（沒有來賓可留空）</span></div>
             <input class="fi" id="txt-guest" type="text" value="" oninput="broadcast()">
           </div>
         </div>
       </div>
 
-      <!-- FL ICON：獨立區塊（原本混在「文案」裡叫「直播間FL」，現在改名FL ICON、
-           標題文字規格比照案型字卡用白色）。版型在上，文案欄位在下方，只有版型選到
-           「無（顯示文案）」才需要文字，其他版型（LOGO／案型）不需要文字就不顯示，
-           顯示/隱藏邏輯統一寫在 setFlStyle() 裡（見 editor-state.js），换分頁時
-           也是呼叫同一個函式，不用另外處理。 -->
       <div class="sg">
-        <div class="sg-label" style="color:#ffffff;">FL ICON</div>
+        <div class="sg-label">FL ICON</div>
         <div class="sg-body">
-          <div class="field">
+          <div class="field" id="fl-b-panel">
             <div class="field-label"><span>版型</span></div>
-            <select class="fi select-fi" id="fl-style-sel" onchange="setFlStyle(this.value)">
-              <option value="無">無（顯示文案）</option>
-              <option value="LOGO">LOGO（顯示廠商Logo）</option>
-              <option value="案型">案型</option>
-            </select>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+              <select class="fi select-fi" id="fl-product-slot" onchange="handleFlSlotChange(this.value)" style="flex:1;">
+                <option value="">純文案</option>
+                <option value="1">商品1</option>
+                <option value="2">商品2</option>
+                <option value="3">商品3</option>
+                <option value="gift">商品+禮物盒</option>
+                <option value="logo">LOGO</option>
+                <option value="skip">不製作</option>
+              </select>
+            </div>
+            <div id="fl-text-field">
+              <div class="field-label"><span>FL 文案</span><span class="cc" id="cc-fl">0 / 6</span></div>
+              <input class="fi" id="txt-fl" type="text" value="" placeholder="文案 / logo（只放Logo時填）" oninput="ccFlUserTriggered();broadcast()">
+            </div>
           </div>
-          <div class="field" id="fl-text-field" style="display:none;">
-            <div class="field-label"><span>FL ICON 專屬文案（6字內）</span><span class="cc" id="cc-fl">0 / 6</span></div>
-            <input class="fi" id="txt-fl" type="text" value="" oninput="cc('txt-fl','cc-fl',6);broadcast()">
-          </div>
-        </div>
-      </div>
-
-      <div class="sg" id="card-panel-anchor">
-        <div class="sg-label" style="display:flex;align-items:center;justify-content:space-between;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span>案型字卡</span>
-            <div id="card-count-mini" style="display:flex;align-items:center;gap:3px;"></div>
-          </div>
-          <div id="card-title-nav" style="display:flex;align-items:center;gap:2px;"></div>
-        </div>
-        <div class="sg-body" id="card-panel-static" style="padding-bottom:0;">
-          <!-- card-plugin.js 動態產生：版型，不跟著翻頁動畫轉 -->
-        </div>
-        <div class="sg-body card-panel-flip" id="card-panel-body">
-          <!-- card-plugin.js 動態產生：標題/文案 -->
         </div>
       </div>
 
@@ -641,132 +465,144 @@ input[type="file"] { display:none; }
 
 
 <div class="popup-overlay" id="popup-import">
-  <div class="popup-panel" style="width:min(92vw,520px);">
+  <div class="popup-panel" style="width:min(90vw,420px);">
     <div class="popup-header">
       <span class="popup-title">匯入工單</span>
       <button class="popup-close" onclick="closePopup('import')">×</button>
     </div>
-    <div style="padding:28px;display:flex;flex-direction:column;gap:16px;">
+    <div style="padding:24px;display:flex;flex-direction:column;gap:14px;">
 
       <div id="import-zone-excel" class="import-dropzone"
-        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:34px 18px;text-align:center;cursor:pointer;transition:border-color .15s;"
+        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent-orange)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
-        <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:10px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div class="import-zone-title" style="font-size:14px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
-        <div class="import-zone-sub" style="font-size:12px;color:var(--text-dim);">支援 .xlsx 格式</div>
+        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
+        <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
       </div>
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="onImportFilePicked(event,'excel')">
 
       <div id="import-zone-assets" class="import-dropzone"
-        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:26px 18px;text-align:center;cursor:pointer;transition:border-color .15s;"
+        style="border:2px dashed var(--border2);border-radius:var(--radius);padding:22px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
         onclick="document.getElementById('importAssetsFolder').click()"
-        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent-orange)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
-        <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M1.5 3.5h4l1.2 1.6H14.5v8.4h-13z"/></svg>
-        <div class="import-zone-title" style="font-size:14px;color:var(--text-muted);margin-bottom:4px;">上傳素材資料夾（Logo＋主持人／商品，可選）</div>
-        <div class="import-zone-sub" style="font-size:12px;color:var(--text-dim);">Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對</div>
+        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
+        <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:6px;"><path d="M1.5 3.5h4l1.2 1.6H14.5v8.4h-13z"/></svg>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">上傳素材資料夾（Logo＋主持人／商品，可選）</div>
+        <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對</div>
       </div>
       <input type="file" id="importAssetsFolder" webkitdirectory directory multiple style="display:none" onchange="onImportFilePicked(event,'assets')">
 
-      <button class="dl-btn" style="margin-top:4px;" onclick="confirmShrimpImport()">確認匯入</button>
+      <button class="dl-btn" style="margin-top:4px;" onclick="confirmImport()">確認匯入</button>
     </div>
   </div>
 </div>
-<!-- 廠商 Logo2 ＋ 商品／主持人 陰影：確認 popup（匯入後自動比對出的內容先在這裡確認，
-     按下確認才會一次套用到所有畫布——Logo跟1200畫布合在同一個彈窗一起確認，不分兩步驟） -->
+
+<!-- 商品／主持人 陰影：確認 popup（匯入後自動比對出的內容先在這裡確認，按下確認才會套用到所有畫布） -->
 <div class="popup-overlay" id="popup-logo2">
-  <div class="popup-panel" style="width:min(96vw,1600px);max-height:none;overflow:visible;">
+  <div class="popup-panel" style="width:min(96vw,900px);">
     <div class="popup-header">
-      <span class="popup-title">廠商 Logo2 ＋ 商品／主持人 陰影</span>
+      <span class="popup-title">Logo2 編輯</span>
       <button class="popup-close" onclick="closePopup('logo2')">×</button>
     </div>
-    <div style="padding:20px;display:flex;gap:24px;flex-wrap:wrap;">
+    <div style="padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
 
-      <!-- 左區塊：Logo2 -->
-      <div style="flex:0 1 440px;min-width:320px;display:grid;grid-template-columns:200px 1fr;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
-        <div style="grid-column:1;display:flex;flex-direction:column;gap:12px;">
-          <div class="lc-field">
-            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">廠商LOGO</label>
-            <div class="logo2-order-list" id="logo2-order-list">
-              <div class="logo2-order-item" data-slot="A" draggable="true"></div>
-              <div class="logo2-order-item" data-slot="B" draggable="true"></div>
-            </div>
-          </div>
+      <!-- 左：上傳/操作/下一步 -->
+      <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+        <div class="lc-field">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Logo2 素材</label>
+          <div class="logo2-slot-item" id="logo2-slot"></div>
           <input type="file" id="logo2-compose-upload" accept="image/*" style="display:none">
-          <input type="file" id="logo2-compose-upload-b" accept="image/*" style="display:none">
         </div>
-        <div style="grid-column:2;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:#2a2a2a;border-radius:var(--radius);padding:12px;gap:8px;">
-          <canvas id="logo2-compose-canvas" width="1200" height="540" style="width:100%;max-width:340px;background:#444;border-radius:4px;touch-action:none;"></canvas>
-          <!-- 懸浮 action bar：只有雙logo模式下、點選其中一個logo時才會出現在畫布下方，
-               比照主持人素材的 .sel-bar 風格（見 layout-common.js / shared.css）。
-               只留「交換」一個按鈕——點下去讓A、B兩個logo的位置整個對調（大小不變）
-               （AB變成BA）；更換/移除都不放在這裡了，更換用原本的上傳欄位重新選檔即可，
-               移除改成左側清單每個項目右上角的小×（跟商品清單的做法一樣）。 -->
-          <div id="logo2-float-bar" class="logo2-float-bar" style="display:none;">
-            <button type="button" class="logo2-float-btn" onclick="logo2FloatBarSwap()" title="A、B兩個logo的位置整個對調（大小不變）">
-              <span class="logo2-float-icon">⇄</span>交換
-            </button>
+        <div id="logo2-compose-hint" style="font-size:11px;color:var(--text-muted);line-height:1.4;"></div>
+
+        <!-- 方形/長型判定：預設自動判斷（有色範圍寬高比 0.8~1.25 內算方形），
+             這裡可以手動覆蓋——換一張新素材時會重新自動判斷、這裡的選取會跟著同步回去 -->
+        <div id="logo2-shape-group" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted);">
+          <label style="display:block;font-size:12px;color:var(--text-muted);">形狀</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="logo2-shape" value="wide" checked onchange="logo2SetShapeOverride('wide')">
+            <span>長型</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="logo2-shape" value="square" onchange="logo2SetShapeOverride('square')">
+            <span>方形</span>
+          </label>
+        </div>
+
+        <!-- FL ICON示意圖：只在「版型」選LOGO（版型L）時顯示，
+             跟03_fl.html的render()/drawVariantL()用同一套規格算出來，兩邊視覺一致
+             2026-07-29 跟 Iona 確認：整段內距/間距都壓縮過，讓連同這個區塊在內的
+             整個左欄能完整塞進popup可視範圍，不需要另外捲動 -->
+        <div id="logo2-fl-preview-wrap" style="display:none;">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px;">直播間FL 示意</div>
+          <div style="background:#2a2a2a;border-radius:var(--radius);padding:6px;max-width:200px;margin:0 auto;">
+            <canvas id="logo2-fl-preview-canvas" width="336" height="120" style="width:100%;height:auto;display:block;cursor:grab;"></canvas>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);margin:3px 0 5px;">可直接在示意圖上拖曳調整位置</div>
+          <div id="fl-logo-color-mode-group" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted);margin-bottom:5px;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="fl-logo-color-mode" value="white" checked onchange="setFlLogoColorMode('white')">
+              <span>白底＋橘框</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="radio" name="fl-logo-color-mode" value="sampled" onchange="setFlLogoColorMode('sampled')">
+              <span>以Logo底色填滿</span>
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted);margin-bottom:5px;">
+            <span style="flex-shrink:0;">額外縮放</span>
+            <input type="range" id="fl-logo-extra-scale" min="0.3" max="3" step="0.05" value="1" oninput="setFlLogoExtraScale(this.value)" style="flex:1;">
+            <span id="fl-logo-extra-scale-label" style="width:36px;text-align:right;flex-shrink:0;">1.00x</span>
+            <button class="icon-btn-mini" type="button" onclick="resetFlLogoExtra()" title="重設">↺</button>
           </div>
         </div>
 
-        <!-- 直播間FL 示意圖：只有這個廠商的「直播間FL 版型」選了 LOGO 才會顯示。
-             跟Logo2連動（上面Logo2畫布調的縮放/位移，這裡會照比例套用），
-             也可以在這裡用「FL 額外放大」跟直接拖曳，單獨微調FL膠囊框裡的位置。 -->
-        <div id="logo2-fl-preview-wrap" style="display:none;grid-column:1/-1;border-top:1px solid var(--border2);padding-top:14px;margin-top:2px;">
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">直播間FL 示意</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-            <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="display:flex;align-items:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;width:fit-content;">
-                <canvas id="logo2-fl-preview-canvas" width="336" height="120" style="width:280px;height:100px;display:block;cursor:grab;"></canvas>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);">
-                <span style="flex-shrink:0;">FL 額外放大</span>
-                <input type="range" id="fl-logo-extra-scale" min="1" max="3" step="0.05" value="1"
-                  oninput="setFlLogoExtraScale(this.value)" style="flex:1;">
-                <span id="fl-logo-extra-scale-label" style="flex-shrink:0;width:34px;text-align:right;">1.0x</span>
-                <button class="tbtn" style="font-size:10px;padding:2px 8px;flex-shrink:0;" onclick="resetFlLogoExtra()">重設</button>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text-muted);min-width:200px;">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" title="黑字／單色 Logo 用，預設">
-                <input type="radio" name="fl-logo-color-mode" value="white" checked onchange="setFlLogoColorMode('white')">
-                白底＋橘框
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" title="吸取Logo素材本身的底色來填滿，不加框">
-                <input type="radio" name="fl-logo-color-mode" value="sampled" onchange="setFlLogoColorMode('sampled')">
-                以 Logo 底色填滿
-              </label>
-            </div>
-          </div>
-        </div>
+        <button class="dl-btn" id="logo2-compose-next-btn" onclick="composeLogo2AndNext()" style="padding:7px;">下一步：調整陰影</button>
+        <button class="tbtn" id="logo2-compose-skip-btn" style="font-size:11px;height:24px;" onclick="skipLogo2AndNext()">跳過此步驟</button>
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.35;">按下一步會把目前畫面合成一張圖，套用到所有版位的 logo2，並自動接著開啟陰影編輯面板。</div>
       </div>
 
-      <!-- 右區塊：陰影編輯器面板＋1200商品區畫布，同一排並排 -->
-      <div style="flex:1 1 680px;min-width:480px;display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
-        <div style="grid-column:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
-          <div id="shadow-editor-mount"></div>
-          <div class="lc-field">
-            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
-            <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
-          </div>
-        </div>
-        <div style="grid-column:2;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
-          <canvas id="shadow-compose-canvas" width="1200" height="1200" style="max-width:100%;max-height:600px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
-        </div>
+      <!-- 右：合成畫布 -->
+      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
+        <canvas id="logo2-compose-canvas" width="1200" height="540" style="width:100%;max-width:520px;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 
     </div>
-    <div style="padding:0 20px 20px;">
-      <div id="logo2-review-progress-wrap" style="display:none;margin-bottom:10px;">
-        <div id="logo2-review-progress-text" style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">廠商確認 (1/1)</div>
-        <div style="height:4px;border-radius:2px;background:var(--border2);overflow:hidden;">
-          <div id="logo2-review-progress-fill" style="height:100%;width:0%;background:var(--accent-orange);transition:width .2s;"></div>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popup-shadow">
+  <div class="popup-panel" style="width:min(96vw,1000px);">
+    <div class="popup-header">
+      <span class="popup-title">商品／主持人 陰影編輯</span>
+      <button class="popup-close" onclick="closePopup('shadow')">×</button>
+    </div>
+    <div style="padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+
+      <!-- 左：版型/角度/素材控制（素材清單本身可拖曳排序前後、右上角 × 刪除，點縮圖可直接選取） -->
+      <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+        <div id="shadow-editor-mount"></div>
+        <div class="lc-field">
+          <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
         </div>
+        <button class="dl-btn" onclick="exportShadowComposite()" style="padding:7px;">確認並匯出到主持人圖層</button>
       </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <button class="btn-secondary" id="logo2-review-prev-btn" onclick="goToPreviousReviewTab()" style="display:none;flex:1;min-width:0;">上一頁</button>
-        <button class="dl-btn" id="logo2-shadow-confirm-btn" onclick="confirmLogo2AndShadow()" style="flex:1;min-width:0;">確認並套用</button>
+
+      <!-- 右：1200x1200 合成畫布
+           2026-07-29 跟 Iona 確認兩件事：
+           1) 外層灰底wrapper原本用預設align-items:stretch，會被撐到跟左欄一樣高
+              （左欄內容比畫布還高時），畫布本身用align-items:center在裡面置中，
+              上下就留出大片看起來像「灰底很大、商品圖只佔一部分」的空白。
+              改成外層整排align-items:flex-start，灰底wrapper不再被強制撐高，
+              直接貼著畫布實際高度，視覺上就不會有多餘空白。
+           2) 畫布尺寸夾住方式維持「只給width一個算式」的安全寫法（避免變形），
+              不用疊加vh去夾高度，改回單純px上限即可。
+           2026-07-31：拿掉 .popup-overlay 的 zoom:0.75（全部 popup 恢復100%），
+              這裡的 max-width:500px 現在就是實際顯示大小，沒有再被縮小過一輪 -->
+      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:10px;">
+        <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:500px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
+
     </div>
   </div>
 </div>
@@ -819,16 +655,15 @@ input[type="file"] { display:none; }
 <script src="js/editor-plugin.js"></script>
 <script src="js/bn-state-plugin.js"></script>
 
+<script src="js/fl-b-theme.js"></script>
+<script src="js/color-theme-engine.js"></script>
 <script src="js/editor-utils.js"></script>
 <script src="js/editor-state.js"></script>
 <script src="js/editor-canvas-ui.js"></script>
-<script src="js/card-plugin.js"></script>
 <script src="js/editor-popups.js"></script>
 <script src="js/editor-logo2-canvas.js"></script>
 <script src="js/editor-shadow-canvas.js"></script>
 <script src="js/editor-import.js"></script>
-<script src="js/workorder-parser-shrimp.js"></script>
-<script src="js/editor-import-shrimp.js"></script>
 <script src="js/editor-export.js"></script>
 <script>
 'use strict';
@@ -885,28 +720,33 @@ setTimeout(broadcast, 800); // 等 iframe 載入
 setTimeout(openImportModal, 400); // 自動開啟匯入視窗
 </script>
 <!-- ── ProgressModal ── -->
-<div id="pm-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.72);
-  display:none;align-items:center;justify-content:center;z-index:9999;cursor:wait;">
+<div id="pm-bg" style="position:fixed;inset:0;background:rgba(0,0,0,.5);
+  display:none;align-items:center;justify-content:center;z-index:9999;">
   <div style="background:var(--surface,#2a2a2a);border-radius:14px;
-    padding:1.75rem 2rem;width:340px;display:flex;flex-direction:column;gap:16px;align-items:center;
+    padding:1.75rem 2rem;width:340px;display:flex;flex-direction:column;gap:14px;
     border:.5px solid var(--border2,#444);">
-    <div id="pm-spinner" class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
-    <div style="width:100%;display:flex;flex-direction:column;gap:14px;">
-      <div style="text-align:center;">
-        <div id="pm-title" style="font-size:14px;font-weight:500;color:var(--text,#f0f0f0);">處理中</div>
-        <div id="pm-sub" style="font-size:12px;color:var(--text2,#999);min-height:16px;margin-top:2px;"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg id="pm-spinner" width="18" height="18" viewBox="0 0 18 18" fill="none"
+        style="flex-shrink:0;animation:pm-spin .8s linear infinite;">
+        <circle cx="9" cy="9" r="7" stroke="#444" stroke-width="2.5"/>
+        <path d="M9 2 A7 7 0 0 1 16 9" stroke="var(--accent,#EE4D2D)" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span id="pm-title" style="font-size:14px;font-weight:500;color:var(--text,#f0f0f0);">處理中</span>
+    </div>
+    <div id="pm-sub" style="font-size:12px;color:var(--text2,#999);min-height:16px;"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;height:6px;background:var(--border2,#383838);border-radius:999px;overflow:hidden;">
+        <div id="pm-bar" style="height:100%;border-radius:999px;background:var(--accent,#EE4D2D);
+          width:0%;transition:width .3s ease;"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;height:6px;background:var(--border2,#383838);border-radius:999px;overflow:hidden;">
-          <div id="pm-bar" style="height:100%;border-radius:999px;background:var(--accent-orange);
-            width:0%;transition:width .3s ease;"></div>
-        </div>
-        <span id="pm-pct" style="font-size:12px;font-weight:500;color:var(--accent-orange);
-          min-width:34px;text-align:right;">0%</span>
-      </div>
+      <span id="pm-pct" style="font-size:12px;font-weight:500;color:var(--accent,#EE4D2D);
+        min-width:34px;text-align:right;">0%</span>
     </div>
   </div>
 </div>
+<style>
+@keyframes pm-spin{to{transform:rotate(360deg)}}
+</style>
 <script>
 var pm=(function(){
   var bg=document.getElementById('pm-bg');
@@ -919,11 +759,8 @@ var pm=(function(){
     show:function(title){
       if(title) titleEl.textContent=title;
       bar.style.width='0%'; pctEl.textContent='0%'; subEl.textContent='';
-      spinner.style.animation='spin .8s linear infinite';
+      spinner.style.animation='pm-spin .8s linear infinite';
       bg.style.display='flex';
-      /* 背景不能點擊、也不能滾動——pm-bg本來就蓋滿整個畫面且z-index最高，
-         這裡額外鎖 body 捲動，避免載入中還能滑動底下的畫布/清單 */
-      document.body.style.overflow='hidden';
     },
     update:function(pct,label){
       var p=Math.min(100,Math.max(0,Math.round(pct)));
@@ -935,19 +772,18 @@ var pm=(function(){
       spinner.style.animation='none';
     },
     hide:function(){
-      setTimeout(function(){ bg.style.display='none'; document.body.style.overflow=''; },800);
+      setTimeout(function(){ bg.style.display='none'; },800);
     }
   };
 })();
 </script>
 
-
 <!-- 商品/主持人 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
 <script src="js/shadow-plugin.js"></script>
 <script src="js/shadow-layout-defaults.js"></script>
 <script src="js/shadow-scene-scale.js"></script>
+<script src="js/stage-defaults.js"></script>
 <script src="js/shadow-layout-receiver.js"></script>
-<!-- 拍立得框：要放在 shadow-editor-plugin.js 之前，商品勾選「拍立得」時才呼叫得到 -->
 <script src="js/frame-defaults.js"></script>
 <script src="js/shadow-frame-plugin.js"></script>
 <script src="js/shadow-editor-plugin.js"></script>
