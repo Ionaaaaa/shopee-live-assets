@@ -137,6 +137,15 @@ function saveCurrentTabState(cb){
   if(window.ShadowEditor) tab.data.combo = window.ShadowEditor.getCombo() || tab.data.combo;
   if(S.imgs.host) tab.data.hostImg = S.imgs.host;
 
+  /* 2026-07-31 跟 Iona 確認的bug：這裡原本沒存顏色，只存了 theme 名稱。
+     switchTab()/applyTabData() 還原時會呼叫 setTheme()，把 cSub/cMain/cDate
+     蓋回 theme 的固定預設色，底色吸取（applySeedHex）算出來的自訂色因此在切分頁
+     或下載暫存/重新匯入後就跟著遺失。這裡補存目前畫面上的顏色值＋seedHex/seedPalette，
+     applyTabData() 再用這幾個欄位覆蓋回 setTheme() 設的預設色。 */
+  tab.data.colors = { cSub:v('cSub'), cMain:v('cMain'), cDate:v('cDate') };
+  tab.data.seedHex = S.seedHex;
+  tab.data.seedPalette = S.seedPalette;
+
   /* 直接讀 iframe 的 D 物件，不用 postMessage */
   tab.data.canvasState = {};
   Object.keys(iframes).forEach(function(id){
@@ -152,6 +161,20 @@ function saveCurrentTabState(cb){
 function applyTabData(tab, loadHost){
   var d = tab.data || {};
   if(d.theme) setTheme(d.theme);
+  /* setTheme() 剛把 cSub/cMain/cDate 蓋成 theme 預設色，這裡如果該分頁有存過
+     自訂顏色（底色吸取或手動調色），要再蓋回來，並還原 S.seedHex/S.seedPalette
+     （否則之後再開「底色吸取」面板會顯示錯的種子色）。 */
+  if(d.colors){
+    var elSub2=document.getElementById('cSub'); if(elSub2&&d.colors.cSub) elSub2.value=d.colors.cSub;
+    var elMain2=document.getElementById('cMain'); if(elMain2&&d.colors.cMain) elMain2.value=d.colors.cMain;
+    var elDate2=document.getElementById('cDate'); if(elDate2&&d.colors.cDate) elDate2.value=d.colors.cDate;
+  }
+  if(d.seedHex){
+    S.seedHex = d.seedHex;
+    S.seedPalette = d.seedPalette || S.seedPalette;
+    var elSeed2=document.getElementById('seed-hex-input'); if(elSeed2) elSeed2.value=d.seedHex;
+    var elSwatch2=document.getElementById('seed-hex-swatch'); if(elSwatch2) elSwatch2.style.background=d.seedHex;
+  }
   var fields = {
     'txt-main': d.main  || '',
     'txt-sub':  d.sub   || '',
