@@ -104,21 +104,32 @@ window.ShadowPlugin = (function () {
       var d = cctx.getImageData(0, 0, w, h).data;
       var minY = h, maxY = -1, minX = w, maxX = -1;
       var alphaThresh = 10;
+      /* 2026-08-01 跟 Iona 確認新增：拖鞋素材那類「右半部一大塊不透明白底」的圖，
+         alpha 沒有低於門檻（不是真透明），原本只看 alpha 會把這塊白底誤判成「有內容」，
+         偵測出來的留白比例因此不準，drawGroundShadow() 算出來的影子水平/垂直支點
+         就會跟著跑掉（實測：拖鞋影子明顯偏移）。這裡加一個「是否接近純白」的判斷，
+         alpha 夠高但顏色也接近白色的像素，一樣當成留白，不算進有色範圍。
+         whiteThresh 抓得比較高（250），是為了盡量不誤傷本身就偏白/淺色的商品
+         （例如白色鞋款）——真的商品就算局部偏白，也很少整塊 R/G/B 都在 250 以上、
+         毫無漸層或陰影變化；如果之後遇到淺色商品被誤裁，再調低這個門檻即可。 */
+      var whiteThresh = 250;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var idx = (y * w + x) * 4;
+          var a = d[idx + 3];
+          if (a <= alphaThresh) continue; // 真透明：不算有色範圍
+          var r = d[idx], g = d[idx + 1], b = d[idx + 2];
+          if (r >= whiteThresh && g >= whiteThresh && b >= whiteThresh) continue; // 不透明白底：也不算有色範圍
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+        }
+      }
       /* 2026-07-28 跟 Iona 確認新增：左右也一併偵測（不再像原本只找 y 就 break），
          算法比照 shadow-layout-receiver.js 的 calcTightBoundsRatio()，只是這裡回傳的是
          上下左右各自的留白比例，不是單一個緊密框物件——drawGroundShadow() 只需要
          left/right 拿來算水平置中修正，不需要完整的 tight bounds。 */
-      for (var y = 0; y < h; y++) {
-        for (var x = 0; x < w; x++) {
-          var a = d[(y * w + x) * 4 + 3];
-          if (a > alphaThresh) {
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-          }
-        }
-      }
       if (maxY >= 0) {
         top = minY / h; bottom = (h - 1 - maxY) / h;
         left = minX / w; right = (w - 1 - maxX) / w;
