@@ -19,21 +19,65 @@
 window.FlBThemeColors = {
 
   _default: {
-    bgColor:   '#1E6EB4',
-    textColor: '#1a1a1a'
+    bgColor:   '#b92c15',
+    textColor: '#ffffff'
   },
 
   A: {
-    bgColor:   '#7bc5d5',
-    textColor: '#165AA5'
+    bgColor:   '#1a9b9f',
+    textColor: '#ffffff'
   },
   B: {
-    bgColor:   '#abc48c',
-    textColor: '#335705'
+    bgColor:   '#ed8907',
+    textColor: '#ffffff'
   },
   C: {
-    bgColor:   '#aac3d6',
-    textColor: '#2B638F'
+    bgColor:   '#e63f92',
+    textColor: '#ffffff'
+  },
+  D: {
+    bgColor:   '#794bb2',
+    textColor: '#ffffff'
+  },
+  E: {
+    bgColor:   '#ee4d2e',
+    textColor: '#ffffff'
+  },
+  F: {
+    bgColor:   '#0d87b5',
+    textColor: '#ffffff'
+  },
+  G: {
+    bgColor:   '#3ec0c2',
+    textColor: '#ffffff'
+  },
+  H: {
+    bgColor:   '#d71d46',
+    textColor: '#ffffff'
+  },
+  I: {
+    bgColor:   '#e03c3d',
+    textColor: '#ffffff'
+  },
+  J: {
+    bgColor:   '#9c1130',
+    textColor: '#ffffff'
+  },
+  K: {
+    bgColor:   '#a54b2a',
+    textColor: '#ffffff'
+  },
+  L: {
+    bgColor:   '#342d94',
+    textColor: '#ffffff'
+  },
+  M: {
+    bgColor:   '#dd9c00',
+    textColor: '#ffffff'
+  },
+  O: {
+    bgColor:   '#732786',
+    textColor: '#ffffff'
   },
 
 };

@@ -4,20 +4,38 @@ console.log('%c[editor-shadow-canvas.js] 版本確認：2026-07-06-v2（含combo
 /* ── 1200x1200 商品／人物 陰影合成畫布 ── */
 var _shadowBigCanvas = null, _shadowBigCtx = null, _shadowBigReceiver = null, _shadowBigSimBg = null;
 var _shadowBigInited = false;
+var _shadowBigUserBg = false; // 使用者是否手動上傳過自訂模擬背景（true 的話就不再被公版背景自動蓋掉）
+
+/* 模擬背景載入：優先套用「目前公版」的 01_thumbnail.jpg（720x720，跟 1200x1200 同為正方形，
+   鋪滿不會變形），純預覽用、不會被匯出。找不到才退回 backgrounds/1200bg.jpg，再找不到就灰底。 */
+function loadShadowBigSimBgForTheme(themeKey){
+  var themeUrl = 'backgrounds/' + themeKey + '/01_thumbnail.jpg';
+  var img = new Image();
+  img.onload = function(){ _shadowBigSimBg = img; drawShadowBigCanvas(); };
+  img.onerror = function(){
+    console.warn('[shadow-compose] 找不到公版背景 '+themeUrl+'，改用預設 backgrounds/1200bg.jpg');
+    var fallback = new Image();
+    fallback.onload = function(){ _shadowBigSimBg = fallback; drawShadowBigCanvas(); };
+    fallback.onerror = function(){
+      console.warn('[shadow-compose] 找不到預設模擬背景 backgrounds/1200bg.jpg，改用灰底');
+      _shadowBigSimBg = null; drawShadowBigCanvas();
+    };
+    fallback.src = 'backgrounds/1200bg.jpg';
+  };
+  img.src = themeUrl;
+}
 
 function initShadowBigCanvasOnce(){
   if(_shadowBigInited) return;
   _shadowBigCanvas = document.getElementById('shadow-compose-canvas');
   if(!_shadowBigCanvas || typeof ShadowLayoutReceiver === 'undefined') return;
   _shadowBigCtx = _shadowBigCanvas.getContext('2d');
+  _shadowBigCtx.imageSmoothingEnabled = true;
+  _shadowBigCtx.imageSmoothingQuality = 'high'; // 商品/人物照片縮放畫進1200畫布時，用高品質重新取樣
   _shadowBigReceiver = ShadowLayoutReceiver.create(_shadowBigCanvas);
   _shadowBigReceiver.attachPointerEvents(drawShadowBigCanvas); // 直接在大畫布上拖曳/縮放商品與人物（點選會透過 LC_ACTIVE_CHANGED 自動同步回左側素材清單的選取高亮）
 
-  /* 預設模擬背景：backgrounds/1200bg.jpg（純預覽用，匯出時不會包含這張背景） */
-  var defaultBg = new Image();
-  defaultBg.onload = function(){ _shadowBigSimBg = defaultBg; drawShadowBigCanvas(); };
-  defaultBg.onerror = function(){ console.warn('[shadow-compose] 找不到預設模擬背景 backgrounds/1200bg.jpg，改用灰底'); };
-  defaultBg.src = 'backgrounds/1200bg.jpg';
+  loadShadowBigSimBgForTheme(S.theme); // 初次開啟：套用目前公版背景
 
   var bgInput = document.getElementById('shadow-compose-bg-file');
   if(bgInput){
@@ -26,7 +44,7 @@ function initShadowBigCanvasOnce(){
       var reader = new FileReader();
       reader.onload = function(ev){
         var img = new Image();
-        img.onload = function(){ _shadowBigSimBg = img; drawShadowBigCanvas(); };
+        img.onload = function(){ _shadowBigUserBg = true; _shadowBigSimBg = img; drawShadowBigCanvas(); };
         img.src = ev.target.result;
       };
       reader.readAsDataURL(f);
@@ -47,6 +65,18 @@ function syncShadowBigCanvasFromState(snapshot){
   if(!_shadowBigReceiver) return;
   snapshot = snapshot || (window.ShadowEditor && window.ShadowEditor.getFullState());
   if(!snapshot) return;
+
+  /* 先清掉「大畫布目前有畫、但這次 snapshot 已經沒有資料」的素材（例如剛被使用者
+     按縮圖右上角 × 刪除）。左側清單刪除時，只有 broadcastToAllFrames 會把
+     LC_REMOVE_SLOT 送給真正的版位 iframe，這個大畫布不是 iframe、收不到那則訊息，
+     只靠下面的 LC_UPSERT_SLOT／LC_SET_ENABLED 沒辦法讓已刪除的東西真的消失
+     ——這裡補送 LC_REMOVE_SLOT，行為才會跟版位一致。 */
+  _shadowBigReceiver.getEnabledOrder().forEach(function(id){
+    if(!snapshot.slots || !snapshot.slots[id]){
+      _shadowBigReceiver.handleMessage({ type:'LC_REMOVE_SLOT', slotId:id }, drawShadowBigCanvas);
+    }
+  });
+
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ANGLE', preset: snapshot.angle }, drawShadowBigCanvas);
   /* 版型要先送，upsertSlot 才能正確判斷這個版型該用哪組 byCombo 位置 */
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ENABLED', ids: snapshot.order || snapshot.enabled || [], combo: snapshot.combo }, drawShadowBigCanvas);
@@ -73,6 +103,9 @@ function drawShadowBigCanvas(){
 function openShadowPopup(){
   document.getElementById('popup-shadow').classList.add('open');
   initShadowBigCanvasOnce();
+  /* 每次開啟都重新對齊「目前公版」的背景（例如匯入後又換了公版），
+     除非使用者這個 session 已經手動上傳過自己的模擬背景，那就尊重使用者的選擇不覆蓋 */
+  if(!_shadowBigUserBg) loadShadowBigSimBgForTheme(S.theme);
   syncShadowBigCanvasFromState(); // popup 開啟當下就把目前狀態畫上去（例如匯入工單已經比對好的素材）
 }
 
@@ -110,6 +143,8 @@ function exportShadowComposite(){
   var shadowCv = document.createElement('canvas');
   shadowCv.width = 1200; shadowCv.height = 1200;
   var sctx = shadowCv.getContext('2d');
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = 'high';
   sctx.fillStyle = '#ffffff';
   sctx.fillRect(0,0,1200,1200);
   ShadowPlugin.renderScene(sctx, states, true); // skipPhoto=true，只畫陰影
@@ -135,12 +170,16 @@ function exportShadowComposite(){
   var photoCv = document.createElement('canvas');
   photoCv.width = 1200; photoCv.height = 1200;
   var pctx = photoCv.getContext('2d');
+  pctx.imageSmoothingEnabled = true;
+  pctx.imageSmoothingQuality = 'high'; // 商品照片依擺放大小攤平匯出的關鍵一步，模糊主要就是這裡造成的
   ShadowPlugin.renderPhotosOnly(pctx, states);
 
   /* 合成：先貼陰影，再疊照片 */
   var outCv = document.createElement('canvas');
   outCv.width = 1200; outCv.height = 1200;
   var octx = outCv.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
   octx.drawImage(shadowCv, 0, 0);
   octx.drawImage(photoCv, 0, 0);
 

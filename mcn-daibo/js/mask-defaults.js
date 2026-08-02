@@ -22,6 +22,10 @@
                      （例如 dip:130，正中間大概往下凹 65px，兩側邊緣仍是原本的高度）
     color            深色（左右邊緣、離弧形較遠的地方看到的顏色）
     lightColor       弧形邊正中央最淺的顏色
+    autoColor        選填，true 的話會忽略上面 color/lightColor 這兩個寫死的色碼，
+                      改成即時從目前公版背景圖自動取樣、算出一淺一深兩色（邏輯見
+                      layout-common.js 的 updateMaskAutoColor()）。想固定用某個顏色
+                      不想跟著背景變，就不要加這個欄位（或設 false），照舊吃 color/lightColor。
     glowWidthRatio   淺色橫向擴散範圍，占畫布寬度的比例（預設 0.32，數字越大擴散越寬）
     glowHeightRatio  淺色縱向擴散範圍，倍數對應 height（預設 1.6，數字越大往下擴散越多）
 
@@ -42,7 +46,8 @@ window.MaskDefaults = {
     enabled: true,
     height: 90,
     dip: 70,
-    color: '#1f305c',
+    autoColor: true,      // 跟著目前公版背景圖自動取色，不用手動維護 color/lightColor
+    color: '#1f305c',     // 抓不到背景圖時的備援色（autoColor 失敗才會用到）
     lightColor: '#364c82',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9

@@ -114,12 +114,56 @@ function getMaskConfig(){
 
    fade（可選）：在指定位置局部「擦淡」遮罩本身的透明度，不是疊白色——
    會讓底下真正的畫面（主持人/背景）透出來，效果比照 Photoshop 的放射性漸層
-   工具：angle 對應「角度」、scale 對應「縮放」（把圓形壓扁成橢圓）。 */
+   工具：angle 對應「角度」、scale 對應「縮放」（把圓形壓扁成橢圓）。
+
+   ── 自動配色（autoColor）──
+   mask-defaults.js 該版位設定 autoColor:true 時，不用 color/lightColor 這兩個
+   寫死的色碼，改成即時從目前公版背景圖（D.bg）取樣平均色，算出兩個顏色：
+     color     ：就是取樣到的底色本身，不做任何調整
+     lightColor：底色往白色淺化 45%（弧形邊正中央最淺處，跟 color 之間拉出漸層）
+   取樣範圍是背景圖「最上方一小塊區域」（高度10%），這裡通常是最單純、沒有商品/
+   文字/漸層裝飾的一塊底色，比較能代表這個公版真正的「背景色」。
+   找不到背景圖、或取樣失敗，會自動退回原本寫死的 color/lightColor，不會壞掉。 */
+function sampleBgAvgColor(img){
+  try{
+    var c = document.createElement('canvas');
+    c.width = 40; c.height = 40;
+    var cctx = c.getContext('2d');
+    var sampleH = Math.max(1, Math.floor(img.naturalHeight * 0.10));
+    cctx.drawImage(img, 0, 0, img.naturalWidth, sampleH, 0, 0, 40, 40);
+    var d = cctx.getImageData(0, 0, 40, 40).data;
+    var r=0,g=0,b=0,n=0;
+    for(var i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; n++; }
+    return { r:r/n, g:g/n, b:b/n };
+  } catch(e){
+    console.warn('[mask] 背景取色失敗，將退回遮罩預設固定色：', e.message);
+    return null;
+  }
+}
+function rgbToCss(o){ return 'rgb('+Math.round(o.r)+','+Math.round(o.g)+','+Math.round(o.b)+')'; }
+function mixWithWhite(o, amt){ return { r:o.r+(255-o.r)*amt, g:o.g+(255-o.g)*amt, b:o.b+(255-o.b)*amt }; }
+
+/* 每次背景圖載入成功都重算一次，存在 D.maskAutoColor，drawMaskLayer 需要時直接拿來用 */
+function updateMaskAutoColor(){
+  D.maskAutoColor = null;
+  if(!D.bg) return;
+  var avg = sampleBgAvgColor(D.bg);
+  if(!avg) return;
+  D.maskAutoColor = {
+    color:      rgbToCss(avg),                 // 底色本身，不調整
+    lightColor: rgbToCss(mixWithWhite(avg, 0.45))  // 底色淺化過的版本
+  };
+}
+
 function drawMaskLayer(ctx){
   var on = (typeof D !== 'undefined' && D.maskOn !== undefined) ? D.maskOn : window.MaskEnabled;
   if(!on) return;
   var m = getMaskConfig();
   if(!m || !m.enabled) return;
+
+  var useAuto = m.autoColor && D.maskAutoColor;
+  var maskColor      = useAuto ? D.maskAutoColor.color      : m.color;
+  var maskLightColor = useAuto ? D.maskAutoColor.lightColor : (m.lightColor || m.color);
 
   var shapeLeft  = m.x !== undefined ? m.x : 0;               // 色塊左邊界（預設貼齊畫布左邊）
   var shapeWidth = m.width !== undefined ? m.width : W;        // 色塊寬度（預設等於畫布寬度）
@@ -158,8 +202,8 @@ function drawMaskLayer(ctx){
   octx.translate(glowCx, glowCy);
   octx.scale(scaleX, 1);
   var grad = octx.createRadialGradient(0, 0, 0, 0, 0, radiusY);
-  grad.addColorStop(0, m.lightColor || m.color);
-  grad.addColorStop(1, m.color);
+  grad.addColorStop(0, maskLightColor);
+  grad.addColorStop(1, maskColor);
   octx.fillStyle = grad;
   var localW = shapeWidth / scaleX;
   octx.fillRect(-localW/2 - 5, -(radiusY + 5), localW + 10, radiusY + m.height + 10);
@@ -208,12 +252,12 @@ function drawMaskLayer(ctx){
 /* ── BG ── */
 
 function loadBg(url){
-  if(!url){ D.bg=null; D.bgUrl=null; render(); return; }
+  if(!url){ D.bg=null; D.bgUrl=null; D.maskAutoColor=null; render(); return; }
   if(url===D.bgUrl && D.bg){ render(); return; }
   D.bgUrl=url;
   var img=new Image();
-  img.onload=function(){ D.bg=img; render(); console.log('[bg] 載入成功:', url); };
-  img.onerror=function(){ D.bg=null; render(); console.warn('[bg] 載入失敗，改用預設色：', url); };
+  img.onload=function(){ D.bg=img; updateMaskAutoColor(); render(); console.log('[bg] 載入成功:', url); };
+  img.onerror=function(){ D.bg=null; D.maskAutoColor=null; render(); console.warn('[bg] 載入失敗，改用預設色：', url); };
   img.src=url;
 }
 

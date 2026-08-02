@@ -50,6 +50,8 @@ var stage   = document.getElementById('stage');
 /* ── 高 DPR（Retina 畫質） ── */
 var DPR = 1;
 var ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = 'high'; // 商品圖從高解析素材縮小畫入作圖區時，用高品質重新取樣避免糊化
 cv.width  = W;
 cv.height = H;
 
