@@ -119,13 +119,6 @@ function applyAssetFiles(files){
           if(entry) entries.push(entry);
         }
       }
-      /* 診斷用：拖曳失敗時第一手判斷卡在哪一段（items有幾項、認得幾個entry、
-         dataTransfer.files有幾個）。看到 entries=0 就是瀏覽器沒給資料夾結構，
-         看到 entries>0 但最後檔案數是0，就是資料夾裡真的沒有符合的圖片副檔名。 */
-      console.log('[素材拖曳] items:', items ? items.length : 0,
-                  '／ 可讀取的 entry:', entries.length,
-                  '／ dataTransfer.files:', dataTransfer.files ? dataTransfer.files.length : 0);
-
       if(entries.length){
         /* 拿得到至少一個 entry：用遞迴讀法把資料夾（含子資料夾）裡所有檔案都
            展開出來，這是唯一能讀到「資料夾裡面」內容的路徑——
@@ -137,7 +130,6 @@ function applyAssetFiles(files){
             remaining--;
             if(remaining === 0){
               var n = applyAssetFiles(collected);
-              console.log('[素材拖曳] 讀完，共讀到', collected.length, '個檔案，其中符合圖片副檔名的有', n, '個');
               if(!n) toast('資料夾內找不到圖片檔案（.png/.jpg/.webp）','err');
               else toast('已讀取 '+n+' 張素材圖片','ok');
             }
