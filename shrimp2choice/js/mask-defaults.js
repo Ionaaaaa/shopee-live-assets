@@ -43,7 +43,7 @@ window.MaskDefaults = {
     height: 90,
     dip: 70,
     color: '#ee4d2d',
-    lightColor: '#f4725a',
+    lightColor: '#F8a101',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
   },
@@ -53,7 +53,7 @@ window.MaskDefaults = {
     height: 284,
     dip: 100,
     color: '#ee4d2d',
-    lightColor: '#f4725a',
+    lightColor: '#F8a101',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
     },
@@ -66,7 +66,7 @@ window.MaskDefaults = {
     leftDrop: 50,
     dip: 90,
     color: '#ee4d2d',
-    lightColor: '#f4725a',
+    lightColor: '#F8a101',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9,
     fade: {
@@ -85,7 +85,7 @@ window.MaskDefaults = {
     height: 234,
     dip: 100,
     color: '#ee4d2d',
-    lightColor: '#f4725a',
+    lightColor: '#F8a101',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
   },
