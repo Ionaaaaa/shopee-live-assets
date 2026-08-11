@@ -5,8 +5,8 @@ var _importState = { excelFile:null, assetFiles:[] };
 
 function openImportModal(){
   _importState = { excelFile:null, assetFiles:[] };
-  resetImportZoneText('import-zone-excel', '點擊上傳 Excel 工單', '支援 .xlsx 格式');
-  resetImportZoneText('import-zone-assets', '上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
+  resetImportZoneText('import-zone-excel', '點擊或拖曳檔案到此上傳 Excel 工單', '支援 .xlsx 格式');
+  resetImportZoneText('import-zone-assets', '點擊或拖曳資料夾到此上傳素材（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
   var zEx = document.getElementById('import-zone-excel'); if(zEx) zEx.classList.remove('done');
   var zAs = document.getElementById('import-zone-assets'); if(zAs) zAs.classList.remove('done');
   document.getElementById('popup-import').classList.add('open');
@@ -21,20 +21,213 @@ function resetImportZoneText(zoneId, title, sub){
 
 function onImportFilePicked(e, kind){
   if(kind === 'excel'){
-    var f = e.target.files[0];
-    _importState.excelFile = f || null;
-    if(f){
-      resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇');
-      document.getElementById('import-zone-excel').classList.add('done');
-    }
+    applyExcelFile(e.target.files[0]);
   } else if(kind === 'assets'){
-    var files = Array.prototype.slice.call(e.target.files).filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
-    _importState.assetFiles = files;
-    if(files.length){
-      resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾');
-      document.getElementById('import-zone-assets').classList.add('done');
-    }
+    applyAssetFiles(Array.prototype.slice.call(e.target.files));
   }
+}
+
+/* 套用選到的 Excel 檔案，點擊選檔／拖曳放檔共用同一套邏輯，
+   確保兩種操作方式選出來的結果、UI狀態完全一致。 */
+function applyExcelFile(file){
+  _importState.excelFile = file || null;
+  if(file){
+    resetImportZoneText('import-zone-excel', '已選擇：'+file.name, '點擊可重新選擇');
+    document.getElementById('import-zone-excel').classList.add('done');
+  }
+}
+
+/* 套用選到的素材圖片清單（只留 png/jpg/jpeg/webp），點擊選資料夾／拖曳丟資料夾
+   共用同一套邏輯，跟 applyExcelFile 同樣的理由。silent參數＝true時，篩選後
+   結果是0張圖片也不跳錯誤toast（點擊選資料夾原本就是這樣，選到空資料夾不用
+   特別提示；拖曳丟資料夾則會在呼叫這裡之前就先擋掉0張的情況，各自的錯誤
+   訊息文案不一樣，所以不放在這裡統一跳）。 */
+function applyAssetFiles(files){
+  files = (files || []).filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
+  _importState.assetFiles = files;
+  if(files.length){
+    resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾');
+    document.getElementById('import-zone-assets').classList.add('done');
+  }
+  return files.length;
+}
+
+/* ── 拖曳上傳：Excel 工單 + 素材資料夾 ──
+   兩個 dropzone 各自綁定 dragenter/dragover/dragleave/drop，跟點擊選檔案
+   共用 applyExcelFile()／applyAssetFiles()，匯入結果、UI狀態完全一致。 */
+(function(){
+  function setupDropzone(zoneId, onFiles){
+    var zone = document.getElementById(zoneId);
+    if(!zone) return;
+
+    function setDragging(on){
+      zone.classList.toggle('dragging', !!on);
+    }
+
+    ['dragenter','dragover'].forEach(function(evt){
+      zone.addEventListener(evt, function(e){
+        e.preventDefault(); e.stopPropagation();
+        setDragging(true);
+      });
+    });
+    ['dragleave','dragend'].forEach(function(evt){
+      zone.addEventListener(evt, function(e){
+        e.preventDefault(); e.stopPropagation();
+        setDragging(false);
+      });
+    });
+    zone.addEventListener('drop', function(e){
+      e.preventDefault(); e.stopPropagation();
+      setDragging(false);
+      onFiles(e.dataTransfer);
+    });
+
+    /* 避免使用者沒對準框、拖到頁面其他地方時瀏覽器直接開啟/下載檔案 */
+    ['dragover','drop'].forEach(function(evt){
+      document.addEventListener(evt, function(e){
+        if(e.target && zone.contains(e.target)) return;
+        e.preventDefault();
+      });
+    });
+  }
+
+  setupDropzone('import-zone-excel', function(dataTransfer){
+    var file = dataTransfer.files && dataTransfer.files[0];
+    if(!file) return;
+    if(!/\.xlsx$/i.test(file.name)){
+      toast('請拖曳 .xlsx 格式的工單檔案','err');
+      return;
+    }
+    applyExcelFile(file);
+  });
+
+  setupDropzone('import-zone-assets', function(dataTransfer){
+    try{
+      /* 逐一收集每個項目的 FileSystemEntry。之前的寫法只檢查 items[0] 是不是
+         file-kind、來決定整批走「entry API」還是「退回 dataTransfer.files」，
+         但拖曳資料進來時第0個項目不一定是檔案本身（例如作業系統/瀏覽器會
+         多附一份 text/uri-list 之類的資料排在前面），只看第0項會誤判整批都
+         不支援entry API、白白放棄能正確讀到資料夾內容的路徑，導致「拖資料夾
+         進來完全沒反應」。改成不管第幾項，每一項各自檢查、各自嘗試取得
+         entry，才不會被排序影響。 */
+      var items = dataTransfer.items;
+      var entries = [];
+      if(items){
+        for(var i=0;i<items.length;i++){
+          var it = items[i];
+          var entry = (it && typeof it.webkitGetAsEntry === 'function') ? it.webkitGetAsEntry() : null;
+          if(entry) entries.push(entry);
+        }
+      }
+      /* 診斷用：拖曳失敗時第一手判斷卡在哪一段（items有幾項、認得幾個entry、
+         dataTransfer.files有幾個）。看到 entries=0 就是瀏覽器沒給資料夾結構，
+         看到 entries>0 但最後檔案數是0，就是資料夾裡真的沒有符合的圖片副檔名。 */
+      console.log('[素材拖曳] items:', items ? items.length : 0,
+                  '／ 可讀取的 entry:', entries.length,
+                  '／ dataTransfer.files:', dataTransfer.files ? dataTransfer.files.length : 0);
+
+      if(entries.length){
+        /* 拿得到至少一個 entry：用遞迴讀法把資料夾（含子資料夾）裡所有檔案都
+           展開出來，這是唯一能讀到「資料夾裡面」內容的路徑——
+           dataTransfer.files 對資料夾本身沒有巢狀結構可讀。 */
+        var collected = [];
+        var remaining = entries.length;
+        entries.forEach(function(entry){
+          readEntryFilesRecursive(entry, collected, function(){
+            remaining--;
+            if(remaining === 0){
+              var n = applyAssetFiles(collected);
+              console.log('[素材拖曳] 讀完，共讀到', collected.length, '個檔案，其中符合圖片副檔名的有', n, '個');
+              if(!n) toast('資料夾內找不到圖片檔案（.png/.jpg/.webp）','err');
+              else toast('已讀取 '+n+' 張素材圖片','ok');
+            }
+          });
+        });
+      } else {
+        /* 整批都拿不到 entry（瀏覽器不支援，或拖曳來源本來就不是檔案系統
+           項目）：退回只吃 dataTransfer.files 第一層，至少不會完全沒反應；
+           對「拖整個資料夾」這個瀏覽器來說如果完全不支援entry API，
+           dataTransfer.files 通常也讀不到內容，這裡明確提示使用者改用點擊
+           選資料夾（那條路徑用 <input webkitdirectory> 相容性更好）。 */
+        var files = dataTransfer.files ? Array.prototype.slice.call(dataTransfer.files) : [];
+        var n2 = applyAssetFiles(files);
+        if(!n2) toast('這個瀏覽器不支援拖曳資料夾，請改用「點擊」選擇資料夾','err');
+      }
+    } catch(err){
+      console.error('[import-zone-assets drop] 讀取拖曳的檔案/資料夾時發生例外', err);
+      toast('讀取拖曳的資料夾時發生錯誤，請改用點擊選擇資料夾','err');
+    }
+  });
+})();
+
+/* 遞迴讀出 FileSystemEntry（檔案或資料夾）底下所有的 File 物件，塞進 out 陣列，
+   全部讀完（包含子資料夾）才呼叫 done()。資料夾用 createReader().readEntries()
+   讀取，瀏覽器可能分批回傳，要連續呼叫讀到回傳空陣列為止才算讀完整層。 */
+function readEntryFilesRecursive(entry, out, done){
+  /* 這裡的 file()／readEntries() 都是瀏覽器原生非同步callback，不是Promise，
+     外層的 try/catch（setupDropzone 的 onFiles）包不到這裡面——任何一個
+     子項目讀取途中出錯，都要自己接住並呼叫 done()，不然單一壞掉的檔案/
+     資料夾會讓整批 remaining 計數卡住，永遠不會觸發 applyAssetFiles()，
+     使用者只會看到「拖了資料夾進去卻完全沒反應」。 */
+  if(!entry){ done(); return; }
+  try{
+    if(entry.isFile){
+      entry.file(function(file){
+        /* 關鍵：補上「這個檔案在資料夾裡的完整路徑」。
+           點擊選資料夾（<input webkitdirectory>）時，瀏覽器會自動幫每個 File 附上
+           webkitRelativePath（例如「素材包/0613_HONG JIN 宏晉/logo1.png」），
+           下面 scopeFilesToVendor() 就是靠這個路徑把候選檔案縮小到「這包廠商自己的
+           子資料夾」，避免不同廠商之間用通用關鍵字（商品1/商品2…）互相誤配對。
+           但拖曳進來、改用 FileSystemEntry API 讀出來的 File，webkitRelativePath
+           是空字串——路徑資訊整個消失，廠商縮小範圍失效，於是每一包都在「全部檔案」
+           裡用通用關鍵字亂配，結果就是 logo 配錯、商品圖抓不到。
+           webkitRelativePath 是唯讀的，不能直接寫入，所以改附掛一個自訂欄位
+           _bnPath，scopeFilesToVendor() 那邊會一併讀取，兩種上傳方式行為就一致了。 */
+        try{ file._bnPath = entry.fullPath || ''; }catch(e){}
+        out.push(file);
+        done();
+      }, function(err){
+        console.error('[readEntryFilesRecursive] 讀取檔案失敗，略過', entry.fullPath, err);
+        done();
+      });
+      return;
+    }
+    if(entry.isDirectory){
+      var reader = entry.createReader();
+      var pending = 0, finishedListing = false;
+      function checkAllDone(){
+        if(finishedListing && pending === 0) done();
+      }
+      function readBatch(){
+        reader.readEntries(function(children){
+          if(!children.length){
+            finishedListing = true;
+            checkAllDone();
+            return;
+          }
+          pending += children.length;
+          children.forEach(function(child){
+            readEntryFilesRecursive(child, out, function(){
+              pending--;
+              checkAllDone();
+            });
+          });
+          readBatch(); // 繼續讀下一批，直到 readEntries 回傳空陣列
+        }, function(err){
+          console.error('[readEntryFilesRecursive] 讀取資料夾內容失敗，以已讀到的檔案為準', entry.fullPath, err);
+          finishedListing = true;
+          checkAllDone();
+        });
+      }
+      readBatch();
+      return;
+    }
+  } catch(err){
+    console.error('[readEntryFilesRecursive] 例外，略過此項目', err);
+    done();
+    return;
+  }
+  done();
 }
 
 /* 依「別名關鍵字」在一堆 File 裡找最匹配的一個。
@@ -107,7 +300,12 @@ function scopeFilesToVendor(files, hint){
   var h = String(hint).toLowerCase().trim();
   if(!h) return files;
   var scoped = files.filter(function(f){
-    var p = ((f.webkitRelativePath || f.name || '')).toLowerCase();
+    /* webkitRelativePath：點擊選資料夾時瀏覽器自動附上的相對路徑；
+       _bnPath：拖曳資料夾時由 readEntryFilesRecursive() 補上的完整路徑
+       （拖曳進來的 File 沒有 webkitRelativePath，少了它廠商縮小範圍會整個失效，
+        導致不同廠商的素材互相配錯，見該處註解）。兩種上傳方式取到的路徑
+       格式雖然一個有開頭斜線、一個沒有，但這裡只做 indexOf 子字串比對，不影響。 */
+    var p = ((f.webkitRelativePath || f._bnPath || f.name || '')).toLowerCase();
     return p.indexOf(h) !== -1;
   });
   return scoped.length ? scoped : files;

@@ -182,6 +182,7 @@ input[type="file"] { display:none; }
 .import-dropzone:hover { border-color:var(--accent); }
 .import-dropzone.done { border-color:var(--accent); }
 .import-dropzone.done .import-zone-title { color:var(--accent); }
+.import-dropzone.dragging { border-style:solid;border-color:var(--accent);background:var(--accent-dim); }
 
 /* Canvas area */
 .canvas-area { background:var(--bg);overflow-y:auto;display:flex;flex-direction:column;align-items:center;padding:28px 36px 64px;gap:28px;scrollbar-width:none; }
@@ -576,7 +577,7 @@ input[type="file"] { display:none; }
         style="border-width:2px;border-style:dashed;border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;"
         onclick="document.getElementById('importExcelFile').click()">
         <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊或拖曳檔案到此上傳 Excel 工單</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
       </div>
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="onImportFilePicked(event,'excel')">
@@ -585,7 +586,7 @@ input[type="file"] { display:none; }
         style="border-width:2px;border-style:dashed;border-radius:var(--radius);padding:22px 16px;text-align:center;cursor:pointer;"
         onclick="document.getElementById('importAssetsFolder').click()">
         <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:6px;"><path d="M1.5 3.5h4l1.2 1.6H14.5v8.4h-13z"/></svg>
-        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">上傳素材資料夾（Logo＋人物／商品，可選）</div>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊或拖曳資料夾到此上傳素材（Logo＋人物／商品，可選）</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">Logo、人物、商品圖可放同一個資料夾，依檔名自動比對</div>
       </div>
       <input type="file" id="importAssetsFolder" webkitdirectory directory multiple style="display:none" onchange="onImportFilePicked(event,'assets')">
@@ -763,21 +764,21 @@ input[type="file"] { display:none; }
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <!-- JS Plugins -->
-<script src="js/banwords-engine-hbn.js?v=20260730f"></script>
-<script src="js/logo-editor-plugin.js?v=20260730f"></script>
-<script src="js/editor-plugin.js?v=20260730f"></script>
-<script src="js/bn-state-plugin.js?v=20260730f"></script>
+<script src="js/banwords-engine-hbn.js?v=20260811a"></script>
+<script src="js/logo-editor-plugin.js?v=20260811a"></script>
+<script src="js/editor-plugin.js?v=20260811a"></script>
+<script src="js/bn-state-plugin.js?v=20260811a"></script>
 
-<script src="js/editor-utils.js?v=20260730f"></script>
-<script src="js/themes.js?v=20260730f"></script>
-<script src="js/fl-b-theme.js?v=20260730f"></script>
-<script src="js/editor-state.js?v=20260730f"></script>
-<script src="js/editor-canvas-ui.js?v=20260730f"></script>
-<script src="js/editor-popups.js?v=20260730f"></script>
-<script src="js/editor-logo2-canvas.js?v=20260730f"></script>
-<script src="js/editor-shadow-canvas.js?v=20260730f"></script>
-<script src="js/editor-import.js?v=20260730f"></script>
-<script src="js/editor-export.js?v=20260730f"></script>
+<script src="js/editor-utils.js?v=20260811a"></script>
+<script src="js/themes.js?v=20260811a"></script>
+<script src="js/fl-b-theme.js?v=20260811a"></script>
+<script src="js/editor-state.js?v=20260811a"></script>
+<script src="js/editor-canvas-ui.js?v=20260811a"></script>
+<script src="js/editor-popups.js?v=20260811a"></script>
+<script src="js/editor-logo2-canvas.js?v=20260811a"></script>
+<script src="js/editor-shadow-canvas.js?v=20260811a"></script>
+<script src="js/editor-import.js?v=20260811a"></script>
+<script src="js/editor-export.js?v=20260811a"></script>
 <script>
 'use strict';
 
@@ -896,12 +897,12 @@ var pm=(function(){
 </script>
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
-<script src="js/shadow-plugin.js?v=20260730f"></script>
-<script src="js/frame-defaults.js?v=20260730f"></script>
-<script src="js/shadow-frame-plugin.js?v=20260730f"></script>
-<script src="js/shadow-layout-defaults.js?v=20260730f"></script>
-<script src="js/shadow-scene-scale.js?v=20260730f"></script>
-<script src="js/shadow-layout-receiver.js?v=20260730f"></script>
-<script src="js/shadow-editor-plugin.js?v=20260730f"></script>
+<script src="js/shadow-plugin.js?v=20260811a"></script>
+<script src="js/frame-defaults.js?v=20260811a"></script>
+<script src="js/shadow-frame-plugin.js?v=20260811a"></script>
+<script src="js/shadow-layout-defaults.js?v=20260811a"></script>
+<script src="js/shadow-scene-scale.js?v=20260811a"></script>
+<script src="js/shadow-layout-receiver.js?v=20260811a"></script>
+<script src="js/shadow-editor-plugin.js?v=20260811a"></script>
 </body>
 </html>
