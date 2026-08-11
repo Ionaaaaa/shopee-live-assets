@@ -25,7 +25,17 @@ function initShadowBigCanvasOnce(){
       var reader = new FileReader();
       reader.onload = function(ev){
         var img = new Image();
-        img.onload = function(){ _shadowBigSimBg = img; drawShadowBigCanvas(); };
+        img.onload = function(){
+          _shadowBigSimBg = img;
+          /* 使用者手動上傳了一張模擬背景圖：改成直接取樣這張圖片本身的顏色
+             （跟 ShadowPlugin.setBackground 原本設計的用途一致），比繼續套用
+             舊的「背景顏色」色票更準確——圖片才是這次真正要合成的背景。 */
+          if(typeof ShadowPlugin !== 'undefined'){
+            ShadowPlugin.setBackground(img);
+            _shadowBigLastColorHex = null; // 之後拿掉這張圖、退回純色時，要能重新觸發一次
+          }
+          drawShadowBigCanvas();
+        };
         img.src = ev.target.result;
       };
       reader.readAsDataURL(f);
@@ -61,11 +71,27 @@ function syncShadowBigCanvasFromState(snapshot){
   drawShadowBigCanvas();
 }
 
+/* 記住上一次已經套用給 ShadowPlugin 的背景色，只有色碼真的變了才重新計算＋重新
+   tint 商品陰影——這支函式在拖曳/縮放商品時會被高頻呼叫，避免每一影格都白算一次。 */
+var _shadowBigLastColorHex = null;
+
 function drawShadowBigCanvas(){
   if(!_shadowBigCtx) return;
   _shadowBigCtx.clearRect(0,0,1200,1200);
-  if(_shadowBigSimBg){ _shadowBigCtx.drawImage(_shadowBigSimBg,0,0,1200,1200); }
-  else { _shadowBigCtx.fillStyle = S.seedHex || '#d8d8d8'; _shadowBigCtx.fillRect(0,0,1200,1200); }
+  if(_shadowBigSimBg){
+    _shadowBigCtx.drawImage(_shadowBigSimBg,0,0,1200,1200);
+  } else {
+    var hex = S.seedHex || '#d8d8d8';
+    _shadowBigCtx.fillStyle = hex;
+    _shadowBigCtx.fillRect(0,0,1200,1200);
+    /* 陰影顏色依照目前的「背景顏色」自動調整，不要固定寫死一個灰色——
+       換色票、或匯入工單帶新背景色，商品貼地陰影要跟著換色調（深色背景陰影也偏深，
+       淺色背景陰影也偏淺），道理跟 color-theme-engine.js 的地平線陰影一樣。 */
+    if(typeof ShadowPlugin !== 'undefined' && hex !== _shadowBigLastColorHex){
+      _shadowBigLastColorHex = hex;
+      ShadowPlugin.setBackgroundColor(hex);
+    }
+  }
   _shadowBigReceiver.drawItems(_shadowBigCtx);
 }
 

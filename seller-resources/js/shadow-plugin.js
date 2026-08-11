@@ -67,6 +67,23 @@ window.ShadowPlugin = (function () {
   }
   function getRawBackgroundRGB() { return rawBgRGB; }
 
+  /* 依「畫布目前的背景底色」（純色 hex，例如側欄背景顏色色票 S.seedHex）自動算陰影色，
+     不用等使用者上傳一張背景圖才能取樣——賣家資源的畫布背景本來就是純色填底，
+     沒有照片可以取樣，所以另外開一個「吃 hex 色碼」的版本，公式跟 setBackground()
+     取樣圖片時完全一樣（乘 0.8 調暗），只是輸入源從「圖片像素平均值」換成「單一顏色值」，
+     維持跟圖片模式一致的視覺調暗程度，兩種來源混用也不會忽然跳一階。 */
+  function setBackgroundColor(hex) {
+    if (fixedColor) return;
+    var h = String(hex || '').replace(/^#/, '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    if (isNaN(n)) return;
+    var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    rawBgRGB = r + ',' + g + ',' + b;
+    shadowRGB = Math.round(r * 0.8) + ',' + Math.round(g * 0.8) + ',' + Math.round(b * 0.8);
+    Object.keys(products).forEach(function (id) { tintProduct(id); });
+  }
+
   function buildSilhouette(img) {
     var c = document.createElement('canvas');
     c.width = img.naturalWidth; c.height = img.naturalHeight;
@@ -413,6 +430,7 @@ window.ShadowPlugin = (function () {
     setAngle: setAngle,
     configureZone: configureZone,
     setBackground: setBackground,
+    setBackgroundColor: setBackgroundColor,
     getRawBackgroundRGB: getRawBackgroundRGB,
     setShadowColorRGB: setShadowColorRGB,
     getShadowColorRGB: getShadowColorRGB,

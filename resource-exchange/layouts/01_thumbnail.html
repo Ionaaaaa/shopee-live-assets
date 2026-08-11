@@ -149,6 +149,7 @@ var D = {
   theme:'A', bg:null, bgUrl:null,
   host:null, hostBounds:null, logo1:null, logo2:null, ctaBtn:null,
   _logo2DataUrl: null,  // logo2 的 base64 src（postMessage 用）
+  logo2BgColor: null,   // editor 端明確指定的 Logo 底色（見 BN_UPDATE handler 的說明）
   main:'主標文案$9字內', sub:'副標文案$8字內',
   date:'XX/XX', time:'19:00', brand:'XXX',
   cSub:'#fff2d0',     /* 主標顏色（由 editor 傳入）*/
@@ -374,9 +375,11 @@ function drawLogos(){
     /* logo2 框（固定 L2_W × L2_H，置中）*/
     var frameX = curX;
     var frameY = a.y + (a.h - L2_H) / 2;
-    /* 採樣底色 */
+    /* 採樣底色：editor 端有明確指定（Logo 編輯畫布確認出來的圖）就直接用；
+       沒有指定（手動裁切、自動比對到贊助商原圖等舊路徑）才退回自己吸色 */
     var bgColor = '#ffffff';
-    try{ bgColor = sampleLogo2BgColor(D.logo2); }catch(e){}
+    if(D.logo2BgColor){ bgColor = D.logo2BgColor; }
+    else { try{ bgColor = sampleLogo2BgColor(D.logo2); }catch(e){} }
     ctx.save(); drawRoundRect(ctx, frameX, frameY, L2_W, L2_H, L2_R);
     ctx.fillStyle = bgColor; ctx.fill(); ctx.restore();
     /* 繪製 logo2（置中於框內，clip 圓角）*/
@@ -905,6 +908,12 @@ if(!msg||msg.type!=='BN_UPDATE') return;
       dec();
     });
   }
+  /* 底色：Logo 編輯畫布「確認並套用」出來的圖已經是透明背景（只有 Logo
+     本體，方便這裡自己抓有色範圍），沒辦法再用「吸角落像素」猜底色，
+     改由 editor 端明確帶這個顏色過來，直接使用；沒有帶（例如手動裁切、
+     或自動比對到贊助商原圖直接套用這些情境，圖片本身還沒被壓平）才退回
+     舊的 sampleLogo2BgColor() 自己吸色。 */
+  if(p.logo2BgColor !== undefined){ D.logo2BgColor = p.logo2BgColor; }
   if(pending===0){ render(); _notifyRendered(); }
 });
 

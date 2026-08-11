@@ -268,6 +268,20 @@ input[type="file"] { display:none; }
   transition:all .15s; white-space:nowrap;
 }
 .canvas-ref-btn:hover { border-color:#888; color:var(--text); }
+
+/* Logo 素材 slot：有圖顯示縮圖＋右上角×刪除；沒有圖顯示虛線框＋「+」，
+   點下去觸發上傳（沿用 pet-frenzy 的 Logo2 編輯面板同一套視覺） */
+.logo2-slot-item{position:relative;display:flex;align-items:center;gap:8px;padding:8px 26px 8px 8px;border:2px dashed var(--border2);border-radius:var(--radius);background:var(--surface);}
+.logo2-slot-item.filled{border-style:solid;border-color:var(--accent);}
+.logo2-slot-item.empty{cursor:pointer;}
+.logo2-slot-item.empty:hover{border-color:var(--accent);}
+.logo2-slot-thumb{width:44px;height:44px;border-radius:6px;overflow:hidden;background:#222;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo2-slot-thumb img{width:100%;height:100%;object-fit:contain;}
+.logo2-slot-thumb.add{background:transparent;}
+.logo2-slot-plus{font-size:18px;color:var(--text-dim);}
+.logo2-slot-label{flex:1;font-size:12px;color:var(--text);}
+.logo2-slot-del{position:absolute;top:6px;right:6px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}
+.logo2-slot-del:hover{background:#c33;}
 </style>
 .color-swatch { width:24px;height:24px;border-radius:5px;border:1px solid var(--border2);cursor:pointer;padding:0;-webkit-appearance:none;flex-shrink:0; }
 .color-swatch::-webkit-color-swatch-wrapper { padding:0; }
@@ -674,17 +688,23 @@ input[type="file"] { display:none; }
     <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
       <div id="import-excel-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''"
+        ondragover="event.preventDefault();if(this.dataset.success!=='1')this.style.borderColor='var(--accent)'"
+        ondragleave="if(this.dataset.success!=='1')this.style.borderColor=''"
+        ondrop="onImportZoneDropRE(event,'excel')">
         <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:3px;">點擊上傳 Excel 工單</div>
+        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:3px;">點擊或拖曳上傳 Excel 工單</div>
         <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
       </div>
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="handleImportExcel(event)">
       <div id="import-logo-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importLogoFolder').click()"
-        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''">
+        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''"
+        ondragover="event.preventDefault();if(this.dataset.success!=='1')this.style.borderColor='var(--accent)'"
+        ondragleave="if(this.dataset.success!=='1')this.style.borderColor=''"
+        ondrop="onImportZoneDropRE(event,'logo')">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><path d="M1 4h14v10H1z"/><path d="M1 4l2-2h4l2 2"/></svg>
-        <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">上傳 Logo 素材資料夾（可選）</div>
+        <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">點擊或拖曳上傳 Logo 素材資料夾（可選）</div>
         <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動對應工單 Logo</div>
       </div>
       <input type="file" id="importLogoFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportLogoFolder(event)">
@@ -692,6 +712,55 @@ input[type="file"] { display:none; }
       <!-- 直播主圖片資料夾已移除（此專案不需要主持人）-->
       <div id="import-status" style="display:none;padding:8px 12px;border-radius:var(--radius);background:rgba(61,153,112,.08);border:1px solid rgba(61,153,112,.3);font-size:11px;color:#3d9970;line-height:1.7;"></div>
       <button class="dl-btn" onclick="doImport()">確認匯入</button>
+    </div>
+  </div>
+</div>
+
+<!-- Logo 編輯 popup：手動上傳、或匯入工單自動比對到 Logo 時，先跳這裡確認/調整，
+     按「確認並套用」才會真的套用＋廣播到所有版位（見 js/editor-logo2-canvas.js） -->
+<div class="popup-overlay" id="popup-logo2">
+  <div class="popup-panel" style="width:min(96vw,900px);">
+    <div class="popup-header">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="popup-title">Logo 編輯</span>
+        <span id="logo2-review-progress" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </span>
+      <button class="popup-close" onclick="closeLogo2Popup()">×</button>
+    </div>
+    <div style="padding:14px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+
+      <!-- 左：上傳/形狀/確認 -->
+      <div style="width:250px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+        <div class="lc-field">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Logo 素材</label>
+          <div class="logo2-slot-item" id="logo2-slot"></div>
+          <input type="file" id="logo2-compose-upload" accept="image/*" style="display:none">
+        </div>
+        <div id="logo2-compose-hint" style="font-size:11px;color:var(--text-muted);line-height:1.4;"></div>
+
+        <!-- 方形/長型判定：預設自動判斷（有色範圍寬高比 0.8~1.25 內算方形），
+             這裡可以手動覆蓋——換一張新素材時會重新自動判斷、這裡的選取會跟著同步回去 -->
+        <div id="logo2-shape-group" style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted);">
+          <label style="display:block;font-size:12px;color:var(--text-muted);">形狀</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="logo2-shape" value="wide" checked onchange="logo2SetShapeOverride('wide')">
+            <span>長型</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="logo2-shape" value="square" onchange="logo2SetShapeOverride('square')">
+            <span>方形</span>
+          </label>
+        </div>
+
+        <button class="dl-btn" id="logo2-compose-next-btn" onclick="composeLogo2AndApply()" style="padding:7px;">確認並套用</button>
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.35;">按下確認會把目前畫面合成一張圖，套用到所有版位的 Logo。</div>
+      </div>
+
+      <!-- 右：合成畫布 -->
+      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
+        <canvas id="logo2-compose-canvas" width="1200" height="540" style="width:100%;max-width:520px;background:#444;border-radius:4px;touch-action:none;"></canvas>
+      </div>
+
     </div>
   </div>
 </div>
@@ -742,6 +811,7 @@ var BN_THEME_MAP = {
 
 <script src="js/editor-plugin.js"></script>
 <script src="js/bn-state-plugin.js"></script>
+<script src="js/editor-logo2-canvas.js"></script>
 
 <script>
 'use strict';
@@ -823,14 +893,96 @@ var TABS = [
 ];
 var ACTIVE_TAB = 0;
 
-function buildTabs(tabs){
+function buildTabs(tabs, allowLogoConfirm, initialTabIndex){
   TABS = tabs;
-  ACTIVE_TAB = 0;
+  ACTIVE_TAB = (typeof initialTabIndex === 'number' && TABS[initialTabIndex]) ? initialTabIndex : 0;
   renderTabBar();
-  /* 等 iframe 就緒再套用第一個分頁 */
+  /* 等 iframe 就緒再開始套用
+     allowLogoConfirm：只有「剛完成 Excel 匯入」這個呼叫點會傳 true，
+     這時改走「逐包確認」流程（startLogoReviewFlow），依序切到每一個
+     有 Logo 的分頁跳確認彈窗；切分頁、整包下載、載入暫存這些呼叫點
+     都不傳，維持原本單純套用第一頁、不跳彈窗。
+
+     initialTabIndex：載入暫存時要跳到當時存檔那一頁（data.activeTab），
+     一定要在這裡、透過同一個 setTimeout 套用，不能在 buildTabs() 呼叫完
+     之後另外馬上再套一次——不然這個延遲套用 TABS[0] 的動作會在 800ms 後
+     姍姍來遲，把剛剛顯示的那一頁蓋掉（這正是「第二分頁的內容被第一頁
+     吃掉」的成因：先顯示了正確的那頁，800ms 後又被延遲的第一頁蓋回去）。 */
   setTimeout(function(){
-    applyTabData(TABS[0], true);
+    if(allowLogoConfirm){
+      startLogoReviewFlow();
+    } else {
+      applyTabData(TABS[ACTIVE_TAB], true, false);
+    }
   }, 800);
+}
+
+/* ── Logo 逐包確認流程 ──
+   只有「剛完成 Excel 匯入」會啟動：篩出所有「有 logoName 或已比對到 logo2Img」
+   的分頁排成隊列，依序切過去、跳出確認彈窗，使用者按「確認並套用」（或直接
+   關掉彈窗＝跳過這包）才會前進到下一包。沒有 Logo 可確認的分頁不會出現在
+   隊列裡，行為上等同原本「切到這頁才套用」，不影響。 */
+var _logoReviewQueue = null; // null＝目前不在逐包確認流程中
+var _logoReviewPos = 0;
+
+function startLogoReviewFlow(){
+  _logoReviewQueue = TABS.map(function(t, i){ return i; }).filter(function(i){
+    var d = TABS[i].data || {};
+    return !!(d.logoName || d.logo2Img);
+  });
+  _logoReviewPos = 0;
+  if(!_logoReviewQueue.length){
+    /* 沒有任何分頁有 Logo 需要確認，直接套用第一頁即可，收起載入動畫 */
+    _logoReviewQueue = null;
+    applyTabData(TABS[0], true, false);
+    pm.hide();
+    return;
+  }
+  advanceLogoReview();
+}
+
+function advanceLogoReview(){
+  if(!_logoReviewQueue || _logoReviewPos >= _logoReviewQueue.length){
+    var total = _logoReviewQueue ? _logoReviewQueue.length : 0;
+    _logoReviewQueue = null;
+    pm.hide(); // 整個逐包確認流程跑完，收起載入動畫
+    if(total) toast('全部 '+total+' 包 Logo 已確認完成','ok',3000);
+    return;
+  }
+  var idx = _logoReviewQueue[_logoReviewPos];
+  /* 切到下一包、非同步搜尋這包的 Logo 檔案，都需要一點時間，
+     這段期間繼續顯示載入動畫＋擋互動，直到彈窗真的跳出來才收起
+     （見 openLogo2Popup），避免每包之間出現一小段「看起來沒反應」的空檔 */
+  pm.show('準備第 '+(_logoReviewPos+1)+' / '+_logoReviewQueue.length+' 包 Logo…');
+  ACTIVE_TAB = idx;
+  renderTabBar();
+  updateLogoReviewProgressUI();
+  applyTabData(TABS[idx], true, true);
+}
+
+/* 目前這包沒有比對到符合的 Logo 檔案（自動搜尋失敗），或使用者關掉彈窗
+   沒有按確認：兩種情況都當作「跳過這包」，繼續前進到下一包，
+   不會讓整個逐包確認流程卡住。 */
+function advanceLogoReviewAfterThis(){
+  if(!_logoReviewQueue) return;
+  _logoReviewPos++;
+  advanceLogoReview();
+}
+
+function updateLogoReviewProgressUI(){
+  var el = document.getElementById('logo2-review-progress');
+  if(!el) return;
+  if(!_logoReviewQueue){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = 'Logo 確認（第 '+(_logoReviewPos+1)+' / '+_logoReviewQueue.length+' 包）';
+}
+
+/* Logo 編輯 popup 的關閉按鈕／點外部關閉都要繞這裡：如果目前正在逐包確認
+   流程中，關掉彈窗視同「跳過這包」，自動前進到下一包；不在流程中就是
+   單純關閉，行為不變。 */
+function closeLogo2Popup(){
+  closePopup('logo2');
+  if(_logoReviewQueue) advanceLogoReviewAfterThis();
 }
 
 function getTabLabel(g, i){
@@ -946,12 +1098,15 @@ function saveCurrentTabState(cb){
   tab.data.brand = ''; /* 無主持人 */
   /* logo2Img 從 iframe 直接讀，避免全局 S.imgs.logo2 被其他分頁污染 */
   var _logo2Src = null;
+  var _logo2Bg  = undefined;
   try{
     var _cw = iframes['01_thumbnail'] && iframes['01_thumbnail'].contentWindow;
     if(_cw && _cw.D && _cw.D._logo2DataUrl) _logo2Src = _cw.D._logo2DataUrl;
+    if(_cw && _cw.D && _cw.D.logo2BgColor) _logo2Bg = _cw.D.logo2BgColor;
   }catch(e){}
   if(_logo2Src) tab.data.logo2Img = _logo2Src;
   else if(S.imgs.logo2) tab.data.logo2Img = S.imgs.logo2;
+  if(_logo2Bg !== undefined) tab.data.logo2BgColor = _logo2Bg;
   tab.data.subLpbn = S.subLpbn || tab.data.subLpbn || '';
 
   /* 直接讀 iframe 的 D 物件，不用 postMessage */
@@ -971,7 +1126,7 @@ function saveCurrentTabState(cb){
   if(cb) cb();
 }
 
-function applyTabData(tab, loadHost){
+function applyTabData(tab, loadHost, allowLogoConfirm){
   var d = tab.data || {};
 
   /* ── 根據工單勾選欄位，show/hide 對應的版位畫布區塊 ── */
@@ -1006,13 +1161,30 @@ function applyTabData(tab, loadHost){
     if(el) el.value = fields[id];
   });
 
-  /* ── LOGO2：優先用已存的 base64，否則嘗試本地端搜尋 ── */
+  /* ── LOGO2：優先用已存的 base64，否則嘗試本地端搜尋 ──
+     allowLogoConfirm 為 true 時（僅限剛完成 Excel 匯入這個呼叫點），
+     自動比對到的 Logo 先跳確認彈窗，使用者按下「確認並套用」才會真的
+     套用＋廣播；平常切分頁/整包下載走原本的靜默自動套用，不受影響。 */
   if(loadHost){
     if(d.logo2Img){
-      S.imgs.logo2 = d.logo2Img;
-      updateLogo2UI(d.logo2Img);
+      if(allowLogoConfirm && typeof logo2LoadImageFromSrc === 'function'){
+        logo2LoadImageFromSrc(d.logo2Img);
+        openLogo2Popup();
+      } else {
+        S.imgs.logo2 = d.logo2Img;
+        S.logo2BgColor = d.logo2BgColor; // 跟著 logo2Img 一起還原，見 applyLogo2() 的說明
+        /* 「重新編輯」用的原始素材＋縮放位移也要跟著這一頁還原，
+           不然點畫布上的「取代」圖示重開編輯畫布時，openLogo2Popup()
+           會拿到別頁殘留的全域值，顯示錯誤的素材（見經驗紀錄）。 */
+        S.logo2Raw = d.logo2Raw;
+        S.logo2Scale = d.logo2Scale;
+        S.logo2OffX = d.logo2OffX;
+        S.logo2OffY = d.logo2OffY;
+        S.logo2Shape = d.logo2Shape;
+        updateLogo2UI(d.logo2Img);
+      }
     } else if(d.logoName){
-      tryLoadSponsorLogo(d.logoName, d.logoPath);
+      tryLoadSponsorLogo(d.logoName, d.logoPath, allowLogoConfirm);
     }
   }
 
@@ -1035,7 +1207,7 @@ function applyTabData(tab, loadHost){
 }
 
 /* 嘗試從本地端 logos/sponsors/ 資料夾載入贊助商 LOGO */
-function tryLoadSponsorLogo(logoName, logoPath){
+function tryLoadSponsorLogo(logoName, logoPath, allowLogoConfirm){
   /* 記錄啟動時的分頁，非同步完成後確認仍在同一頁才套用 */
   var targetTab = ACTIVE_TAB;
   var exts = ['png','jpg','jpeg','svg'];
@@ -1043,6 +1215,8 @@ function tryLoadSponsorLogo(logoName, logoPath){
   function tryNext(){
     if(j >= exts.length){
       if(ACTIVE_TAB === targetTab) showLogo2Hint(logoName, logoPath);
+      /* 逐包確認流程中，這包搜尋失敗就直接跳過、前進下一包 */
+      if(allowLogoConfirm) advanceLogoReviewAfterThis();
       return;
     }
     var src = 'logos/sponsors/'+logoName+'.'+exts[j++];
@@ -1050,8 +1224,17 @@ function tryLoadSponsorLogo(logoName, logoPath){
     img.onload = function(){
       loadSrcAsBase64(src, function(b64){
         if(ACTIVE_TAB !== targetTab) return; /* 已切換分頁，丟棄 */
-        if(b64){ applyLogo2(b64); }
-        else { showLogo2Hint(logoName, logoPath); }
+        if(b64){
+          if(allowLogoConfirm && typeof logo2LoadImageFromSrc === 'function'){
+            logo2LoadImageFromSrc(b64);
+            openLogo2Popup();
+          } else {
+            applyLogo2(b64);
+          }
+        } else {
+          showLogo2Hint(logoName, logoPath);
+          if(allowLogoConfirm) advanceLogoReviewAfterThis();
+        }
       });
     };
     img.onerror = tryNext;
@@ -1089,6 +1272,13 @@ function showLogo2Hint(logoName, logoPath){
 
 function clearLogo2(){
   S.imgs.logo2 = null;
+  S.logo2BgColor = null;
+  S.logo2Raw = null; S.logo2Scale = undefined; S.logo2OffX = undefined; S.logo2OffY = undefined; S.logo2Shape = undefined;
+  if(TABS[ACTIVE_TAB]){
+    var _t = TABS[ACTIVE_TAB].data;
+    _t.logo2Img = null; _t.logo2BgColor = null;
+    _t.logo2Raw = null; _t.logo2Scale = undefined; _t.logo2OffX = undefined; _t.logo2OffY = undefined; _t.logo2Shape = undefined;
+  }
   var els = ['logo2-img','logo2-thumb'];
   els.forEach(function(id){
     var el = document.getElementById(id);
@@ -1260,6 +1450,7 @@ function broadcastFull(){
     cDate:   v('cDate'),
     sepColor: (typeof BN_THEME_MAP!=='undefined' && BN_THEME_MAP[S.theme]) ? BN_THEME_MAP[S.theme].sepColor : '#ffffff',
     logo2:   S.imgs.logo2,
+    logo2BgColor: S.logo2BgColor, // 明確指定底色，見 applyLogo2() 的說明
   });
 }
 
@@ -1273,7 +1464,10 @@ window.addEventListener('message', function(e){
 
   /* ── Logo2 懸浮 bar 事件 ── */
   if(msg.type === 'BN_REPLACE_IMG' && msg.key === 'logo2'){
-    document.getElementById('logo2Up').click();
+    /* 原本直接開檔案選擇框，改成打開整個 Logo 編輯畫布——
+       openLogo2Popup() 本來就會自動帶入目前的 Logo（S.logo2Raw）方便調整，
+       畫布裡的「點擊上傳」slot 一樣可以選全新的檔案，效果涵蓋原本單純換檔的需求 */
+    openLogo2Popup();
   }
   else if(msg.type === 'BN_DELETE_IMG' && msg.key === 'logo2'){
     clearLogo2();
@@ -1312,6 +1506,9 @@ function closePopup(type){
   if(el) el.addEventListener('click', function(e){
     if(e.target === this) closePopup(type);
   });
+});
+document.getElementById('popup-logo2').addEventListener('click', function(e){
+  if(e.target === this) closeLogo2Popup(); /* 逐包確認流程中，點外部關閉＝跳過這包 */
 });
 
 function buildBgPopup(){
@@ -1506,7 +1703,11 @@ function markUpload(key,label){
 function handleLogo2Upload(e){
   var file = e.target.files[0]; if(!file) return;
   var reader = new FileReader();
-  reader.onload = function(ev){ applyLogo2(ev.target.result); };
+  reader.onload = function(ev){
+    /* 手動上傳一律先跳 Logo 編輯確認彈窗，按「確認並套用」才真的套用＋廣播 */
+    logo2LoadImageFromSrc(ev.target.result);
+    openLogo2Popup();
+  };
   reader.readAsDataURL(file);
   e.target.value = '';
 }
@@ -1525,11 +1726,21 @@ function editorLogo2Crop(){
     toast('Logo 裁切完成','ok');
   });
 }
-function applyLogo2(src){
+function applyLogo2(src, bgColor){
   S.imgs.logo2 = src;
+  /* bgColor 只有從 Logo 編輯畫布「確認並套用」出來的才會帶（見
+     composeLogo2AndApply），因為匯出圖已經是透明背景，版位端沒辦法再
+     自己用「吸角落像素」猜底色，要明確告訴它用哪個顏色。其他呼叫點
+     （裁切編輯器、自動比對到贊助商原圖直接套用）沒有帶這個參數，
+     維持不覆蓋，讓版位端退回原本自己吸色的邏輯（那些情境圖片本身
+     還沒被壓平，吸色還吸得到）。 */
+  if(bgColor !== undefined) S.logo2BgColor = bgColor;
   updateLogo2UI(src);
   /* 同步到當前分頁暫存 */
-  if(TABS[ACTIVE_TAB]) TABS[ACTIVE_TAB].data.logo2Img = src;
+  if(TABS[ACTIVE_TAB]){
+    TABS[ACTIVE_TAB].data.logo2Img = src;
+    if(bgColor !== undefined) TABS[ACTIVE_TAB].data.logo2BgColor = bgColor;
+  }
   /* 隱藏提示列 */
   var hint = document.getElementById('logo2-hint');
   if(hint) hint.style.display = 'none';
@@ -1644,13 +1855,8 @@ function applyState(data){
     if(data.logo1){ S.imgs.logo1=data.logo1; }
     if(data.subLpbn !== undefined) S.subLpbn = data.subLpbn;
     if(data.tabs && data.tabs.length){
-      buildTabs(data.tabs.map(function(t){ return {id:t.id, label:t.label, data:t.data}; }));
-      /* 跳到當時的分頁 */
-      if(typeof data.activeTab === 'number' && TABS[data.activeTab]){
-        ACTIVE_TAB = data.activeTab;
-        renderTabBar();
-        applyTabData(TABS[ACTIVE_TAB], true);
-      }
+      var _initialIdx = (typeof data.activeTab === 'number') ? data.activeTab : 0;
+      buildTabs(data.tabs.map(function(t){ return {id:t.id, label:t.label, data:t.data}; }), false, _initialIdx);
     }
     toast('全分頁暫存已載入（共'+((data.tabs||[]).length)+'頁）','ok',3000);
     return;
@@ -1723,6 +1929,10 @@ var _importPending={excelFile:null,logoMap:{},logoCount:0};
 
 function handleImportLogoFolder(e){
   var files=Array.from(e.target.files||[]);
+  processLogoFilesRE(files);
+  e.target.value='';
+}
+function processLogoFilesRE(files){
   var imgs=files.filter(function(f){return /\.(png|jpg|jpeg|svg|gif|webp)$/i.test(f.name);});
   if(!imgs.length){toast('找不到圖片','err');return;}
   _importPending.logoMap={};_importPending.logoCount=0;
@@ -1730,7 +1940,10 @@ function handleImportLogoFolder(e){
   imgs.forEach(function(f){
     var k=f.name.replace(/\.[^.]+$/,'').trim().toLowerCase();
     var fk='';
-    if(f.webkitRelativePath){var p=f.webkitRelativePath.split('/');if(p.length>=2)fk=p[p.length-2].trim().toLowerCase();}
+    /* 點擊選資料夾有 webkitRelativePath；拖曳資料夾沒有，改用 _bnPath
+       （拖曳讀取時掛上的自訂欄位，見 onImportZoneDropRE/readEntryFilesRecursiveRE） */
+    var rel=f.webkitRelativePath||f._bnPath||'';
+    if(rel){var p=rel.split('/');if(p.length>=2)fk=p[p.length-2].trim().toLowerCase();}
     var r=new FileReader();
     r.onload=function(ev){
       _importPending.logoMap[k]=ev.target.result;
@@ -1743,7 +1956,7 @@ function handleImportLogoFolder(e){
         _updateImportStatus();
       }
     };r.readAsDataURL(f);
-  });e.target.value='';
+  });
 }
 function _updateImportStatus(){
   var el=document.getElementById('import-status');if(!el)return;
@@ -1803,7 +2016,13 @@ function doImport(){
         if(g.logoName&&!g.logo2Img){var s=findLogoSrcByName(g.logoName);if(s)g.logo2Img=s;}
       });
       var tabs=groups.map(function(g,i){return{id:'tab-'+(i+1),label:getTabLabel(g,i),data:g};});
-      buildTabs(tabs);
+      /* 匯入完成到跳出 Logo 確認彈窗之間，會有等 iframe 就緒、非同步搜尋 Logo
+         檔案這幾步的空檔，這段時間先顯示載入動畫＋擋住畫布點擊，避免使用者
+         誤以為卡住而亂點，反而干擾到正在進行的讀取。真的跳出確認彈窗、
+         或確認全部跑完沒有東西要確認時，才會收起來（見 openLogo2Popup /
+         advanceLogoReview）。 */
+      pm.show('匯入中，準備 Logo 確認…');
+      buildTabs(tabs, true); // true：這次是匯入完成，自動比對到的 Logo 要先跳確認彈窗
       toast('匯入完成，共 '+tabs.length+' 個分頁'+(_importPending.logoCount?' + Logo':''),'ok',3000);
     }catch(err){toast('匯入失敗：'+err.message,'err');}
   };r.readAsBinaryString(_importPending.excelFile);
@@ -1811,18 +2030,105 @@ function doImport(){
 function openImportModal(){
   _importPending={excelFile:null,logoMap:{},logoCount:0};
   ['import-excel-zone','import-logo-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.dataset.success='';el.style.borderStyle='dashed';el.style.borderColor='';el.style.background='';}});
-  var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊上傳 Excel 工單';el.style.color='';}
-  var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='上傳 Logo 素材資料夾（可選）';ll.style.color='';}
+  var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊或拖曳上傳 Excel 工單';el.style.color='';}
+  var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='點擊或拖曳上傳 Logo 素材資料夾（可選）';ll.style.color='';}
   var st=document.getElementById('import-status');if(st)st.style.display='none';
   document.getElementById('popup-import').classList.add('open');
 }
 function handleImportExcel(e){
-  var file=e.target.files[0];if(!file)return;
+  var file=e.target.files[0];
+  processExcelFileRE(file);
+  e.target.value='';
+}
+function processExcelFileRE(file){
+  if(!file)return;
   _importPending.excelFile=file;
   var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
   if(z){z.dataset.success='1';z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
   if(l){l.textContent='✓ '+file.name;l.style.color='var(--accent)';}
-  _updateImportStatus();e.target.value='';
+  _updateImportStatus();
+}
+
+/* ── 拖曳上傳：遞迴讀取資料夾 + drop handler ──
+   拖曳走的是 DataTransfer → webkitGetAsEntry() → FileSystemEntry 路徑，
+   瀏覽器不會自動走訪子資料夾，要靠程式自己遞迴（點擊選資料夾則是瀏覽器
+   自己走完），兩條路最後都會餵進同一套 processLogoFilesRE/processExcelFileRE，
+   後續比對邏輯完全共用，不分點擊或拖曳。 */
+function readEntryFilesRecursiveRE(entry, out, doneCb){
+  if(entry.isFile){
+    entry.file(function(file){
+      try{ file._bnPath = (entry.fullPath || '').replace(/^\/+/, ''); }catch(e){}
+      out.push(file);
+      doneCb();
+    }, function(err){
+      console.warn('[drag-import] 讀取檔案失敗，跳過：', entry.fullPath, err);
+      doneCb();
+    });
+  } else if(entry.isDirectory){
+    var reader = entry.createReader();
+    var allEntries = [];
+    (function readBatch(){
+      reader.readEntries(function(batch){
+        if(!batch || !batch.length){
+          if(!allEntries.length){ doneCb(); return; }
+          var remaining = allEntries.length;
+          allEntries.forEach(function(childEntry){
+            readEntryFilesRecursiveRE(childEntry, out, function(){
+              if(--remaining === 0) doneCb();
+            });
+          });
+        } else {
+          for(var i=0;i<batch.length;i++) allEntries.push(batch[i]);
+          readBatch();
+        }
+      }, function(err){
+        console.warn('[drag-import] 讀取資料夾失敗，跳過：', entry.fullPath, err);
+        doneCb();
+      });
+    })();
+  } else {
+    doneCb();
+  }
+}
+
+function onImportZoneDropRE(event, type){
+  event.preventDefault();
+  event.stopPropagation();
+  var zone = event.currentTarget;
+  if(zone.dataset.success !== '1') zone.style.borderColor = '';
+
+  if(type === 'excel'){
+    var files = event.dataTransfer.files;
+    var xlsxFile = null;
+    for(var i=0;i<files.length;i++){
+      if(/\.xlsx$/i.test(files[i].name)){ xlsxFile = files[i]; break; }
+    }
+    if(!xlsxFile){ toast('請拖入 .xlsx 格式的工單檔案','err'); return; }
+    processExcelFileRE(xlsxFile);
+    return;
+  }
+
+  /* type === 'logo'：資料夾，遞迴讀取後餵進 processLogoFilesRE */
+  var items = event.dataTransfer.items;
+  if(!items || !items.length){ toast('無法讀取拖曳內容','err'); return; }
+
+  var entries = [];
+  for(var j=0;j<items.length;j++){
+    var entry = items[j].webkitGetAsEntry ? items[j].webkitGetAsEntry() : null;
+    if(entry) entries.push(entry);
+  }
+  if(!entries.length){
+    toast('瀏覽器不支援拖曳資料夾讀取，請改用點擊選取','err');
+    return;
+  }
+
+  var allFiles = [];
+  var remaining = entries.length;
+  entries.forEach(function(ent){
+    readEntryFilesRecursiveRE(ent, allFiles, function(){
+      if(--remaining === 0) processLogoFilesRE(allFiles);
+    });
+  });
 }
 function parseWorkorderGroups(rows){
   /* ── 新格式工單（第一單型）：
@@ -2272,6 +2578,15 @@ function downloadAll(){
 
       var tab = TABS[ti];
       var d   = tab.data || {};
+      /* 這裡一定要同步更新 ACTIVE_TAB，不然 applyTabData() 裡
+         tryLoadSponsorLogo() 用來判斷「非同步結果還要不要套用」的
+         targetTab（=呼叫當下的 ACTIVE_TAB）會一直是迴圈開始前停留的
+         那一頁，導致某幾包如果沒在「逐包確認」流程裡先確認過 Logo
+         （例如自動搜尋失敗被跳過），輪到它們在這裡重新非同步搜尋時，
+         抓到的結果會被誤寫進「迴圈開始前那一頁」的 tab.data，
+         把那一頁原本正確的 Logo 蓋掉——這正是「第二分頁的內容被
+         第一頁吃掉」的成因。 */
+      ACTIVE_TAB = ti;
       function padDate(s){
         /* 把 5/7 → 0507，5/7 → 0507，已是 0507 保持不變 */
         s = s.replace(/\//g,'');

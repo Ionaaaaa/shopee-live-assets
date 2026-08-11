@@ -126,6 +126,7 @@ var D = {
   bg:null, bgUrl:null,
   logo1:null, logo2:null,
   _logo2DataUrl: null,
+  logo2BgColor: null, // editor 端明確指定的 Logo 底色
   main:'看直播領券領蝦幣',
   sub:'嚴選蝦拼TIME',
   date:'XX/XX', time:'19:00', brand:'XXX',
@@ -281,9 +282,10 @@ function drawLogos(){
     var imgX = frameX + (L2_W - lw2)/2 + _logo2OffX;
     var imgY = frameY + (L2_H - lh2)/2 + _logo2OffY;
 
-    /* 先填 logo2 底色（吸取 logo2 角落像素）*/
+    /* 先填 logo2 底色：editor 端有明確指定就直接用，沒有才自己吸角落像素 */
     var bgColor = '#ffffff';
-    try{ bgColor = sampleLogo2BgColor(D.logo2); }catch(e){}
+    if(D.logo2BgColor){ bgColor = D.logo2BgColor; }
+    else { try{ bgColor = sampleLogo2BgColor(D.logo2); }catch(e){} }
     ctx.save(); drawRoundRect(ctx, frameX, frameY, L2_W, L2_H, L2_R);
     ctx.fillStyle = bgColor; ctx.fill(); ctx.restore();
 
@@ -483,6 +485,9 @@ window.addEventListener('message',function(e){
       dec();
     });
   }
+  /* 底色：跟 01_thumbnail.html 同一套說明——editor 端有明確指定就直接用，
+     沒有指定才退回自己吸色 */
+  if(p.logo2BgColor !== undefined){ D.logo2BgColor = p.logo2BgColor; }
   if(pending===0) render();
 });
 
