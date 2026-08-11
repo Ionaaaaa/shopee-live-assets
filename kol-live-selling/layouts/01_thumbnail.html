@@ -894,11 +894,16 @@ if(!msg||msg.type!=='BN_UPDATE') return;
   }
   // logo2 可由外部傳入（手動上傳），有傳才更新
   if(p.logo2 !== undefined){ pending++;
+    var _logo2IsNew = (p.logo2 !== D._logo2DataUrl);
     loadImg(p.logo2, function(img){
       D.logo2=img; D._logo2DataUrl=p.logo2;
       _logo2Bounds=img?calcLogo2Bounds(img):null;
-      /* 下載模式：不重置縮放，由 BN_RESTORE_STATE 恢復 */
-      if(!window._downloadMode){ _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; }
+      /* 只有圖片真的換了才重置縮放/位移；同一張圖只是被重新廣播
+         （例如換主持人時 broadcastFull() 會連同沒變更的 logo2 一起送出），
+         不應該把使用者已經調好的縮放沖掉——這是「換主持人後 logo 放大
+         的調整會消失」這個問題的根本原因。
+         下載模式一律不重置，由 BN_RESTORE_STATE 負責恢復。 */
+      if(_logo2IsNew && !window._downloadMode){ _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; }
       dec();
     });
   }
