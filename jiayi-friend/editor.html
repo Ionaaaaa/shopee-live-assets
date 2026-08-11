@@ -461,9 +461,12 @@ input[type="file"] { display:none; }
       <div id="import-zone-excel" class="import-dropzone"
         style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
+        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'"
+        ondragover="event.preventDefault();if(!this.classList.contains('success'))this.style.borderColor='var(--accent)'"
+        ondragleave="if(!this.classList.contains('success'))this.style.borderColor='var(--border2)'"
+        ondrop="onImportZoneDrop(event,'excel')">
         <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:8px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊或拖曳上傳 Excel 工單</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
       </div>
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="onImportFilePicked(event,'excel')">
@@ -471,9 +474,12 @@ input[type="file"] { display:none; }
       <div id="import-zone-assets" class="import-dropzone"
         style="border:2px dashed var(--border2);border-radius:var(--radius);padding:22px 16px;text-align:center;cursor:pointer;transition:border-color .15s;"
         onclick="document.getElementById('importAssetsFolder').click()"
-        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'">
+        onmouseenter="if(!this.classList.contains('success')) this.style.borderColor='var(--accent)'" onmouseleave="if(!this.classList.contains('success')) this.style.borderColor='var(--border2)'"
+        ondragover="event.preventDefault();if(!this.classList.contains('success'))this.style.borderColor='var(--accent)'"
+        ondragleave="if(!this.classList.contains('success'))this.style.borderColor='var(--border2)'"
+        ondrop="onImportZoneDrop(event,'assets')">
         <svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:6px;"><path d="M1.5 3.5h4l1.2 1.6H14.5v8.4h-13z"/></svg>
-        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">上傳素材資料夾（Logo＋主持人／商品，可選）</div>
+        <div class="import-zone-title" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊或拖曳上傳素材資料夾（Logo＋主持人／商品，可選）</div>
         <div class="import-zone-sub" style="font-size:11px;color:var(--text-dim);">Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對</div>
       </div>
       <input type="file" id="importAssetsFolder" webkitdirectory directory multiple style="display:none" onchange="onImportFilePicked(event,'assets')">
@@ -640,6 +646,125 @@ input[type="file"] { display:none; }
 <script src="js/editor-logo2-canvas.js"></script>
 <script src="js/editor-shadow-canvas.js"></script>
 <script src="js/editor-import.js"></script>
+<!-- ── 拖曳上傳：遞迴讀取資料夾 + drop handler ── -->
+<script>
+'use strict';
+/* 遞迴讀取 FileSystemEntry（資料夾或檔案），把所有檔案收集到 out 陣列。
+   拖曳上傳走的是 DataTransfer → webkitGetAsEntry() → FileSystemEntry 路徑，
+   瀏覽器不會自動走訪子資料夾，要靠程式自己遞迴（點擊選資料夾則是瀏覽器
+   自己走完，兩條路徑最後都會匯集到同一個 _importState.assetFiles，
+   後續 matchFileByAliases 等比對邏輯完全共用，不分點擊或拖曳）。
+   這個專案的比對邏輯（matchFileByAliases）只看檔名，不吃路徑，
+   所以不像多廠商版本需要額外補 _bnPath 欄位；但還是掛上以防之後
+   有新的比對邏輯需要用到路徑資訊，維持跟其他專案一致的作法。 */
+function readEntryFilesRecursive(entry, out, doneCb){
+  if(entry.isFile){
+    entry.file(function(file){
+      try{ file._bnPath = (entry.fullPath || '').replace(/^\/+/, ''); }catch(e){}
+      out.push(file);
+      doneCb();
+    }, function(err){
+      console.warn('[drag-import] 讀取檔案失敗，跳過：', entry.fullPath, err);
+      doneCb(); // 單一檔案失敗不阻斷整體
+    });
+  } else if(entry.isDirectory){
+    var reader = entry.createReader();
+    var allEntries = [];
+    /* readEntries 一次最多只回傳一批（Chrome 上限約100），
+       必須反覆呼叫直到回傳空陣列才代表讀完 */
+    (function readBatch(){
+      reader.readEntries(function(batch){
+        if(!batch || !batch.length){
+          // 整個資料夾讀完，遞迴處理所有子項目
+          if(!allEntries.length){ doneCb(); return; }
+          var remaining = allEntries.length;
+          allEntries.forEach(function(childEntry){
+            readEntryFilesRecursive(childEntry, out, function(){
+              if(--remaining === 0) doneCb();
+            });
+          });
+        } else {
+          for(var i=0;i<batch.length;i++) allEntries.push(batch[i]);
+          readBatch(); // 繼續讀下一批
+        }
+      }, function(err){
+        console.warn('[drag-import] 讀取資料夾失敗，跳過：', entry.fullPath, err);
+        doneCb(); // 單一子資料夾失敗不阻斷整體
+      });
+    })();
+  } else {
+    doneCb(); // 非檔案也非資料夾（例如 symlink），跳過
+  }
+}
+
+/* 匯入區塊的 drop handler：Excel 區接受 .xlsx 檔案，素材區接受資料夾（遞迴讀取） */
+function onImportZoneDrop(event, type){
+  event.preventDefault();
+  event.stopPropagation();
+  var zone = event.currentTarget;
+  zone.style.borderColor = 'var(--border2)';
+
+  if(type === 'excel'){
+    var files = event.dataTransfer.files;
+    var xlsxFile = null;
+    for(var i=0;i<files.length;i++){
+      if(/\.xlsx$/i.test(files[i].name)){ xlsxFile = files[i]; break; }
+    }
+    if(!xlsxFile){ toast('請拖入 .xlsx 格式的工單檔案','err'); return; }
+    _importState.excelFile = xlsxFile;
+    zone.classList.add('success');
+    zone.style.borderColor = 'var(--accent)';
+    zone.querySelector('.import-zone-title').textContent = xlsxFile.name;
+    zone.querySelector('.import-zone-sub').textContent = '已選取 Excel 工單';
+    return;
+  }
+
+  if(type === 'assets'){
+    var items = event.dataTransfer.items;
+    if(!items || !items.length){ toast('無法讀取拖曳內容','err'); return; }
+
+    /* 逐一檢查每個拖曳項目（不只看 items[0]），避免非檔案項目排在最前面時誤判 */
+    var entries = [];
+    for(var j=0;j<items.length;j++){
+      var entry = items[j].webkitGetAsEntry ? items[j].webkitGetAsEntry() : null;
+      if(entry) entries.push(entry);
+    }
+    if(!entries.length){
+      toast('瀏覽器不支援拖曳資料夾讀取，請改用點擊選取','err');
+      return;
+    }
+
+    var allFiles = [];
+    var remaining = entries.length;
+
+    zone.querySelector('.import-zone-title').textContent = '讀取中…';
+    zone.querySelector('.import-zone-sub').textContent = '';
+
+    entries.forEach(function(ent){
+      readEntryFilesRecursive(ent, allFiles, function(){
+        if(--remaining === 0){
+          /* 只保留圖片檔 */
+          var imageFiles = allFiles.filter(function(f){
+            return /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name);
+          });
+          if(!imageFiles.length){
+            toast('資料夾內沒有找到圖片檔案','err');
+            zone.querySelector('.import-zone-title').textContent = '點擊或拖曳上傳素材資料夾（Logo＋主持人／商品，可選）';
+            zone.querySelector('.import-zone-sub').textContent = 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對';
+            return;
+          }
+          _importState.assetFiles = imageFiles;
+          zone.classList.add('success');
+          zone.style.borderColor = 'var(--accent)';
+          zone.querySelector('.import-zone-title').textContent = '已讀取 ' + imageFiles.length + ' 張素材圖片';
+          zone.querySelector('.import-zone-sub').textContent = '（共掃描 ' + allFiles.length + ' 個檔案）';
+          toast('已讀取 ' + imageFiles.length + ' 張素材圖片','ok');
+        }
+      });
+    });
+  }
+}
+</script>
 <script src="js/editor-export.js"></script>
 <script>
 'use strict';

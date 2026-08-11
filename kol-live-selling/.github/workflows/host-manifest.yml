@@ -1,0 +1,43 @@
+name: 自動更新主持人圖片清單
+
+# 只要 push 到 main 分支、且改動到 hosts/ 資料夾底下的檔案，就自動觸發，
+# 不需要手動執行任何指令——照舊把圖片丟進 hosts/<主持人名稱>/ 資料夾、
+# 正常 git push 上去即可，清單會在幾十秒後自動更新完成。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hosts/**'
+      - 'scripts/build-host-manifest.js'
+  workflow_dispatch: {} # 也可以在 GitHub 網頁上手動點一次「Run workflow」強制重跑
+
+# 需要寫入權限，才能把重新產生的 manifest.json commit 回 repo
+permissions:
+  contents: write
+
+jobs:
+  build-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 簽出程式碼
+        uses: actions/checkout@v4
+
+      - name: 安裝 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 重新產生 hosts/manifest.json
+        run: node scripts/build-host-manifest.js
+
+      - name: 有變動才 commit（沒變動就跳過，不會產生空 commit）
+        run: |
+          if git diff --quiet -- hosts/manifest.json; then
+            echo "manifest.json 沒有變動，略過 commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add hosts/manifest.json
+            git commit -m "chore: 自動更新 hosts/manifest.json"
+            git push
+          fi

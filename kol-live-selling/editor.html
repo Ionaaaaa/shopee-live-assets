@@ -1401,6 +1401,43 @@ function closePopup(type){
   });
 });
 
+/* ── hosts/manifest.json 快取：由 GitHub Actions（.github/workflows/host-manifest.yml）
+   在每次 push 到 hosts/ 資料夾時自動重新產生，記錄每位主持人資料夾裡實際有哪些檔案。
+   瀏覽器沒辦法直接列出靜態網站的資料夾內容，所以要靠這份清單才能找到「艾伶備用.png」
+   這種不含編號規則的檔名——原本 findHostSrc()/scanHostByName() 只會猜「姓名-1」到
+   「姓名-10」這種固定編號，猜不到的檔名永遠不會被找到。 */
+var _hostManifestCache = null;
+function loadHostManifest(cb){
+  if(_hostManifestCache){ cb(_hostManifestCache); return; }
+  fetch('hosts/manifest.json').then(function(res){
+    if(!res.ok) throw new Error('manifest not found');
+    return res.json();
+  }).then(function(json){
+    _hostManifestCache = (json && json.hosts) ? json : { hosts:{} };
+    cb(_hostManifestCache);
+  }).catch(function(){
+    /* 清單還沒 push 過、或 push 完 Actions 還沒跑完時會抓不到，
+       這裡快取一個空結果，避免每次開 popup 都重新打一次注定失敗的請求；
+       重新整理頁面就會再試一次。 */
+    _hostManifestCache = { hosts:{} };
+    cb(_hostManifestCache);
+  });
+}
+
+/* 依名稱模糊比對 manifest 裡的資料夾：雙向比對（資料夾名含關鍵字、或關鍵字含資料夾名），
+   跟專案裡其他地方的檔名比對邏輯（matchFileByAliases）一致，避免「艾伶」比對不到
+   資料夾名稱剛好多打一個字的情況，反之亦然。 */
+function findManifestHostFolders(manifest, brandName){
+  if(!manifest || !manifest.hosts || !brandName) return [];
+  var target = brandName.trim().toLowerCase();
+  if(!target) return [];
+  return Object.keys(manifest.hosts).filter(function(folder){
+    var f = folder.trim().toLowerCase();
+    if(!f) return false;
+    return f.indexOf(target) !== -1 || (target.length>=2 && target.indexOf(f)!==-1);
+  });
+}
+
 function buildHostPopup(){
   var body = document.getElementById('popup-host-body');
   body.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center;">載入素材中...</div>';
@@ -1417,25 +1454,38 @@ function buildHostPopup(){
   }
   if(brandName === 'XXX') brandName = '';
 
-  /* 這個 popup 只顯示「匯入工單」當下批次上傳的KOL素材（_importPending.hostMap），
-     不再混入 hosts/ 後台資料夾或 localStorage 本機圖庫的內容。 */
-  var allHosts = [];
-  if(!brandName){
-    Object.keys(_importPending.hostMap).forEach(function(k){
-      if(k.indexOf('__dir')!==-1) return;
-      allHosts.push({name:k, src:_importPending.hostMap[k]});
-    });
-  } else {
-    findHostSrcsByName(brandName).forEach(function(uh){
-      allHosts.push({name:uh.name, src:uh.src});
-    });
-  }
+  /* 這個 popup 顯示兩種來源：① 這次「匯入工單」當下批次上傳的KOL素材
+     （_importPending.hostMap）② hosts/ 資料夾圖庫（透過 manifest.json 找到所有
+     符合名稱的檔案，不限定編號命名）。沒有 brandName 時只列①，因為②要有名字
+     才有辦法篩選，全部列出來會太多、也不知道使用者要找誰。 */
+  loadHostManifest(function(manifest){
+    var allHosts = [];
+    if(!brandName){
+      Object.keys(_importPending.hostMap).forEach(function(k){
+        if(k.indexOf('__dir')!==-1) return;
+        allHosts.push({name:k, src:_importPending.hostMap[k]});
+      });
+    } else {
+      findHostSrcsByName(brandName).forEach(function(uh){
+        allHosts.push({name:uh.name, src:uh.src});
+      });
+      findManifestHostFolders(manifest, brandName).forEach(function(folder){
+        manifest.hosts[folder].forEach(function(fileName){
+          allHosts.push({ name: fileName.replace(/\.[^.]+$/,''), src: 'hosts/'+folder+'/'+fileName });
+        });
+      });
+    }
+    renderHostPopupBody(allHosts, brandName);
+  });
+}
 
+function renderHostPopupBody(allHosts, brandName){
+  var body = document.getElementById('popup-host-body');
   body.innerHTML = '';
   if(!allHosts.length){
     var hint2 = _importPending.hostCount
-      ? '找不到「'+brandName+'」符合的圖片<br><small>已匯入 '+_importPending.hostCount+' 張，但無符合「'+brandName+'」的檔名</small>'
-      : '尚未匯入直播主圖片資料夾<br><small>請先在「匯入工單」步驟上傳直播主圖片資料夾</small>';
+      ? '找不到「'+brandName+'」符合的圖片<br><small>已匯入 '+_importPending.hostCount+' 張、圖庫也沒有符合「'+brandName+'」的資料夾</small>'
+      : '尚未匯入直播主圖片資料夾<br><small>請先在「匯入工單」步驟上傳直播主圖片資料夾，或確認 hosts/ 圖庫裡有「'+(brandName||'該名稱')+'」的資料夾</small>';
     body.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px;text-align:center;">'+hint2+'</div>';
     return;
   }

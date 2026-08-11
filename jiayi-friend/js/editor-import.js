@@ -5,8 +5,8 @@ var _importState = { excelFile:null, assetFiles:[] };
 
 function openImportModal(){
   _importState = { excelFile:null, assetFiles:[] };
-  resetImportZoneText('import-zone-excel', '點擊上傳 Excel 工單', '支援 .xlsx 格式');
-  resetImportZoneText('import-zone-assets', '上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
+  resetImportZoneText('import-zone-excel', '點擊或拖曳上傳 Excel 工單', '支援 .xlsx 格式');
+  resetImportZoneText('import-zone-assets', '點擊或拖曳上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
   setImportZoneSuccess('import-zone-excel', false);
   setImportZoneSuccess('import-zone-assets', false);
   document.getElementById('popup-import').classList.add('open');
