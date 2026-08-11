@@ -28,7 +28,7 @@
   版位 id 怎麼來：自動抓網址檔名，跟專案裡其他設定檔用同一套規則。
 
   ── 目前狀態 ──
-  01_thumbnail 已經有實際數字（height:184，弧形凹陷約65px視覺深度，深藍 #364c82）。
+  01_thumbnail 已經有實際數字（height:90，弧形凹陷約35px視覺深度，橘紅 #ee4d2d）。
   04_ig / 04_opening 先套用跟 01 一樣的起始數字——這兩個版位畫布比較高，
   建議實際預覽後再依畫面調整 height / dip，不用改其他程式，改這裡的數字就好。
 */
@@ -42,8 +42,8 @@ window.MaskDefaults = {
     enabled: true,
     height: 90,
     dip: 70,
-    color: '#1f305c',
-    lightColor: '#364c82',
+    color: '#ee4d2d',
+    lightColor: '#f4725a',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
   },
@@ -52,8 +52,8 @@ window.MaskDefaults = {
     enabled: true, // 先用跟01一樣的起始數字，04畫布比較高，建議預覽後再調整 height/dip
     height: 284,
     dip: 100,
-    color: '#1f305c',
-    lightColor: '#364c82',
+    color: '#ee4d2d',
+    lightColor: '#f4725a',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
     },
@@ -65,8 +65,8 @@ window.MaskDefaults = {
     height: 130,        // 加長（原本114）
     leftDrop: 50,
     dip: 90,
-    color: '#1f305c',
-    lightColor: '#364c82',
+    color: '#ee4d2d',
+    lightColor: '#f4725a',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9,
     fade: {
@@ -84,8 +84,8 @@ window.MaskDefaults = {
     enabled: true, // 先用跟01一樣的起始數字，04畫布比較高，建議預覽後再調整 height/dip
     height: 234,
     dip: 100,
-    color: '#1f305c',
-    lightColor: '#364c82',
+    color: '#ee4d2d',
+    lightColor: '#f4725a',
     glowWidthRatio: 0.6,
     glowHeightRatio: 0.9
   },
