@@ -724,8 +724,10 @@ function exportBlob(fmt, q, cb){
 }
 
 function snapBlob(fmt, q, cb){
-  var ws = D.selected; D.selected = false; render();
-  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  var ws = D.selected; D.selected = false;
+  var wc = COUPON_SELECTED; COUPON_SELECTED = null;
+  render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; COUPON_SELECTED=wc; render(); cb(blob); });
 }
 
 window.BNExport = {
@@ -735,11 +737,13 @@ window.BNExport = {
   /* 輸出兩張：有CTA + 無CTA */
   getBothBlobs: function(fmt, q, cb){
     var origCTA = D.showCTA;
+    var ws = D.selected; D.selected = false;
+    var wc = COUPON_SELECTED; COUPON_SELECTED = null;
     D.showCTA = true; render();
     exportBlob(fmt, q, function(blobWith){
       D.showCTA = false; render();
       exportBlob(fmt, q, function(blobWithout){
-        D.showCTA = origCTA; render();
+        D.showCTA = origCTA; D.selected = ws; COUPON_SELECTED = wc; render();
         cb(blobWith, blobWithout);
       });
     });

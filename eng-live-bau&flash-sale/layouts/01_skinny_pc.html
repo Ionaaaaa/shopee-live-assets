@@ -172,9 +172,14 @@ var COUPON_SPEC = {
   },
   flash: {
     coupon1: {
-      cx: 268, cy: 51,
-      maxSize: 40, subRatio: 0.81, minSize: 13, maxWidth: 80,
-      weight: 700, color: '#EE4D2D', angle: -0.20
+      cx: 264, cy: 71,
+      maxSize: 34, subRatio: 0.81, minSize: 13, maxWidth: 71,
+      weight: 700, color: '#EE4D2D', angle: -0.06
+    },
+    coupon2: {
+      cx: 268, cy: 36,
+      maxSize: 24, subRatio: 0.81, minSize: 13, maxWidth: 68,
+      weight: 700, color: '#EE4D2D', angle: -0.15
     }
   }
 };
@@ -685,18 +690,41 @@ window.addEventListener('message',function(e){
   if(pending===0) render();
 });
 
-/* ── Export ── */
+/* ── Export ──
+   Skinny_PC 原生只有 400×110px，直接輸出畫質會偏粗糙。
+   改用「超取樣」：內部以 SS 倍解析度重繪一次，再縮小回 400×110 輸出，
+   最終尺寸完全不變，但文字/漸層邊緣會平滑許多。 */
+var EXPORT_SS = 3;
 function exportBlob(fmt, q, cb){
+  var hi = document.createElement('canvas');
+  hi.width  = W * EXPORT_SS;
+  hi.height = H * EXPORT_SS;
+  var hiCtx = hi.getContext('2d');
+  hiCtx.scale(EXPORT_SS, EXPORT_SS);
+
+  /* 暫時把繪圖目標換成高解析度畫布，沿用同一套 render() 邏輯 */
+  var prevCv = cv, prevCtx = ctx;
+  cv = hi; ctx = hiCtx;
+  render();
+  cv = prevCv; ctx = prevCtx;
+
   var out = document.createElement('canvas');
   out.width  = W;
   out.height = H;
-  out.getContext('2d').drawImage(cv, 0, 0, cv.width, cv.height, 0, 0, W, H);
-  out.toBlob(cb, 'image/'+(fmt||'jpeg'), q||0.95);
+  var octx = out.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
+  octx.drawImage(hi, 0, 0, hi.width, hi.height, 0, 0, W, H);
+  /* 畫布本身很小，145KB 上限根本用不完，固定用最高品質輸出（忽略外部傳入的 0.95） */
+  var outQ = (fmt==='png') ? (q||1) : 1;
+  out.toBlob(cb, 'image/'+(fmt||'jpeg'), outQ);
 }
 
 function snapBlob(fmt, q, cb){
-  var ws = D.selected; D.selected = false; render();
-  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  var ws = D.selected; D.selected = false;
+  var wc = COUPON_SELECTED; COUPON_SELECTED = null;
+  render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; COUPON_SELECTED=wc; render(); cb(blob); });
 }
 
 window.BNExport = {

@@ -819,8 +819,10 @@ function exportBlob(fmt, q, cb){
 }
 
 function snapBlob(fmt, q, cb){
-  var ws = D.selected; D.selected = false; render();
-  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  var ws = D.selected; D.selected = false;
+  var wc = COUPON_SELECTED; COUPON_SELECTED = null;
+  render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; COUPON_SELECTED=wc; render(); cb(blob); });
 }
 
 window.BNExport = {

@@ -245,12 +245,12 @@ input[type="file"] { display:none; }
         <div class="sg-label">一般文案</div>
         <div class="sg-body">
           <div class="field">
-            <div class="field-label"><span>主標</span><span class="cc" id="cc-main">0 / 9</span></div>
-            <input class="fi" id="txt-main" type="text" placeholder="主標文案" oninput="ccAuto('txt-main','cc-main',9);broadcast()">
+            <div class="field-label"><span>主標</span><span class="cc" id="cc-main">0 / 8</span></div>
+            <input class="fi" id="txt-main" type="text" placeholder="主標文案" oninput="enforceCharLimit('txt-main',8);ccAuto('txt-main','cc-main',8);broadcast()">
           </div>
           <div class="field">
-            <div class="field-label"><span>副標</span><span class="cc" id="cc-sub">0 / 8</span></div>
-            <input class="fi" id="txt-sub" type="text" placeholder="副標文案" oninput="ccAuto('txt-sub','cc-sub',8);broadcast()">
+            <div class="field-label"><span>副標</span><span class="cc" id="cc-sub">0 / 7</span></div>
+            <input class="fi" id="txt-sub" type="text" placeholder="副標文案" oninput="enforceCharLimit('txt-sub',7);ccAuto('txt-sub','cc-sub',7);broadcast()">
           </div>
           <div class="field">
             <div class="field-label"><span>日期</span></div>
@@ -286,7 +286,7 @@ input[type="file"] { display:none; }
         <div class="sg-body">
           <div class="field">
             <div class="field-label"><span>Skin 副標文案</span><span class="cc" id="cc-skin">0 / 6</span></div>
-            <input class="fi" id="txt-skin-sub" type="text" placeholder="例：領5%蝦幣回饋" oninput="ccAuto('txt-skin-sub','cc-skin',6);broadcast()">
+            <input class="fi" id="txt-skin-sub" type="text" placeholder="例：領5%蝦幣回饋" oninput="enforceCharLimit('txt-skin-sub',6);ccAuto('txt-skin-sub','cc-skin',6);broadcast()">
           </div>
         </div>
       </div>
@@ -313,9 +313,9 @@ input[type="file"] { display:none; }
     <div style="padding:24px;display:flex;flex-direction:column;gap:12px;">
       <div id="import-excel-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .15s;"
         onclick="document.getElementById('importExcelFile').click()"
-        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor='var(--border2)'">
+        onmouseenter="if(this.dataset.success!=='1'&&this.dataset.dragging!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1'&&this.dataset.dragging!=='1') this.style.borderColor='var(--border2)'">
         <svg width="32" height="32" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:10px;"><path d="M8 10V2M5 5l3-3 3 3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
-        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊上傳 Excel 工單</div>
+        <div id="import-excel-label" style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">點擊或拖曳檔案到此上傳</div>
         <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式 ・ 自動建立 BAU / 快閃日兩個分頁</div>
       </div>
       <div style="font-size:11px;color:var(--text-dim);line-height:1.7;padding:0 4px;">
@@ -640,6 +640,20 @@ function countChars(val){
   return Math.ceil(len*2)/2;
 }
 
+/* ── 字數硬上限：超過上限時直接擋下，不讓字打進去 ── */
+var _lastValidText = {};
+function enforceCharLimit(inputId, max){
+  var el = document.getElementById(inputId); if(!el) return;
+  var val = el.value;
+  if(countChars(val) <= max){ _lastValidText[inputId] = val; return; }
+  var prev = (_lastValidText[inputId] !== undefined) ? _lastValidText[inputId] : val.slice(0, -1);
+  while(prev.length > 0 && countChars(prev) > max){ prev = prev.slice(0, -1); }
+  var pos = el.selectionStart;
+  el.value = prev;
+  _lastValidText[inputId] = prev;
+  try{ el.setSelectionRange(Math.min(pos, prev.length), Math.min(pos, prev.length)); }catch(_){}
+}
+
 function ccAuto(inputId, countId, max){
   var val = v(inputId);
   var len = countChars(val);
@@ -670,7 +684,7 @@ function setRefLayer(id, input){
 function openImportModal(){
   var z=document.getElementById('import-excel-zone'),l=document.getElementById('import-excel-label');
   if(z){z.dataset.success='';z.style.borderStyle='dashed';z.style.borderColor='var(--border2)';z.style.background='';}
-  if(l){l.textContent='點擊上傳 Excel 工單';l.style.color='var(--text-muted)';}
+  if(l){l.textContent='點擊或拖曳檔案到此上傳';l.style.color='var(--text-muted)';}
   document.getElementById('popup-import').classList.add('open');
 }
 function closePopup(type){ document.getElementById('popup-'+type).classList.remove('open'); }
@@ -685,6 +699,52 @@ document.getElementById('importExcelFile').addEventListener('change', function(e
   handleImportExcel(file);
   this.value = '';
 });
+
+/* 拖曳上傳：拖到虛線框內放開即可，跟點擊選檔案共用同一套處理邏輯 */
+(function(){
+  var zone = document.getElementById('import-excel-zone');
+  if(!zone) return;
+
+  function setDragging(on){
+    zone.dataset.dragging = on ? '1' : '';
+    if(zone.dataset.success==='1') return; // 已成功匯入的樣式優先，不被拖曳狀態蓋掉
+    zone.style.borderStyle = on ? 'solid' : 'dashed';
+    zone.style.borderColor = on ? 'var(--accent)' : 'var(--border2)';
+    zone.style.background  = on ? 'rgba(238,77,45,.06)' : '';
+  }
+
+  ['dragenter','dragover'].forEach(function(evt){
+    zone.addEventListener(evt, function(e){
+      e.preventDefault(); e.stopPropagation();
+      setDragging(true);
+    });
+  });
+  ['dragleave','dragend'].forEach(function(evt){
+    zone.addEventListener(evt, function(e){
+      e.preventDefault(); e.stopPropagation();
+      setDragging(false);
+    });
+  });
+  zone.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    setDragging(false);
+    var file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!file) return;
+    if(!/\.xlsx$/i.test(file.name)){
+      toast('請拖曳 .xlsx 格式的工單檔案','err');
+      return;
+    }
+    handleImportExcel(file);
+  });
+
+  /* 避免使用者沒對準框、拖到頁面其他地方時瀏覽器直接開啟檔案 */
+  ['dragover','drop'].forEach(function(evt){
+    document.addEventListener(evt, function(e){
+      if(e.target && zone.contains(e.target)) return;
+      e.preventDefault();
+    });
+  });
+})();
 
 function handleImportExcel(file){
   var reader = new FileReader();

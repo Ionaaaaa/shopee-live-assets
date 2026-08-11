@@ -172,14 +172,14 @@ var COUPON_SPEC = {
   },
   flash: {
     coupon2: {
-      cx: 109, cy: 138,
-      maxSize: 50, subRatio: 0.81, minSize: 16, maxWidth: 80,
-      weight: 700, color: '#EE4D2D', angle: -0.09
+      cx: 172, cy: 190,
+      maxSize: 50, subRatio: 0.81, minSize: 16, maxWidth: 120,
+      weight: 700, color: '#EE4D2D', angle: -0.13
     },
     coupon1: {
-      cx: 165, cy: 220,
-      maxSize: 78, subRatio: 0.81, minSize: 21, maxWidth: 140,
-      weight: 700, color: '#EE4D2D', angle: -0.18
+      cx: 165, cy: 260,
+      maxSize: 60, subRatio: 0.81, minSize: 21, maxWidth: 136,
+      weight: 700, color: '#EE4D2D', angle: -0.05
     }
   }
 };
@@ -700,8 +700,10 @@ function exportBlob(fmt, q, cb){
 }
 
 function snapBlob(fmt, q, cb){
-  var ws = D.selected; D.selected = false; render();
-  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  var ws = D.selected; D.selected = false;
+  var wc = COUPON_SELECTED; COUPON_SELECTED = null;
+  render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; COUPON_SELECTED=wc; render(); cb(blob); });
 }
 
 window.BNExport = {

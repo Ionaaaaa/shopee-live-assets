@@ -101,6 +101,7 @@ function weightedTextLen(val){
   var len = 0;
   for(var i=0; i<val.length; i++){
     var code = val.codePointAt(i);
+    if(code === 0x0A || code === 0x0D) continue; // 換行符號不算字數
     if(isWideChar(code)){
       len += 1;
     } else if(code > 0xFFFF){
@@ -121,6 +122,7 @@ function truncateToWeightedLen(val, max){
   var len = 0;
   for(var i=0; i<val.length; i++){
     var code = val.codePointAt(i);
+    if(code === 0x0A || code === 0x0D){ out += val[i]; continue; } // 換行符號保留但不算字數
     var wide = isWideChar(code);
     var isSurrogate = !wide && code > 0xFFFF;
     var chunk = isSurrogate ? val.substr(i, 2) : val[i];
@@ -142,6 +144,7 @@ function truncateToWeightedLen(val, max){
   var len = 0;
   for(var i=0; i<val.length; i++){
     var code = val.codePointAt(i);
+    if(code === 0x0A || code === 0x0D){ result += val[i]; continue; } // 換行符號保留但不算字數
     var charStr = val[i];
     var weight;
     if(isWideChar(code)){
@@ -273,6 +276,14 @@ function handleFlA1VariantChange(value){
 }
 
 function handleFlA1TextInput(value){
+  /* 最多只允許1個換行（2行），多餘的換行直接移除，避免使用者按太多次Enter */
+  var el = document.getElementById('txt-fl-a1');
+  if(el){
+    var parts = el.value.split('\n');
+    if(parts.length > 2){
+      el.value = parts[0] + '\n' + parts.slice(1).join('');
+    }
+  }
   ccFlA1(); // 先做字數上限截斷，會直接修改輸入框的value
   S.flAText = v('txt-fl-a1'); // 讀回截斷後的值，不能直接用參數value（可能是截斷前、超過上限的原始值）
   if(typeof broadcast === 'function') broadcast();
@@ -315,4 +326,3 @@ function setPill(rowId,el){
 }
 
 /* ── Save / Load ── */
-

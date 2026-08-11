@@ -119,6 +119,17 @@ var LOGO = { x:46, y:32, w:142, h:74 };
 var BAR  = { x:696, y:309, w:434, h:51  };
 var GAP  = 15; // logo 分隔線兩側間距
 
+/* 主標+副標文字安全區：LOGO 右側 ～ 券樣圖示左側之前
+   BAU / 快閃日可分開調，兩者券樣位置本來就有微差
+   - BAU：左邊界再往左擴 20px（多留一點空間，可再調）
+   - 快閃日：左邊界往左擴 5px
+   - 兩者再一起往左平移 10px */
+var TEXT_ZONE = {
+  bau:   { x1: 162, x2: 914 },
+  flash: { x1: 184, x2: 924 }
+};
+var TEXT_GAP  = 10; // 主標與副標之間的固定間距（原16，縮短3px）
+
 var cv      = document.getElementById('cv');
 var overlay = document.getElementById('overlay');
 var stage   = document.getElementById('stage');
@@ -247,15 +258,26 @@ function drawLogos(){
 function drawText(){
   ctx.textAlign = 'left';
 
-  ctx.font = font(44, 500);
-  var mainAscent = ctx.measureText('測').actualBoundingBoxAscent || 44 * 0.88;
-  var mainBaseline = 49 + mainAscent;
-  if(D.main){ ctx.fillStyle = D.cMain; ctx.fillText(D.main, 204, mainBaseline); }
+  var zone = TEXT_ZONE[D.tabType] || TEXT_ZONE.bau;
+  var MAIN_SIZE = 44, SUB_SIZE = 56; // 字級固定，不自動縮小
+  var zoneW = zone.x2 - zone.x1;
+  var gap = (D.main && D.sub) ? TEXT_GAP : 0;
 
-  ctx.font = font(56, 700);
-  var subAscent = ctx.measureText('測').actualBoundingBoxAscent || 57 * 0.88;
+  ctx.font = font(MAIN_SIZE, 500);
+  var mainAscent = ctx.measureText('測').actualBoundingBoxAscent || MAIN_SIZE * 0.88;
+  var mainBaseline = 49 + mainAscent;
+  var mainW = D.main ? ctx.measureText(D.main).width : 0;
+
+  ctx.font = font(SUB_SIZE, 700);
+  var subAscent = ctx.measureText('測').actualBoundingBoxAscent || SUB_SIZE * 0.88;
   var subBaseline = 44 + subAscent;
-  if(D.sub){ ctx.fillStyle = D.cSub; ctx.fillText(D.sub, 497, subBaseline); }
+  var subW = D.sub ? ctx.measureText(D.sub).width : 0;
+
+  var totalW = mainW + gap + subW;
+  var startX = zone.x1 + Math.max(0, (zoneW - totalW) / 2);
+
+  if(D.main){ ctx.font = font(MAIN_SIZE, 500); ctx.fillStyle = D.cMain; ctx.fillText(D.main, startX, mainBaseline); }
+  if(D.sub){ ctx.font = font(SUB_SIZE, 700); ctx.fillStyle = D.cSub; ctx.fillText(D.sub, startX + mainW + gap, subBaseline); }
 
   drawCoupon();
 }
@@ -702,8 +724,10 @@ function exportBlob(fmt, q, cb){
 }
 
 function snapBlob(fmt, q, cb){
-  var ws = D.selected; D.selected = false; render();
-  exportBlob(fmt, q, function(blob){ D.selected=ws; render(); cb(blob); });
+  var ws = D.selected; D.selected = false;
+  var wc = COUPON_SELECTED; COUPON_SELECTED = null;
+  render();
+  exportBlob(fmt, q, function(blob){ D.selected=ws; COUPON_SELECTED=wc; render(); cb(blob); });
 }
 
 window.BNExport = {
