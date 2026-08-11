@@ -22,7 +22,11 @@ function groupAssetFilesByVendorFolder(files){
   var groups = {};
   var flat = [];
   (files || []).forEach(function(f){
-    var rel = f.webkitRelativePath || f.name;
+    /* 點擊選資料夾：瀏覽器自動填入 webkitRelativePath。
+       拖曳資料夾：瀏覽器不會填這個欄位，改用 _bnPath（拖曳讀取時掛上的自訂欄位，
+       見 editor.html 的 readEntryFilesRecursive()）當備援，否則會退回只有檔名、
+       完全比對不到廠商子資料夾，整包退回 flat 造成跨廠商互相亂配。 */
+    var rel = f.webkitRelativePath || f._bnPath || f.name;
     var parts = rel.split('/');
     if(parts.length >= 3){
       var vendorFolder = parts[1];
@@ -174,7 +178,9 @@ function buildShadowSnapshotForVendor(vendorFiles, thumbInfo, thumbnailNames, cb
 function findVendorLogoFiles(vendorFiles){
   if(!vendorFiles || !vendorFiles.length) return [];
   var byFolder = vendorFiles.filter(function(f){
-    var rel = f.webkitRelativePath || f.name;
+    /* 同上：拖曳上傳沒有 webkitRelativePath，補上 _bnPath 備援，
+       否則這裡永遠比對不到「資料夾名稱含 logo/商標/標誌」，Logo 資料夾偵測整個失效 */
+    var rel = f.webkitRelativePath || f._bnPath || f.name;
     var parts = rel.split('/');
     var folderPath = parts.slice(0, -1).join('/'); // 去掉最後一段(檔名本身)，只看中間資料夾名稱
     return /logo|商標|標誌/i.test(folderPath);
