@@ -45,6 +45,14 @@ function initShadowBigCanvasOnce(){
   /* 訂閱 shadow-editor-plugin 的狀態變更（版型/角度/素材/順序/選取），同步畫到這個大畫布上 */
   if(window.ShadowEditor){
     window.ShadowEditor.onStateChange(function(snapshot){ syncShadowBigCanvasFromState(snapshot); });
+    /* 陰影 X/Y 縮放改走輕量訂閱：拖曳滑桿時高頻觸發，直接呼叫 receiver.setShadowScale()
+       只改兩個數字＋重繪，不要走 onStateChange 那條「整包 slot 重新 upsert（含重新載入
+       圖片、重建輪廓）」的路徑，不然拖曳滑桿時畫面會明顯卡頓。 */
+    if(window.ShadowEditor.onShadowScaleChange){
+      window.ShadowEditor.onShadowScaleChange(function(slotId, scaleX, scaleY){
+        if(_shadowBigReceiver) _shadowBigReceiver.setShadowScale(slotId, scaleX, scaleY, drawShadowBigCanvas);
+      });
+    }
   }
 
   _shadowBigInited = true;
@@ -57,6 +65,9 @@ function syncShadowBigCanvasFromState(snapshot){
   snapshot = snapshot || (window.ShadowEditor && window.ShadowEditor.getFullState());
   if(!snapshot) return;
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ANGLE', preset: snapshot.angle }, drawShadowBigCanvas);
+  /* 全域陰影開關：關掉/開啟所有素材的陰影，直接呼叫 ShadowPlugin.setShadowsEnabled，
+     跟商品的位置/縮放無關，順序放哪裡都可以 */
+  _shadowBigReceiver.handleMessage({ type:'LC_SET_SHADOWS_ENABLED', enabled: snapshot.shadowsEnabled !== false }, drawShadowBigCanvas);
   /* 版型要先送，upsertSlot 才能正確判斷這個版型該用哪組 byCombo 位置 */
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ENABLED', ids: snapshot.order || snapshot.enabled || [], combo: snapshot.combo }, drawShadowBigCanvas);
   var slotDefs = window.ShadowEditor.SLOT_DEFS;
@@ -65,6 +76,10 @@ function syncShadowBigCanvasFromState(snapshot){
     if(def){
       var ratio = snapshot.slotRatios ? snapshot.slotRatios[slotId] : undefined;
       _shadowBigReceiver.handleMessage({ type:'LC_UPSERT_SLOT', slotId:slotId, slotType:def.type, dataUrl:snapshot.slots[slotId], ratio:ratio }, drawShadowBigCanvas);
+      /* 陰影 X/Y 縮放：每個 slot 各自獨立的比例，沒調過的 slot 這裡會是 undefined，
+         upsertSlot() 建立新 slot 時本來就會給預設值 1/1，所以這裡只在「有值」時才送 */
+      var sc = snapshot.shadowScale ? snapshot.shadowScale[slotId] : undefined;
+      if(sc) _shadowBigReceiver.handleMessage({ type:'LC_SET_SHADOW_SCALE', slotId:slotId, scaleX:sc.x, scaleY:sc.y }, drawShadowBigCanvas);
     }
   });
   _shadowBigReceiver.setSelectedSlots(snapshot.selectedIds || (snapshot.activeSlotId ? [snapshot.activeSlotId] : []));

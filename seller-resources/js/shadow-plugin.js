@@ -29,6 +29,10 @@ window.ShadowPlugin = (function () {
   var shadowRGB = '90,90,90';
   var rawBgRGB = null; // 未乘0.8的原始背景取樣色，供拍立得框底色使用；還沒 setBackground 過就是 null
   var fixedColor = false;
+  var shadowsEnabled = true; // 全域開關：關閉時所有商品/人物都只畫照片本體，不畫任何陰影/光暈層
+
+  function setShadowsEnabled(v) { shadowsEnabled = !!v; }
+  function getShadowsEnabled() { return shadowsEnabled; }
 
   function setAngle(preset) {
     if (typeof preset === 'number') { opts.angle = preset; return; }
@@ -217,6 +221,15 @@ window.ShadowPlugin = (function () {
     var trimCenterOffsetX = p.trim ? (p.trim.left - p.trim.right) * pw / 2 : 0;
     var shadowCx = cx + trimCenterOffsetX;
 
+    /* 陰影專屬縮放（2026-08 新增）：state.shadowScaleX/shadowScaleY，1＝跟商品原始
+       寬高一致（沒設定過就是這個值）。只影響「主斜切陰影」的寬度/長度，商品照片
+       本體（下面 drawImage(p.img,...)）跟接地補強陰影都固定用原始 pw/ph，
+       不受這兩個倍率影響。 */
+    var scaleX = state.shadowScaleX || 1;
+    var scaleY = state.shadowScaleY || 1;
+    var spw = pw * scaleX;
+    var sph = ph * scaleY;
+
     /* 2026-07-28 跟 Iona 確認新增：陰影不跟著商品旋轉。
        原本 withRotation() 包住整段（補強陰影＋主陰影＋照片），旋轉商品時陰影會
        跟著轉。現在改成：陰影（補強陰影、主斜切陰影）直接畫在未旋轉的 ctx 上，
@@ -225,6 +238,7 @@ window.ShadowPlugin = (function () {
     var pivotX = cx, pivotY = state.y - ph / 2;
     var rot = state.rot || 0;
 
+    if (shadowsEnabled) {
     /* 2026-07-28 跟 Iona 確認新增／調整：接地補強陰影，改成固定 3px（原本試過
        用比例、5px、都覺得太厚，最後定案固定 3px）。
        做法：把商品去背輪廓整張稍微「往下拉長」3px，上緣固定不動、只有下緣往外
@@ -232,7 +246,9 @@ window.ShadowPlugin = (function () {
        畫在最上層蓋掉其餘部分，不影響原本外觀。
        2026-07-28 再跟 Iona 確認：商品一旦旋轉，這層補強陰影就不畫——它是貼著
        商品「未旋轉」的原始輪廓算的，旋轉之後商品實際角度變了，這層陰影不會
-       跟著轉，位置會兜不起來，乾脆直接跳過，只保留原本的主斜切陰影。 */
+       跟著轉，位置會兜不起來，乾脆直接跳過，只保留原本的主斜切陰影。
+       這層永遠用原始 pw/ph，不吃 shadowScaleX/Y——不管主陰影怎麼調，商品貼地
+       的地方視覺上都該維持一致。 */
     if (!rot) {
       var CONTACT_GROW_PX = 3;
       var contactH = ph + CONTACT_GROW_PX;
@@ -250,9 +266,9 @@ window.ShadowPlugin = (function () {
     var shear = Math.tan(angle * 0.55);
     var maxSpread = soft * 1.8;
 
-    var halfW = pw / 2 + Math.abs(shear) * ph + maxSpread * 2 + 20;
+    var halfW = spw / 2 + Math.abs(shear) * sph + maxSpread * 2 + 20;
     var tempW = Math.ceil(halfW * 2);
-    var tempH = Math.ceil(ph * squash * 2 + maxSpread * 2 + 40);
+    var tempH = Math.ceil(sph * squash * 2 + maxSpread * 2 + 40);
     var anchorX = halfW;
     var anchorY = Math.ceil(tempH * 0.5);
 
@@ -260,9 +276,9 @@ window.ShadowPlugin = (function () {
     tmp.width = tempW; tmp.height = tempH;
     var tctx = tmp.getContext('2d');
 
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 1.8, 0.28, 12);
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.8, 0.4, 10);
-    stampLayer(tctx, p.tinted, anchorX, anchorY, pw, ph, shear, squash, soft * 0.25, 0.35, 6);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, spw, sph, shear, squash, soft * 1.8, 0.28, 12);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, spw, sph, shear, squash, soft * 0.8, 0.4, 10);
+    stampLayer(tctx, p.tinted, anchorX, anchorY, spw, sph, shear, squash, soft * 0.25, 0.35, 6);
 
     if (occludeStrength > 0 && occluderMask) {
       tctx.save();
@@ -272,8 +288,8 @@ window.ShadowPlugin = (function () {
       tctx.restore();
     }
 
-    var tipX = -shear * ph * fadeMul;
-    var tipY = -squash * ph * fadeMul - soft * 0.6;
+    var tipX = -shear * sph * fadeMul;
+    var tipY = -squash * sph * fadeMul - soft * 0.6;
     tctx.globalCompositeOperation = 'destination-in';
     var grad = tctx.createLinearGradient(anchorX, anchorY, anchorX + tipX, anchorY + tipY);
     grad.addColorStop(0, 'rgba(255,255,255,1)');
@@ -296,6 +312,7 @@ window.ShadowPlugin = (function () {
     ctx.globalCompositeOperation = 'multiply';
     ctx.drawImage(tmp, shadowCx - anchorX, shadowGroundY - anchorY);
     ctx.restore();
+    } // shadowsEnabled
 
     if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
       withRotation(ctx, pivotX, pivotY, rot, function () {
@@ -318,6 +335,7 @@ window.ShadowPlugin = (function () {
     var rot = state.rot || 0;
 
     withRotation(ctx, pivotX, pivotY, rot, function () {
+      if (shadowsEnabled) {
       var angle = opts.angle * Math.PI / 180;
       var shear = Math.tan(angle * 0.55);
 
@@ -349,6 +367,7 @@ window.ShadowPlugin = (function () {
       }
 
       ctx.drawImage(tmp, 0, 0);
+      } // shadowsEnabled
 
       if (!skipPhoto && p.img.complete && p.img.naturalWidth) {
         ctx.drawImage(p.img, cx - pw / 2, py - ph, pw, ph);
@@ -435,6 +454,8 @@ window.ShadowPlugin = (function () {
     setShadowColorRGB: setShadowColorRGB,
     getShadowColorRGB: getShadowColorRGB,
     unlockShadowColor: unlockShadowColor,
+    setShadowsEnabled: setShadowsEnabled,
+    getShadowsEnabled: getShadowsEnabled,
     registerProduct: registerProduct,
     removeProduct: removeProduct,
     getType: getType,

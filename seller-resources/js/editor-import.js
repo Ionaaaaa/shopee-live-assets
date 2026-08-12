@@ -5,8 +5,8 @@ var _importState = { excelFile:null, assetFiles:[] };
 
 function openImportModal(){
   _importState = { excelFile:null, assetFiles:[] };
-  resetImportZoneText('import-zone-excel', '點擊上傳 Excel 工單', '支援 .xlsx 格式');
-  resetImportZoneText('import-zone-assets', '上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
+  resetImportZoneText('import-zone-excel', '點擊或拖曳上傳 Excel 工單', '支援 .xlsx 格式');
+  resetImportZoneText('import-zone-assets', '點擊或拖曳上傳素材資料夾（Logo＋主持人／商品，可選）', 'Logo、主持人、商品圖可放同一個資料夾，依檔名自動比對');
   var zEx = document.getElementById('import-zone-excel'); if(zEx) zEx.classList.remove('done');
   var zAs = document.getElementById('import-zone-assets'); if(zAs) zAs.classList.remove('done');
   document.getElementById('popup-import').classList.add('open');
@@ -21,20 +21,111 @@ function resetImportZoneText(zoneId, title, sub){
 
 function onImportFilePicked(e, kind){
   if(kind === 'excel'){
-    var f = e.target.files[0];
-    _importState.excelFile = f || null;
-    if(f){
-      resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇');
-      document.getElementById('import-zone-excel').classList.add('done');
-    }
+    processExcelFileSR(e.target.files[0]);
   } else if(kind === 'assets'){
     var files = Array.prototype.slice.call(e.target.files).filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
-    _importState.assetFiles = files;
-    if(files.length){
-      resetImportZoneText('import-zone-assets', '已選擇 '+files.length+' 個圖片檔案', '點擊可重新選擇資料夾');
-      document.getElementById('import-zone-assets').classList.add('done');
-    }
+    processAssetFilesSR(files);
   }
+  e.target.value = '';
+}
+
+function processExcelFileSR(f){
+  _importState.excelFile = f || null;
+  if(f){
+    resetImportZoneText('import-zone-excel', '已選擇：'+f.name, '點擊可重新選擇');
+    document.getElementById('import-zone-excel').classList.add('done');
+  }
+}
+
+function processAssetFilesSR(files){
+  var imgFiles = files.filter(function(f){ return /\.(png|jpe?g|webp)$/i.test(f.name); });
+  _importState.assetFiles = imgFiles;
+  if(imgFiles.length){
+    resetImportZoneText('import-zone-assets', '已選擇 '+imgFiles.length+' 個圖片檔案', '點擊可重新選擇資料夾');
+    document.getElementById('import-zone-assets').classList.add('done');
+  } else {
+    toast('資料夾內沒有找到圖片檔案','err');
+  }
+}
+
+/* ── 拖曳上傳：遞迴讀取資料夾 + drop handler ──
+   拖曳走的是 DataTransfer → webkitGetAsEntry() → FileSystemEntry 路徑，
+   瀏覽器不會自動走訪子資料夾，要靠程式自己遞迴（點擊選資料夾則是瀏覽器
+   自己走完），兩條路最後都會餵進同一套 processExcelFileSR/processAssetFilesSR，
+   後續比對邏輯（matchFileByAliases）完全共用，不分點擊或拖曳。這個專案的
+   比對邏輯只看檔名、不吃路徑，所以不需要額外補路徑欄位。 */
+function readEntryFilesRecursiveSR(entry, out, doneCb){
+  if(entry.isFile){
+    entry.file(function(file){
+      out.push(file);
+      doneCb();
+    }, function(err){
+      console.warn('[drag-import] 讀取檔案失敗，跳過：', entry.fullPath, err);
+      doneCb();
+    });
+  } else if(entry.isDirectory){
+    var reader = entry.createReader();
+    var allEntries = [];
+    (function readBatch(){
+      reader.readEntries(function(batch){
+        if(!batch || !batch.length){
+          if(!allEntries.length){ doneCb(); return; }
+          var remaining = allEntries.length;
+          allEntries.forEach(function(childEntry){
+            readEntryFilesRecursiveSR(childEntry, out, function(){
+              if(--remaining === 0) doneCb();
+            });
+          });
+        } else {
+          for(var i=0;i<batch.length;i++) allEntries.push(batch[i]);
+          readBatch();
+        }
+      }, function(err){
+        console.warn('[drag-import] 讀取資料夾失敗，跳過：', entry.fullPath, err);
+        doneCb();
+      });
+    })();
+  } else {
+    doneCb();
+  }
+}
+
+function onImportZoneDropSR(event, kind){
+  event.preventDefault();
+  event.stopPropagation();
+
+  if(kind === 'excel'){
+    var files = event.dataTransfer.files;
+    var xlsxFile = null;
+    for(var i=0;i<files.length;i++){
+      if(/\.xlsx$/i.test(files[i].name)){ xlsxFile = files[i]; break; }
+    }
+    if(!xlsxFile){ toast('請拖入 .xlsx 格式的工單檔案','err'); return; }
+    processExcelFileSR(xlsxFile);
+    return;
+  }
+
+  /* kind === 'assets'：資料夾，遞迴讀取後餵進 processAssetFilesSR */
+  var items = event.dataTransfer.items;
+  if(!items || !items.length){ toast('無法讀取拖曳內容','err'); return; }
+
+  var entries = [];
+  for(var j=0;j<items.length;j++){
+    var entry = items[j].webkitGetAsEntry ? items[j].webkitGetAsEntry() : null;
+    if(entry) entries.push(entry);
+  }
+  if(!entries.length){
+    toast('瀏覽器不支援拖曳資料夾讀取，請改用點擊選取','err');
+    return;
+  }
+
+  var allFiles = [];
+  var remaining = entries.length;
+  entries.forEach(function(ent){
+    readEntryFilesRecursiveSR(ent, allFiles, function(){
+      if(--remaining === 0) processAssetFilesSR(allFiles);
+    });
+  });
 }
 
 /* 依「別名關鍵字」在一堆 File 裡找最匹配的一個。

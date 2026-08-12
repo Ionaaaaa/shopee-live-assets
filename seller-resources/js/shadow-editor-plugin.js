@@ -54,6 +54,8 @@
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
     polaroid: {}, // slotId -> true/false，這個 slot 目前是不是「已套拍立得框」的狀態
     slotOriginal: {}, // slotId -> dataUrl，套框之前的原圖（只在第一次勾選時記錄，取消勾選時拿來還原）
+    shadowScale: {}, // slotId -> {x,y}，陰影 X/Y 獨立縮放倍率（1=跟商品原始寬高一致），沒調過的 slot 不會有這個 key
+    shadowsEnabled: true, // 全域陰影開關：關閉時所有 slot 都只顯示照片本體，不畫任何陰影/光暈
     order: []  // 手動疊放順序：陣列前面＝後方，後面＝前方；也是左側清單的顯示順序來源（清單上面＝最前面，所以顯示時要反過來）
   };
   var activeSlotId = null;
@@ -61,6 +63,9 @@
   var readyFrames = {}; // iframeId -> true
   var pendingMode = false; // true 時：狀態變更不廣播，等 commit() 才一次送出
   var changeListeners = []; // 給外部（例如 1200x1200 大畫布）訂閱狀態變更用，跟 pendingMode 無關，一律即時通知
+  var shadowScaleListeners = []; // 給外部訂閱「單一 slot 陰影縮放變化」用，比 changeListeners 輕量很多——
+                                  // 拖曳滑桿時會連續觸發，不能像 notifyChange() 那樣整包 slot 重新 upsert
+                                  // （會連帶重新載入圖片、重建輪廓，拖曳中每個影格都做一次會很卡）
 
   function setSelection(ids){
     selectedIds = (ids || []).filter(function(id){ return state.slots[id]; });
@@ -86,6 +91,8 @@
       slotRatios: Object.assign({}, state.slotRatios),
       polaroid: Object.assign({}, state.polaroid),
       slotOriginal: Object.assign({}, state.slotOriginal),
+      shadowScale: Object.assign({}, state.shadowScale),
+      shadowsEnabled: state.shadowsEnabled,
       enabled: currentCombo().enabled.slice(),
       order: state.order.slice(),
       activeSlotId: activeSlotId,
@@ -95,6 +102,15 @@
   function notifyChange(){
     var snap = getFullStateSnapshot();
     changeListeners.forEach(function(cb){ try{ cb(snap); }catch(e){ console.warn('shadow-editor-plugin onStateChange callback error:', e); } });
+  }
+  /* 輕量版通知，只給「單一 slot 陰影縮放變化」用──跟 notifyChange() 不同，
+     不會觸發外部整包 slot 重新 upsert（那個流程含重新載入圖片、重建輪廓，
+     拖曳滑桿這種連續觸發的操作跑那一整套會很卡）。 */
+  function notifyShadowScaleChange(slotId){
+    var sc = state.shadowScale[slotId] || { x: 1, y: 1 };
+    shadowScaleListeners.forEach(function(cb){
+      try{ cb(slotId, sc.x, sc.y); }catch(e){ console.warn('shadow-editor-plugin onShadowScaleChange callback error:', e); }
+    });
   }
 
   function injectStyle(){
@@ -120,13 +136,68 @@
       '.lc-thumb img{width:100%;height:100%;object-fit:contain;}' +
       '.lc-thumb .lc-plus{font-size:18px;color:var(--text-dim);}' +
       '.lc-meta{font-size:12px;color:var(--text);flex:1;min-width:0;}' +
-      '.lc-meta .lc-tag{font-size:10px;color:var(--text-dim);display:block;margin-top:2px;}' +
       '.lc-del{position:absolute;top:4px;right:4px;background:#a33;color:#fff;font-size:10px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:4px;cursor:pointer;}' +
       '.lc-frame-row{display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:var(--text-muted);cursor:default;}' +
       '.lc-frame-row input[type=checkbox]{margin:0;cursor:pointer;}' +
       '.lc-frame-row a{color:var(--accent);text-decoration:none;cursor:pointer;}' +
-      '.lc-frame-row a:hover{text-decoration:underline;}';
+      '.lc-frame-row a:hover{text-decoration:underline;}' +
+      /* 全域陰影開關：放在「光源角度」標題同一行右側 */
+      '.lc-field-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}' +
+      '.lc-field-head label{margin-bottom:0;}' +
+      '.lc-switch{position:relative;display:inline-block;width:36px;height:20px;flex:0 0 auto;}' +
+      '.lc-switch input{opacity:0;width:0;height:0;position:absolute;}' +
+      '.lc-switch .lc-track{position:absolute;inset:0;background:var(--surface);border:1px solid var(--border2);border-radius:999px;cursor:pointer;transition:background .15s,border-color .15s;}' +
+      '.lc-switch .lc-track::before{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;background:var(--text-dim);border-radius:50%;transition:transform .15s,background .15s;}' +
+      '.lc-switch input:checked + .lc-track{background:var(--accent);border-color:var(--accent);}' +
+      '.lc-switch input:checked + .lc-track::before{transform:translateX(16px);background:#fff;}' +
+      /* 陰影微調面板：預設隱藏，選到單一素材才出現；每條滑桿精簡成一行，避免佔太多高度 */
+      '.lc-shadow-panel{display:none;flex-direction:column;gap:6px;padding:8px 10px;margin-top:10px;border:1px solid var(--accent);border-radius:var(--radius);background:rgba(238,77,45,0.06);}' +
+      '.lc-shadow-panel.show{display:flex;}' +
+      '.lc-shadow-panel .lc-sp-title{font-size:12px;font-weight:600;color:var(--text);display:flex;justify-content:space-between;align-items:center;}' +
+      '.lc-shadow-panel .lc-sp-close{cursor:pointer;color:var(--text-dim);font-size:11px;font-weight:400;}' +
+      '.lc-shadow-panel .lc-sp-close:hover{color:var(--text);}' +
+      '.lc-shadow-panel .lc-sp-row{display:flex;flex-direction:column;gap:1px;}' +
+      '.lc-shadow-panel .lc-sp-lbl{font-size:11px;color:var(--text-muted);display:flex;justify-content:space-between;}' +
+      '.lc-shadow-panel .lc-sp-lbl b{color:var(--text);font-weight:600;}' +
+      '.lc-shadow-panel input[type=range]{width:100%;height:16px;margin:0;}' +
+      '.lc-sp-reset{background:none;border:1px solid var(--border2);color:var(--text-muted);border-radius:var(--radius);padding:4px;font-size:11px;cursor:pointer;}' +
+      '.lc-sp-reset:hover{color:var(--text);border-color:var(--text-muted);}';
     document.head.appendChild(style);
+  }
+
+  /* 陰影微調面板：只有單選（activeSlotId 有值）時才顯示，多選/沒選都收起來。
+     每次 renderSlotBar() 都會呼叫這個，確保選取狀態一變，面板跟著同步。 */
+  function renderShadowPanel(){
+    var panel = document.getElementById('lc-shadow-panel');
+    if (!panel) return;
+    if (!activeSlotId){
+      panel.classList.remove('show');
+      return;
+    }
+    var def = SLOT_DEFS.filter(function(d){ return d.id === activeSlotId; })[0];
+    panel.classList.add('show');
+    var titleEl = document.getElementById('lc-sp-title-text');
+    if (titleEl) titleEl.textContent = '正在編輯：' + (def ? def.label : activeSlotId) + ' 的陰影';
+    var sc = state.shadowScale[activeSlotId] || { x: 1, y: 1 };
+    var xInput = document.getElementById('lc-sp-scale-x');
+    var yInput = document.getElementById('lc-sp-scale-y');
+    var xLabel = document.getElementById('lc-sp-x-label');
+    var yLabel = document.getElementById('lc-sp-y-label');
+    if (xInput) xInput.value = Math.round(sc.x * 100);
+    if (yInput) yInput.value = Math.round(sc.y * 100);
+    if (xLabel) xLabel.textContent = Math.round(sc.x * 100) + '%';
+    if (yLabel) yLabel.textContent = Math.round(sc.y * 100) + '%';
+  }
+
+  // 廣播單一 slot 的陰影縮放（給實際版位 iframe，目前這套陰影只用在1200x1200合成
+  // popup，broadcastToAllFrames 對版位iframe來說是保險，不影響現有行為）＋通知大畫布
+  // ── 注意：故意用 notifyShadowScaleChange() 而不是 notifyChange()，因為滑桿拖曳
+  //    時會連續觸發，notifyChange() 那條路徑會讓大畫布整包 slot 重新 upsert
+  //    （含重新載入圖片、重建輪廓），拖曳中每個影格都跑一次會明顯卡頓 */
+  function broadcastShadowScale(slotId){
+    var sc = state.shadowScale[slotId] || { x: 1, y: 1 };
+    broadcastToAllFrames({ type: 'LC_SET_SHADOW_SCALE', slotId: slotId, scaleX: sc.x, scaleY: sc.y });
+    notifyShadowScaleChange(slotId);
   }
 
   function buildSectionHTML(){
@@ -141,7 +212,13 @@
             '<select id="lc-combo-sel">' + comboOptions + '</select>' +
           '</div>' +
           '<div class="lc-field">' +
-            '<label>光源角度</label>' +
+            '<div class="lc-field-head">' +
+              '<label>光源角度</label>' +
+              '<span class="lc-switch" title="開啟／關閉所有素材的陰影">' +
+                '<input type="checkbox" id="lc-shadows-onoff"' + (state.shadowsEnabled ? ' checked' : '') + '>' +
+                '<label class="lc-track" for="lc-shadows-onoff"></label>' +
+              '</span>' +
+            '</div>' +
             '<div class="lc-ang-group">' +
               '<button class="lc-ang" data-ang="left">左上</button>' +
               '<button class="lc-ang active" data-ang="top">正上</button>' +
@@ -149,8 +226,23 @@
             '</div>' +
           '</div>' +
           '<div class="lc-field">' +
-            '<label>素材（拖曳可移動，右上角 × 可刪除；商品可去背、可勾選「拍立得」套白框）</label>' +
+            '<label>素材</label>' +
             '<div class="lc-slotbar" id="lc-slotbar"></div>' +
+          '</div>' +
+          '<div class="lc-shadow-panel" id="lc-shadow-panel">' +
+            '<div class="lc-sp-title">' +
+              '<span id="lc-sp-title-text">正在編輯：陰影</span>' +
+              '<span class="lc-sp-close" id="lc-sp-close">取消選取 ✕</span>' +
+            '</div>' +
+            '<div class="lc-sp-row">' +
+              '<div class="lc-sp-lbl">寬度縮放<b id="lc-sp-x-label">100%</b></div>' +
+              '<input type="range" id="lc-sp-scale-x" min="40" max="220" value="100">' +
+            '</div>' +
+            '<div class="lc-sp-row">' +
+              '<div class="lc-sp-lbl">長度縮放<b id="lc-sp-y-label">100%</b></div>' +
+              '<input type="range" id="lc-sp-scale-y" min="40" max="220" value="100">' +
+            '</div>' +
+            '<button class="lc-sp-reset" id="lc-sp-reset">重設為 100% / 100%</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -183,12 +275,15 @@
     var w = ifr.contentWindow;
     if (state.bgDataUrl) w.postMessage({ type:'LC_SET_BG', dataUrl: state.bgDataUrl }, '*');
     w.postMessage({ type:'LC_SET_ANGLE', preset: state.angle }, '*');
+    w.postMessage({ type:'LC_SET_SHADOWS_ENABLED', enabled: state.shadowsEnabled }, '*');
     /* 版型／疊放順序要先送，upsertSlot 判斷「這個版型該用哪組預設位置」才會抓到正確的版型，
        不然素材先送到，接收端還不知道目前是哪個版型，byCombo 覆蓋就會判斷錯 */
     w.postMessage({ type:'LC_SET_ENABLED', ids: state.order, combo: state.combo }, '*');
     SLOT_DEFS.forEach(function(def){
       if (state.slots[def.id]){
         w.postMessage({ type:'LC_UPSERT_SLOT', slotId: def.id, slotType: def.type, dataUrl: state.slots[def.id], ratio: state.slotRatios[def.id] }, '*');
+        var sc = state.shadowScale[def.id];
+        if (sc) w.postMessage({ type:'LC_SET_SHADOW_SCALE', slotId: def.id, scaleX: sc.x, scaleY: sc.y }, '*');
       }
     });
   }
@@ -338,6 +433,7 @@
     delete state.slots[slotId];
     delete state.polaroid[slotId];
     delete state.slotOriginal[slotId];
+    delete state.shadowScale[slotId];
     broadcastToAllFrames({ type:'LC_REMOVE_SLOT', slotId: slotId });
     setSelection(selectedIds.filter(function(id){ return id !== slotId; }));
     renderSlotBar();
@@ -355,6 +451,8 @@
     state.slotRatios = Object.assign({}, saved.slotRatios || {});
     state.polaroid = Object.assign({}, saved.polaroid || {});
     state.slotOriginal = Object.assign({}, saved.slotOriginal || {});
+    state.shadowScale = Object.assign({}, saved.shadowScale || {});
+    state.shadowsEnabled = saved.shadowsEnabled !== false; // 舊存檔沒有這個欄位時，預設當作開啟
     if(saved.angle) state.angle = saved.angle;
 
     /* 疊放順序：優先用存檔裡記的順序，過濾掉目前版型不會用到的 id，
@@ -369,6 +467,8 @@
 
     var sel = document.getElementById('lc-combo-sel');
     if(sel) sel.value = state.combo;
+    var shadowsToggle = document.getElementById('lc-shadows-onoff');
+    if(shadowsToggle) shadowsToggle.checked = state.shadowsEnabled;
     setSelection([]);
     renderSlotBar();
     var frames = window.iframes || {};
@@ -449,7 +549,7 @@
 
       var meta = document.createElement('div');
       meta.className = 'lc-meta';
-      meta.innerHTML = def.label + '<span class="lc-tag">' + (def.type==='person' ? '人物・光暈陰影' : '商品・貼地陰影') + '</span>';
+      meta.innerHTML = def.label;
 
       // 商品類、而且已經有圖：加「去背」連結＋「拍立得」勾選（人物類先不開放——人物走頭部
       // 定位邏輯，去背/套框後整張圖的形狀跟頭部偵測會對不上，之後真的有需求再另外處理）
@@ -530,6 +630,7 @@
 
       bar.appendChild(box);
     });
+    renderShadowPanel(); // 選取狀態每次變動都同步一次陰影面板（顯示/隱藏＋滑桿數值）
   }
   var _dragFromDisplayIdx = null; // 拖曳中：清單顯示順序（上=前景）的索引
 
@@ -550,6 +651,59 @@
         notifyChange();
       });
     });
+
+    // 全域陰影開關：關掉/開啟所有素材的陰影，不影響各自已經記住的 X/Y 縮放比例
+    var shadowsToggle = document.getElementById('lc-shadows-onoff');
+    if (shadowsToggle){
+      shadowsToggle.addEventListener('change', function(e){
+        state.shadowsEnabled = e.target.checked;
+        broadcastToAllFrames({ type:'LC_SET_SHADOWS_ENABLED', enabled: state.shadowsEnabled });
+        notifyChange();
+      });
+    }
+
+    // 陰影微調面板：X/Y 縮放滑桿只影響目前 activeSlotId 這一個 slot
+    var spX = document.getElementById('lc-sp-scale-x');
+    var spY = document.getElementById('lc-sp-scale-y');
+    var spReset = document.getElementById('lc-sp-reset');
+    var spClose = document.getElementById('lc-sp-close');
+    if (spX){
+      spX.addEventListener('input', function(){
+        if (!activeSlotId) return;
+        var sc = state.shadowScale[activeSlotId] || { x: 1, y: 1 };
+        sc.x = Number(spX.value) / 100;
+        state.shadowScale[activeSlotId] = sc;
+        var lbl = document.getElementById('lc-sp-x-label');
+        if (lbl) lbl.textContent = spX.value + '%';
+        broadcastShadowScale(activeSlotId);
+      });
+    }
+    if (spY){
+      spY.addEventListener('input', function(){
+        if (!activeSlotId) return;
+        var sc = state.shadowScale[activeSlotId] || { x: 1, y: 1 };
+        sc.y = Number(spY.value) / 100;
+        state.shadowScale[activeSlotId] = sc;
+        var lbl = document.getElementById('lc-sp-y-label');
+        if (lbl) lbl.textContent = spY.value + '%';
+        broadcastShadowScale(activeSlotId);
+      });
+    }
+    if (spReset){
+      spReset.addEventListener('click', function(){
+        if (!activeSlotId) return;
+        state.shadowScale[activeSlotId] = { x: 1, y: 1 };
+        renderShadowPanel();
+        broadcastShadowScale(activeSlotId);
+      });
+    }
+    if (spClose){
+      spClose.addEventListener('click', function(){
+        setSelection([]);
+        renderSlotBar();
+        notifyChange();
+      });
+    }
   }
 
   window.addEventListener('message', function(e){
@@ -604,6 +758,9 @@
     /* 給 1200x1200 大畫布訂閱：combo/角度/素材任何變動都會呼叫 cb(snapshot)，跟 pendingMode 無關、永遠即時 */
     getFullState: getFullStateSnapshot,
     onStateChange: function(cb){ if(typeof cb === 'function') changeListeners.push(cb); },
+    /* 輕量版訂閱：只有「單一 slot 陰影 X/Y 縮放」變化時才觸發 cb(slotId, scaleX, scaleY)，
+       拖曳滑桿這種高頻操作要接這個，不要接 onStateChange（會整包 slot 重新 upsert，很卡） */
+    onShadowScaleChange: function(cb){ if(typeof cb === 'function') shadowScaleListeners.push(cb); },
     /* 多選（給大畫布回報選取狀態變化時同步左側清單用） */
     getSelectedIds: function(){ return selectedIds.slice(); },
     setSelectedIds: function(ids){ setSelection(ids); renderSlotBar(); notifyChange(); }

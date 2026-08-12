@@ -195,7 +195,8 @@ window.ShadowLayoutReceiver = (function () {
     function getState(slotId){
       var s = slots[slotId];
       if (!s) return null;
-      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0 };
+      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0,
+        shadowScaleX: s.shadowScaleX || 1, shadowScaleY: s.shadowScaleY || 1 };
     }
     // 選取框偏移修正：實際畫出來的照片（shadow-plugin.js drawGroundShadow/renderPhotosOnly）
     // 用的是 py = state.y + trimBottomPad 當基準去 drawImage，trimBottomPad 是 PNG 下緣
@@ -254,7 +255,9 @@ window.ShadowLayoutReceiver = (function () {
               y: cy + (s.y - cy) * scale,
               w: s.w * scale,
               h: s.h * scale,
-              rot: s.rot // 旋轉角度不受縮放影響，原樣帶過去
+              rot: s.rot, // 旋轉角度不受縮放影響，原樣帶過去
+              shadowScaleX: s.shadowScaleX, // 陰影 X/Y 縮放倍率也不受版位整體縮放影響，原樣帶過去
+              shadowScaleY: s.shadowScaleY
             };
           });
         }
@@ -477,7 +480,7 @@ window.ShadowLayoutReceiver = (function () {
             /* 商品比例（Excel「(商品)比例」欄位，0~1）：100% 或沒填就是 1（維持這裡算出來的最大尺寸），
                填了更小的比例，就從第一次貼合的當下直接縮小；之後使用者拖曳調整過，就照使用者調整的結果。 */
             var initScaleMul = (typeof ratio === 'number' && ratio > 0 && ratio <= 1) ? ratio : 1;
-            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, rot: 0, tight: tight };
+            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, rot: 0, tight: tight, shadowScaleX: 1, shadowScaleY: 1 };
           } else {
             /* 換圖時（例如勾選/取消拍立得框，圖片從「原始照片」換成「壓平後的框+照片」，
                長寬比通常會差很多——原圖可能是窄長的商品照，壓平後的拍立得卡片接近正方形）
@@ -545,6 +548,19 @@ window.ShadowLayoutReceiver = (function () {
             console.log('[shadow-debug] 收到 LC_SET_ENABLED，但這則訊息沒有帶 combo 欄位（目前仍是 ' + JSON.stringify(currentComboLetter) + '）');
           }
           setSelection(selectedIds.filter(function(id){ return enabledIds.indexOf(id) !== -1; }));
+          if (redraw) redraw();
+          break;
+        case 'LC_SET_SHADOW_SCALE':
+          // 單一 slot 的陰影 X/Y 縮放倍率（1＝跟商品原始寬高一致），只影響這個 slot
+          if (slots[msg.slotId]){
+            if (typeof msg.scaleX === 'number') slots[msg.slotId].shadowScaleX = msg.scaleX;
+            if (typeof msg.scaleY === 'number') slots[msg.slotId].shadowScaleY = msg.scaleY;
+          }
+          if (redraw) redraw();
+          break;
+        case 'LC_SET_SHADOWS_ENABLED':
+          // 全域陰影開關：關閉時所有 slot 都只畫照片本體，不畫任何陰影/光暈
+          ShadowPlugin.setShadowsEnabled(msg.enabled !== false);
           if (redraw) redraw();
           break;
       }
@@ -821,6 +837,17 @@ window.ShadowLayoutReceiver = (function () {
         if (redraw) redraw();
       },
       getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; },
+      /* 給外部程式化設定「這個 slot 的陰影 X/Y 縮放倍率」用（1＝跟商品原始寬高一致） */
+      setShadowScale: function(slotId, scaleX, scaleY, redraw){
+        if (!slots[slotId]) return;
+        if (typeof scaleX === 'number') slots[slotId].shadowScaleX = scaleX;
+        if (typeof scaleY === 'number') slots[slotId].shadowScaleY = scaleY;
+        if (redraw) redraw();
+      },
+      getShadowScale: function(slotId){
+        var s = slots[slotId];
+        return { x: s ? (s.shadowScaleX || 1) : 1, y: s ? (s.shadowScaleY || 1) : 1 };
+      },
       /* Ctrl+Z 復原：外部（例如工具列想加一個復原按鈕）也可以直接呼叫 undo()，
          不一定要透過鍵盤事件；peekUndoTs() 給 UI 顯示「上次復原時間」用，非必要 */
       undo: undo,
