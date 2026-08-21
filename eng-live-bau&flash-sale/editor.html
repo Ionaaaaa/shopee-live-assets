@@ -1230,8 +1230,8 @@ function _downloadAll(){
 
 /* ── 壓縮 ── */
 var SIZE_LIMIT_KB = {
-  '01_skinny_pc':145, '02_skinny_app':145, '03_c2c_bn':145,
-  '04_c2c_popup':145, '05_c2c_dd':245, '06_live_hall_bn':100,
+  '01_skinny_pc':250, '02_skinny_app':250, '03_c2c_bn':250,
+  '04_c2c_popup':250, '05_c2c_dd':250, '06_live_hall_bn':100,
   '07_live_popup':300, '08_coin_bn':250
 };
 
@@ -1261,7 +1261,29 @@ function compressToLimit(blob,layoutId,fmt,cb){
   img.src=url;
 }
 
-/* PNG 超過上限時：尺寸不變，僅透過降低色彩階數（量化）縮小檔案 */
+/* 動態載入 UPNG.js（Photopea/線上版Photoshop同款PNG引擎） */
+function ensureUPNG(cb){
+  if(window.UPNG){ cb(); return; }
+  function loadUPNG(){
+    var s2=document.createElement('script');
+    s2.src='https://cdnjs.cloudflare.com/ajax/libs/upng-js/2.1.0/UPNG.min.js';
+    s2.onload=cb;
+    s2.onerror=function(){ console.warn('[壓縮偵錯] UPNG.js 載入失敗'); cb(); };
+    document.head.appendChild(s2);
+  }
+  if(window.pako){ loadUPNG(); return; }
+  // UPNG.js 內部倚賴 pako 做 deflate/inflate，必須先載入 pako 才能正常運作
+  var s1=document.createElement('script');
+  s1.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.2.0/pako.min.js';
+  s1.onload=loadUPNG;
+  s1.onerror=function(){ console.warn('[壓縮偵錯] pako.js 載入失敗，UPNG 將無法運作'); cb(); };
+  document.head.appendChild(s1);
+}
+
+/* PNG 超過上限時：改用 UPNG.js 做「調色盤索引色」壓縮（非全彩逐色版量化）。
+   調色盤模式每像素只存1個索引值而非3 bytes RGB，同樣色彩精簡程度下檔案小很多，
+   UPNG內部用K-d tree找最佳配色+近似色映射，畫質遠優於原本的均勻四捨五入量化，
+   斷層感也大幅降低（同樣原理是 Photopea／Photoshop 網頁版在用的引擎）。 */
 function compressPngToLimit(blob,limitKB,cb){
   var url=URL.createObjectURL(blob);
   var img=new Image();
@@ -1271,33 +1293,150 @@ function compressPngToLimit(blob,limitKB,cb){
     cv.width=img.naturalWidth; cv.height=img.naturalHeight;
     var ctx=cv.getContext('2d');
     ctx.drawImage(img,0,0);
-    var baseData;
-    try{ baseData=ctx.getImageData(0,0,cv.width,cv.height); }
+    var w=cv.width, h=cv.height, baseData;
+    try{ baseData=ctx.getImageData(0,0,w,h); }
     catch(e){ cb(blob); return; }
 
-    var levels=[64,32,16,12,8,6,5,4]; // 每色階數，由細到粗
-    var i=0;
-    function tryNext(){
-      if(i>=levels.length){ cb(lastBlob||blob); return; }
-      var step = 255/(levels[i]-1);
-      var id = ctx.createImageData(cv.width, cv.height);
-      var src = baseData.data, dst = id.data;
-      for(var p=0;p<src.length;p+=4){
-        dst[p]   = Math.round(Math.round(src[p]/step)*step);
-        dst[p+1] = Math.round(Math.round(src[p+1]/step)*step);
-        dst[p+2] = Math.round(Math.round(src[p+2]/step)*step);
-        dst[p+3] = src[p+3]; // 保留原本透明度，不量化 alpha
+    ensureUPNG(function(){
+      if(!window.UPNG){ // UPNG 載入失敗，退回舊的均勻量化法，確保功能不中斷
+        console.warn('[壓縮偵錯] UPNG.js 未載入成功，改用備援量化法');
+        legacyQuantizeFallback(); return;
       }
-      ctx.putImageData(id,0,0);
-      cv.toBlob(function(b){
-        if(!b){ cb(blob); return; }
-        lastBlob=b;
-        if(b.size<=limitKB*1024||i>=levels.length-1){ cb(b); return; }
+      var origBytes = new Uint8Array(baseData.data); // 保留一份原始像素的乾淨複本
+
+      // Step 0：先試「全彩無損」（cnum=0，不做調色盤量化），
+      // 如果這樣就已經塞得進 KB 上限，直接用這版，畫質 100% 無損、完全沒有色塊。
+      try{
+        var losslessPng = UPNG.encode([new Uint8Array(origBytes).buffer], w, h, 0);
+        var losslessBuf = new Blob([losslessPng],{type:'image/png'});
+        console.log('[壓縮偵錯] 全彩無損 → '+(losslessBuf.size/1024).toFixed(1)+'KB');
+        if(losslessBuf.size<=limitKB*1024){
+          cb(losslessBuf); return; // 無損版本就已達標，不需要再犧牲畫質
+        }
+      }catch(e){
+        console.warn('[壓縮偵錯] 全彩無損嘗試失敗，改走調色盤量化：', e);
+      }
+
+      // Step 1：無損版本太大，才開始降到調色盤量化，由細到粗嘗試色數
+      var colorCounts=[256,192,128,96,64,48,32,16,8];
+      var i=0;
+
+      // 從 UPNG 內部的 packed RGBA 整數解出 [r,g,b,a]
+      function unpackRGBA(v){ return [v&255, (v>>8)&255, (v>>16)&255, (v>>24)&255]; }
+
+      // Floyd-Steinberg 誤差擴散抖動：用「這張圖實際找出的最佳調色盤」做映射，
+      // 而非均勻硬砍色階，同樣色數下斷層感大幅降低，副作用是檔案會變大一些，
+      // 所以每一階都會重新檢查是否仍在 KB 預算內，超過才放棄改用無dithering版本。
+      function ditherToPalette(src, palette){
+        var buf = new Float32Array(src.length);
+        for(var p=0;p<src.length;p++) buf[p]=src[p];
+        var out = new Uint8Array(src.length);
+        for(var y=0;y<h;y++){
+          for(var x=0;x<w;x++){
+            var idx=(y*w+x)*4;
+            var r=buf[idx],g=buf[idx+1],b=buf[idx+2],a=buf[idx+3];
+            var best=-1,bestDist=Infinity;
+            for(var k=0;k<palette.length;k++){
+              var c=palette[k];
+              var dr=r-c[0],dg=g-c[1],db=b-c[2],da=a-c[3];
+              var d=dr*dr+dg*dg+db*db+da*da;
+              if(d<bestDist){bestDist=d;best=k;}
+            }
+            var c=palette[best];
+            out[idx]=c[0]; out[idx+1]=c[1]; out[idx+2]=c[2]; out[idx+3]=c[3];
+            var er=r-c[0], eg=g-c[1], eb=b-c[2], ea=a-c[3];
+            if(x+1<w){ buf[idx+4]+=er*7/16; buf[idx+5]+=eg*7/16; buf[idx+6]+=eb*7/16; buf[idx+7]+=ea*7/16; }
+            if(y+1<h){
+              if(x>0){ buf[idx+w*4-4]+=er*3/16; buf[idx+w*4-3]+=eg*3/16; buf[idx+w*4-2]+=eb*3/16; buf[idx+w*4-1]+=ea*3/16; }
+              buf[idx+w*4]+=er*5/16; buf[idx+w*4+1]+=eg*5/16; buf[idx+w*4+2]+=eb*5/16; buf[idx+w*4+3]+=ea*5/16;
+              if(x+1<w){ buf[idx+w*4+4]+=er*1/16; buf[idx+w*4+5]+=eg*1/16; buf[idx+w*4+6]+=eb*1/16; buf[idx+w*4+7]+=ea*1/16; }
+            }
+          }
+        }
+        return out.buffer;
+      }
+
+      function tryNext(){
+        if(i>=colorCounts.length){
+          console.warn('[壓縮偵錯] 所有色數都試過仍未達標，使用最後一次成功結果');
+          cb(lastBlob||blob); return;
+        }
+        var buf;
+        try{
+          var freshCopy = new Uint8Array(origBytes).buffer;
+          var png = UPNG.encode([freshCopy], w, h, colorCounts[i]);
+          buf = new Blob([png],{type:'image/png'});
+          console.log('[壓縮偵錯] 色數='+colorCounts[i]+'（無dither）→ '+(buf.size/1024).toFixed(1)+'KB');
+
+          // 嘗試加 dithering 版本，若仍在預算內且畫質更平滑，優先採用
+          try{
+            var q = UPNG.quantize([new Uint8Array(origBytes).buffer], colorCounts[i]);
+            var palette = q.plte.map(function(p){ return unpackRGBA(p.est.rgba); });
+            var dithered = ditherToPalette(origBytes, palette);
+            var pngD = UPNG.encode([dithered], w, h, colorCounts[i]);
+            var bufD = new Blob([pngD],{type:'image/png'});
+            console.log('[壓縮偵錯] 色數='+colorCounts[i]+'（加dither）→ '+(bufD.size/1024).toFixed(1)+'KB');
+            if(bufD.size<=limitKB*1024){ buf=bufD; }
+          }catch(e2){
+            console.warn('[壓縮偵錯] dithering 嘗試失敗，使用無dither版本：', e2);
+          }
+        }catch(e){
+          console.error('[壓縮偵錯] 色數='+colorCounts[i]+' 發生例外，改試下一階：', e);
+          i++; tryNext(); return;
+        }
+        lastBlob=buf;
+        if(buf.size<=limitKB*1024||i>=colorCounts.length-1){ cb(buf); return; }
         i++; tryNext();
-      },'image/png');
+      }
+      var lastBlob=null;
+      tryNext();
+    });
+
+    function legacyQuantizeFallback(){
+      var levels=[64,32,16,12,8,6,5,4];
+      var i=0;
+      function ditheredQuantize(step){
+        var src = baseData.data;
+        var buf = new Float32Array(src.length);
+        for(var p=0;p<src.length;p++) buf[p]=src[p];
+        var id = ctx.createImageData(w,h);
+        var dst = id.data;
+        for(var y=0;y<h;y++){
+          for(var x=0;x<w;x++){
+            var idx=(y*w+x)*4;
+            for(var c=0;c<3;c++){
+              var old = buf[idx+c];
+              var q = Math.round(Math.round(old/step)*step);
+              q = q<0?0:(q>255?255:q);
+              dst[idx+c]=q;
+              var err = old-q;
+              if(x+1<w){ buf[idx+4+c] += err*7/16; }
+              if(y+1<h){
+                if(x>0)   buf[idx+w*4-4+c] += err*3/16;
+                          buf[idx+w*4+c]   += err*5/16;
+                if(x+1<w) buf[idx+w*4+4+c] += err*1/16;
+              }
+            }
+            dst[idx+3]=src[idx+3];
+          }
+        }
+        return id;
+      }
+      function tryNext2(){
+        if(i>=levels.length){ cb(lastBlob||blob); return; }
+        var step = 255/(levels[i]-1);
+        var id = ditheredQuantize(step);
+        ctx.putImageData(id,0,0);
+        cv.toBlob(function(b){
+          if(!b){ cb(blob); return; }
+          lastBlob=b;
+          if(b.size<=limitKB*1024||i>=levels.length-1){ cb(b); return; }
+          i++; tryNext2();
+        },'image/png');
+      }
+      var lastBlob=null;
+      tryNext2();
     }
-    var lastBlob=null;
-    tryNext();
   };
   img.onerror=function(){ cb(blob); };
   img.src=url;
