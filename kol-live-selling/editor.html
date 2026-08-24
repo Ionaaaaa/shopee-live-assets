@@ -2220,8 +2220,8 @@ function parseWorkorderGroups(rows){
         }
         ri2 = rj;
 
-        var isThumbnail = /^01_/.test(layoutName);
-        var isLpbn      = /^02_/.test(layoutName);
+        var isThumbnail = /縮圖/.test(layoutName);
+        var isLpbn      = /lpbn/i.test(layoutName);
 
         if(isThumbnail){
           /* 每個 thumbnail 主行開一個新分頁（不管是否 checked）*/
@@ -2238,7 +2238,7 @@ function parseWorkorderGroups(rows){
               time:            '',
               sub:             host2, /* thumbnail 大字 = 直播主名 */
               subLpbn:         '',
-              layouts:         [layoutName],
+              layouts:         ['01_thumbnail'],
               excludedLayouts: []
             };
           }
@@ -2257,9 +2257,9 @@ function parseWorkorderGroups(rows){
             if(!currentGroup.date && parsedDate) currentGroup.date = parsedDate;
           }
           if(checked2){
-            if(currentGroup.layouts.indexOf(layoutName)===-1) currentGroup.layouts.push(layoutName);
+            if(currentGroup.layouts.indexOf('02_lpbn')===-1) currentGroup.layouts.push('02_lpbn');
           } else {
-            if(currentGroup.excludedLayouts.indexOf(layoutName)===-1) currentGroup.excludedLayouts.push(layoutName);
+            if(currentGroup.excludedLayouts.indexOf('02_lpbn')===-1) currentGroup.excludedLayouts.push('02_lpbn');
           }
           /* LPBN 收完，flush 這個 group */
           flushGroup();
