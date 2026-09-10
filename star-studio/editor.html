@@ -578,6 +578,25 @@ function buildTabs(tabs){
   }, 800);
 }
 
+/* ── 分頁切換防呆 ──
+   問題：點分頁時，主持人圖片是非同步載入的；如果使用者在還沒載完前
+   又點了別的分頁，舊的載入結果會晚一步回來，把「舊分頁的圖」蓋到
+   「現在畫面顯示的分頁」上，看起來就是內容錯亂。
+   解法：每次切換分頁都發一個新的 gen（世代編號）。非同步 callback
+   回來時，如果 gen 已經不是最新的，就代表使用者中途又點了別的分頁，
+   這次結果直接丟棄，不套用、不覆蓋畫面。同時鎖住分頁列＋顯示「載入中」，
+   讓使用者在載入完成前也點不到別的分頁，從源頭避免搶跑。 */
+var _tabGen = 0;
+var _tabBusy = false;
+
+function setTabBarBusy(busy){
+  _tabBusy = busy;
+  var nav = document.getElementById('canvas-nav');
+  if(!nav) return;
+  nav.style.pointerEvents = busy ? 'none' : '';
+  nav.style.opacity = busy ? '0.6' : '';
+}
+
 function renderTabBar(){
   var nav = document.getElementById('canvas-nav');
   if(!nav) return;
@@ -586,15 +605,24 @@ function renderTabBar(){
     var warn = missing
       ? '<span title="找不到主持人圖片，畫布上主持人是空的" style="color:#e5484d;margin-left:4px;">⚠</span>'
       : '';
-    return '<button class="nav-btn'+(i===ACTIVE_TAB?' active':'')+'" onclick="switchTab('+i+')">'+tab.label+warn+'</button>';
+    var loadingTag = (i===ACTIVE_TAB && _tabBusy)
+      ? '<span style="margin-left:4px;font-size:11px;color:var(--text-dim);">載入中…</span>'
+      : '';
+    return '<button class="nav-btn'+(i===ACTIVE_TAB?' active':'')+'" onclick="switchTab('+i+')">'+tab.label+warn+loadingTag+'</button>';
   }).join('');
 }
 
 function switchTab(i){
+  if(i === ACTIVE_TAB && !_tabBusy) return; /* 同一頁不重複觸發 */
+  var myGen = ++_tabGen;
+  setTabBarBusy(true);
   saveCurrentTabState(function(){
+    if(myGen !== _tabGen) return; /* 存檔這段期間又點了別的分頁，這次切換作廢 */
     ACTIVE_TAB = i;
     renderTabBar();
-    applyTabData(TABS[i], true);
+    applyTabData(TABS[i], true, myGen, function(){
+      if(myGen === _tabGen){ setTabBarBusy(false); renderTabBar(); }
+    });
   });
 }
 
@@ -623,7 +651,9 @@ function saveCurrentTabState(cb){
   if(cb) cb();
 }
 
-function applyTabData(tab, loadHost){
+function applyTabData(tab, loadHost, gen, doneCb){
+  if(gen === undefined) gen = _tabGen; /* 沒帶 gen 的舊呼叫點，視為永遠有效 */
+  doneCb = doneCb || function(){};
   var d = tab.data || {};
   if(d.theme) setTheme(d.theme);
   var fields = {
@@ -647,6 +677,7 @@ function applyTabData(tab, loadHost){
       /* broadcastFull 之後再恢復位置，避免被 initHostPos 蓋掉 */
       if(d.canvasState){
         setTimeout(function(){
+          if(gen !== _tabGen) return; /* 使用者已經切到別頁，這次還原作廢 */
           Object.keys(d.canvasState).forEach(function(id){
             var ifr = iframes[id];
             if(ifr && ifr.contentWindow){
@@ -655,14 +686,18 @@ function applyTabData(tab, loadHost){
           });
         }, 300);
       }
+      doneCb();
     } else if(d.brand){
       /* 第一次，從圖庫載入 */
       loadHostByName(d.brand, function(src){
+        if(gen !== _tabGen){ doneCb(); return; } /* 使用者已經切到別頁，這次載入結果丟棄，不套用 */
         if(src){
           d._hostMissing = false;
           loadSrcAsBase64(src, function(b64){
+            if(gen !== _tabGen){ doneCb(); return; } /* 再檢查一次，base64 轉換也是非同步 */
             if(b64){ S.imgs.host = b64; applyHost(b64, d.brand); }
             broadcastFull();
+            doneCb();
           });
         } else {
           /* 找不到任何一張圖：不要默默留空，明確標記＋提示，
@@ -678,6 +713,7 @@ function applyTabData(tab, loadHost){
           toast('找不到「'+d.brand+'」的主持人圖片，請至圖庫手動選取／上傳','err',4000);
           renderTabBar();
           broadcastFull();
+          doneCb();
         }
       });
     } else {
@@ -685,9 +721,11 @@ function applyTabData(tab, loadHost){
       d._hostMissing = false;
       S.imgs.host = null;
       broadcastFull();
+      doneCb();
     }
   } else {
     broadcast();
+    doneCb();
   }
 }
 var iframes = {}; // id -> iframe element
