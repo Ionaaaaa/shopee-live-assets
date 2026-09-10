@@ -609,6 +609,7 @@ function saveCurrentTabState(cb){
   tab.data.time  = v('txt-time')  || tab.data.time;
   tab.data.brand = v('txt-brand') || tab.data.brand;
   if(S.imgs.host) tab.data.hostImg = S.imgs.host;
+  else tab.data.hostImg = null; /* 目前沒有主持人圖，就把存檔也清掉，不要留舊圖 */
 
   /* 直接讀 iframe 的 D 物件，不用 postMessage */
   tab.data.canvasState = {};
@@ -664,7 +665,10 @@ function applyTabData(tab, loadHost){
             broadcastFull();
           });
         } else {
-          /* 找不到任何一張圖：不要默默留空，明確標記＋提示 */
+          /* 找不到任何一張圖：不要默默留空，明確標記＋提示，
+             而且一定要用 broadcastFull()（不是 broadcast()）把 host:null
+             真的送給每個版位 iframe，不然 iframe 裡還留著上一個分頁的
+             主持人圖，畫布上就會看起來像「借用」了別頁的圖。 */
           d._hostMissing = true;
           S.imgs.host = null;
           var hostImgEl = document.getElementById('host-img');
@@ -673,11 +677,14 @@ function applyTabData(tab, loadHost){
           if(hostItemEl) hostItemEl.style.display = 'none';
           toast('找不到「'+d.brand+'」的主持人圖片，請至圖庫手動選取／上傳','err',4000);
           renderTabBar();
-          broadcast();
+          broadcastFull();
         }
       });
     } else {
-      broadcast();
+      /* 這個分頁本來就沒有指定主持人：一樣要清掉畫布上殘留的圖 */
+      d._hostMissing = false;
+      S.imgs.host = null;
+      broadcastFull();
     }
   } else {
     broadcast();
