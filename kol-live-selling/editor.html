@@ -920,12 +920,35 @@ function renderTabBar(){
     return '<button class="nav-btn'+(i===ACTIVE_TAB?' active':'')+'" onclick="switchTab('+i+')">'+tab.label+'</button>';
   }).join('');
   var showDropdown = TABS.length > TAB_OVERFLOW_THRESHOLD;
-  nav.innerHTML =
-    '<div class="nav-tabs-scroll" id="nav-tabs-scroll">'+tabsHtml+'</div>' +
-    (showDropdown
-      ? '<button class="nav-dropdown-btn" id="nav-dropdown-btn" onclick="toggleTabDropdown(event)" title="所有分頁（共'+TABS.length+'頁）">▾</button>'+
-        '<div class="nav-dropdown-panel" id="nav-dropdown-panel"></div>'
-      : '');
+
+  /* 重點：只換分頁按鈕的內容，不要整個重建 #nav-tabs-scroll 這個容器，
+     不然每次切分頁捲動位置都會被重設回最左邊，造成「點哪一個都會整排跳動」的問題 */
+  var scroller = document.getElementById('nav-tabs-scroll');
+  if(!scroller){
+    nav.innerHTML = '<div class="nav-tabs-scroll" id="nav-tabs-scroll"></div>';
+    scroller = document.getElementById('nav-tabs-scroll');
+  }
+  scroller.innerHTML = tabsHtml;
+
+  var dropdownBtn = document.getElementById('nav-dropdown-btn');
+  if(showDropdown && !dropdownBtn){
+    nav.insertAdjacentHTML('beforeend',
+      '<button class="nav-dropdown-btn" id="nav-dropdown-btn" onclick="toggleTabDropdown(event)" title="所有分頁（共'+TABS.length+'頁）">▾</button>'+
+      '<div class="nav-dropdown-panel" id="nav-dropdown-panel"></div>');
+  } else if(!showDropdown && dropdownBtn){
+    dropdownBtn.remove();
+    var oldPanel = document.getElementById('nav-dropdown-panel');
+    if(oldPanel) oldPanel.remove();
+  } else if(showDropdown && dropdownBtn){
+    dropdownBtn.title = '所有分頁（共'+TABS.length+'頁）';
+    var openPanel = document.getElementById('nav-dropdown-panel');
+    if(openPanel && openPanel.classList.contains('open')){
+      openPanel.innerHTML = TABS.map(function(tab, i){
+        return '<div class="nav-dropdown-item'+(i===ACTIVE_TAB?' active':'')+'" onclick="selectTabFromDropdown('+i+')">'+(i+1)+'. '+tab.label+'</div>';
+      }).join('');
+    }
+  }
+
   scrollActiveTabIntoView();
 }
 
@@ -967,15 +990,27 @@ document.addEventListener('click', function(e){
   closeTabDropdown();
 });
 
-/* 把目前分頁平滑捲動到分頁列可視範圍內（例如從下拉選單跳回第一個分頁時，
-   會有一段滑動動畫，而不是瞬間跳過去）*/
+/* 把目前分頁平滑捲動到分頁列可視範圍內。
+   只有在目前分頁「不在可視範圍內」時才捲動（例如點到第 6~7 個超出可視範圍的分頁，
+   或從下拉選單跳回第 1 個分頁時），已經看得到的分頁不會無故整排跳動。*/
 function scrollActiveTabIntoView(){
   var scroller = document.getElementById('nav-tabs-scroll');
   if(!scroller) return;
   var activeBtn = scroller.querySelector('.nav-btn.active');
   if(!activeBtn) return;
-  var target = activeBtn.offsetLeft - 24;
-  scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  var btnLeft  = activeBtn.offsetLeft;
+  var btnRight = btnLeft + activeBtn.offsetWidth;
+  var viewLeft  = scroller.scrollLeft;
+  var viewRight = viewLeft + scroller.clientWidth;
+  var GAP = 12; /* 留一點邊距，避免緊貼邊緣 */
+  if(btnLeft < viewLeft){
+    /* 分頁在可視範圍左邊 → 往左捲，讓它出現在最前面 */
+    scroller.scrollTo({ left: Math.max(0, btnLeft - GAP), behavior: 'smooth' });
+  } else if(btnRight > viewRight){
+    /* 分頁在可視範圍右邊 → 往右捲，讓它剛好完整露出 */
+    scroller.scrollTo({ left: btnRight - scroller.clientWidth + GAP, behavior: 'smooth' });
+  }
+  /* 已經完整可見 → 不捲動 */
 }
 
 function switchTab(i){
