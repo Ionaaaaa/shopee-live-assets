@@ -134,9 +134,13 @@ input[type="file"] { display:none; }
 .canvas-nav {
   height:48px;background:var(--panel);border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:4px;padding:0 16px;flex-shrink:0;
-  overflow-x:auto;scrollbar-width:none;
+  position:relative;
 }
-.canvas-nav::-webkit-scrollbar { display:none; }
+.nav-tabs-scroll {
+  display:flex;align-items:center;gap:4px;flex:1;min-width:0;
+  overflow-x:auto;scrollbar-width:none;scroll-behavior:smooth;
+}
+.nav-tabs-scroll::-webkit-scrollbar { display:none; }
 .nav-btn {
   height:32px;padding:0 16px;border-radius:var(--radius);
   border:1.5px solid transparent;background:transparent;
@@ -145,6 +149,27 @@ input[type="file"] { display:none; }
 }
 .nav-btn:hover { color:var(--text);background:var(--surface); }
 .nav-btn.active { border-color:var(--accent);color:var(--accent);background:var(--accent-dim);font-weight:600; }
+.nav-dropdown-btn {
+  flex-shrink:0;width:28px;height:28px;margin-left:6px;border-radius:var(--radius);
+  border:1.5px solid var(--border2);background:transparent;color:var(--text-dim);
+  font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.nav-dropdown-btn:hover { color:var(--text);border-color:#555; }
+.nav-dropdown-btn.active { color:var(--accent);border-color:var(--accent);background:var(--accent-dim); }
+.nav-dropdown-panel {
+  display:none;position:absolute;top:100%;right:16px;margin-top:4px;
+  background:var(--panel);border:1px solid var(--border2);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);padding:6px;max-height:360px;min-width:220px;
+  overflow-y:auto;z-index:80;
+}
+.nav-dropdown-panel.open { display:block; }
+.nav-dropdown-item {
+  padding:7px 10px;border-radius:6px;font-size:12px;color:var(--text-muted);
+  cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all .1s;
+}
+.nav-dropdown-item:hover { background:var(--surface);color:var(--text); }
+.nav-dropdown-item.active { background:var(--accent-dim);color:var(--accent);font-weight:600; }
 .nav-add-btn {
   height:28px;width:28px;border-radius:var(--radius);border:1.5px solid var(--border2);
   background:transparent;color:var(--text-dim);font-size:16px;cursor:pointer;
@@ -632,6 +657,13 @@ input[type="file"] { display:none; }
           <div class="field">
             <div class="field-label"><span>主持人名稱</span></div>
             <input class="fi" id="txt-brand" type="text" value="XXX" oninput="broadcast()">
+            <div class="toggle-row" style="height:26px;padding:4px 2px 0;cursor:default;" title="名稱過長時可關閉，縮圖只顯示名稱、不加「直播主」字首">
+              <span class="toggle-label">縮圖顯示「直播主」字首</span>
+              <label class="sw">
+                <input type="checkbox" id="chk-host-prefix" checked onchange="onHostPrefixChange()">
+                <span class="sw-track"></span>
+              </label>
+            </div>
           </div>
           <div class="fi-row">
             <div class="field">
@@ -799,6 +831,7 @@ var S = {
   }()),
   imgs:{ host:null, logo1:null, logo2:null },
   subLpbn: '',
+  showHostPrefix: true,   /* 縮圖副標是否加「直播主」字首，名稱過長時可關閉 */
 };
 /* BG_TEXT_DEF → 由 themes.js 的 BN_THEME_MAP 提供，這裡建立相容別名 */
 var BG_TEXT_DEF = {};
@@ -876,12 +909,73 @@ function getTabLabel(g, i){
   return g.date ? g.date : ('第'+(i+1)+'天');
 }
 
+/* 分頁一多（超過 6 個）就會出現右側下拉箭頭，可以直接選分頁，
+   選了之後分頁列會平滑捲動（動畫）到該分頁的位置 */
+var TAB_OVERFLOW_THRESHOLD = 6;
+
 function renderTabBar(){
   var nav = document.getElementById('canvas-nav');
   if(!nav) return;
-  nav.innerHTML = TABS.map(function(tab, i){
+  var tabsHtml = TABS.map(function(tab, i){
     return '<button class="nav-btn'+(i===ACTIVE_TAB?' active':'')+'" onclick="switchTab('+i+')">'+tab.label+'</button>';
   }).join('');
+  var showDropdown = TABS.length > TAB_OVERFLOW_THRESHOLD;
+  nav.innerHTML =
+    '<div class="nav-tabs-scroll" id="nav-tabs-scroll">'+tabsHtml+'</div>' +
+    (showDropdown
+      ? '<button class="nav-dropdown-btn" id="nav-dropdown-btn" onclick="toggleTabDropdown(event)" title="所有分頁（共'+TABS.length+'頁）">▾</button>'+
+        '<div class="nav-dropdown-panel" id="nav-dropdown-panel"></div>'
+      : '');
+  scrollActiveTabIntoView();
+}
+
+/* 下拉選單：列出全部分頁，點了直接跳過去 */
+function toggleTabDropdown(e){
+  if(e) e.stopPropagation();
+  var panel = document.getElementById('nav-dropdown-panel');
+  var btn = document.getElementById('nav-dropdown-btn');
+  if(!panel || !btn) return;
+  if(panel.classList.contains('open')){
+    closeTabDropdown();
+    return;
+  }
+  panel.innerHTML = TABS.map(function(tab, i){
+    return '<div class="nav-dropdown-item'+(i===ACTIVE_TAB?' active':'')+'" onclick="selectTabFromDropdown('+i+')">'+(i+1)+'. '+tab.label+'</div>';
+  }).join('');
+  panel.classList.add('open');
+  btn.classList.add('active');
+}
+
+function closeTabDropdown(){
+  var panel = document.getElementById('nav-dropdown-panel');
+  var btn = document.getElementById('nav-dropdown-btn');
+  if(panel) panel.classList.remove('open');
+  if(btn) btn.classList.remove('active');
+}
+
+function selectTabFromDropdown(i){
+  closeTabDropdown();
+  switchTab(i);
+}
+
+/* 點下拉選單以外的地方時自動收起 */
+document.addEventListener('click', function(e){
+  var panel = document.getElementById('nav-dropdown-panel');
+  var btn = document.getElementById('nav-dropdown-btn');
+  if(!panel || !panel.classList.contains('open')) return;
+  if(panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+  closeTabDropdown();
+});
+
+/* 把目前分頁平滑捲動到分頁列可視範圍內（例如從下拉選單跳回第一個分頁時，
+   會有一段滑動動畫，而不是瞬間跳過去）*/
+function scrollActiveTabIntoView(){
+  var scroller = document.getElementById('nav-tabs-scroll');
+  if(!scroller) return;
+  var activeBtn = scroller.querySelector('.nav-btn.active');
+  if(!activeBtn) return;
+  var target = activeBtn.offsetLeft - 24;
+  scroller.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
 }
 
 function switchTab(i){
@@ -910,6 +1004,7 @@ function saveCurrentTabState(cb){
   tab.data.date  = v('txt-date');
   tab.data.time  = v('txt-time');
   tab.data.brand = v('txt-brand');
+  tab.data.showHostPrefix = (S.showHostPrefix !== false);
   /* hostImg：來自上傳資料夾的圖才存 base64（否則載入時依 brand 名從 hosts/ 重抓）*/
   if(tab.data.hostImgUploaded && S.imgs.host){
     tab.data.hostImg = S.imgs.host;
@@ -972,6 +1067,10 @@ function applyTabData(tab, loadHost){
   if(themeKey) setTheme(themeKey);
   /* 把 LPBN 副標存到 S 供 broadcast 分版位使用 */
   S.subLpbn = d.subLpbn || '';
+  /* 「直播主」字首開關：沒存過（舊分頁）預設為 true（顯示）*/
+  S.showHostPrefix = (d.showHostPrefix !== false);
+  var chkHostPrefixEl = document.getElementById('chk-host-prefix');
+  if(chkHostPrefixEl) chkHostPrefixEl.checked = S.showHostPrefix;
 
   /* txt-main（主標）固定為「直播灑50%蝦幣回饋」，不跟分頁切換 */
   var fields = {
@@ -1267,11 +1366,20 @@ function broadcastPayload(payload){
       if(id === '02_lpbn'){
         p = Object.assign({}, payload, { main: '直播灑50%蝦幣回饋', sub: S.subLpbn || '' });
       } else if(id === '01_thumbnail'){
-        p = Object.assign({}, payload, { sub: '直播主 ' + (payload.brand || '') });
+        var hostPrefix = (S.showHostPrefix === false) ? '' : '直播主 ';
+        p = Object.assign({}, payload, { sub: hostPrefix + (payload.brand || '') });
       }
       ifr.contentWindow.postMessage({type:'BN_UPDATE', payload:p},'*');
     }
   });
+}
+
+/* ── 「直播主」字首開關（縮圖版位用，名稱過長時可關閉）── */
+function onHostPrefixChange(){
+  var chk = document.getElementById('chk-host-prefix');
+  S.showHostPrefix = chk ? chk.checked : true;
+  if(TABS[ACTIVE_TAB]) TABS[ACTIVE_TAB].data.showHostPrefix = S.showHostPrefix;
+  broadcastText();
 }
 
 function broadcastText(){
