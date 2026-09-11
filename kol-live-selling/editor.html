@@ -714,30 +714,18 @@ input[type="file"] { display:none; }
         <div style="font-size:11px;color:var(--text-dim);">支援 .xlsx 格式</div>
       </div>
       <input type="file" id="importExcelFile" accept=".xlsx" style="display:none" onchange="handleImportExcel(event)">
-      <div id="import-logo-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
-        onclick="document.getElementById('importLogoFolder').click()"
+      <!-- ── 整合資料夾（新，優先使用）：資料夾名稱＝KOL/直播主名稱，裡面同時放主持人照片與品牌LOGO ── -->
+      <div id="import-combined-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
+        onclick="document.getElementById('importCombinedFolder').click()"
         onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''"
         ondragover="event.preventDefault();if(this.dataset.success!=='1')this.style.borderColor='var(--accent)'"
         ondragleave="if(this.dataset.success!=='1')this.style.borderColor=''"
-        ondrop="onImportZoneDropKOL(event,'logo')">
+        ondrop="onImportZoneDropKOL(event,'combined')">
         <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><path d="M1 4h14v10H1z"/><path d="M1 4l2-2h4l2 2"/></svg>
-        <div id="import-logo-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">點擊或拖曳上傳 Logo 素材資料夾（可選）</div>
-        <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動對應工單 Logo</div>
+        <div id="import-combined-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">點擊或拖曳上傳整合資料夾（可選）</div>
+        <div style="font-size:11px;color:var(--text-dim);">資料夾內每個子資料夾＝一位KOL／直播主，裡面同時放照片與品牌LOGO，會自動比對</div>
       </div>
-      <input type="file" id="importLogoFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportLogoFolder(event)">
-
-      <!-- ── 直播主圖片資料夾（新增）── -->
-      <div id="import-host-zone" style="border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:all .15s;"
-        onclick="document.getElementById('importHostFolder').click()"
-        onmouseenter="if(this.dataset.success!=='1') this.style.borderColor='var(--accent)'" onmouseleave="if(this.dataset.success!=='1') this.style.borderColor=''"
-        ondragover="event.preventDefault();if(this.dataset.success!=='1')this.style.borderColor='var(--accent)'"
-        ondragleave="if(this.dataset.success!=='1')this.style.borderColor=''"
-        ondrop="onImportZoneDropKOL(event,'host')">
-        <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--text-dim)" stroke-width="1.2" style="margin-bottom:5px;"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
-        <div id="import-host-label" style="font-size:12px;color:var(--text-muted);margin-bottom:1px;">點擊或拖曳上傳直播主圖片資料夾（可選）</div>
-        <div style="font-size:11px;color:var(--text-dim);">選整個資料夾，依檔名自動比對主持人</div>
-      </div>
-      <input type="file" id="importHostFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportHostFolder(event)">
+      <input type="file" id="importCombinedFolder" webkitdirectory mozdirectory multiple accept="image/*" style="display:none" onchange="handleImportCombinedFolder(event)">
 
       <div id="import-status" style="display:none;padding:8px 12px;border-radius:var(--radius);background:rgba(61,153,112,.08);border:1px solid rgba(61,153,112,.3);font-size:11px;color:#3d9970;line-height:1.7;"></div>
       <button class="dl-btn" onclick="doImport()">確認匯入</button>
@@ -1954,7 +1942,130 @@ function setRefLayer(id, input){
 
 
 /* ── 匯入工單系統 ── */
-var _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0};
+var _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0,combinedMap:{},combinedCount:0};
+
+/* ── 整合資料夾上傳處理（優先使用）：資料夾名稱＝KOL名稱，
+   裡面同時放主持人照片＋品牌LOGO，匯入時依「資料夾名稱＝直播主名」
+   先鎖定該位KOL的資料夾，再用「LOGO欄位文字」去比對哪張是LOGO，
+   剩下的圖片就當作主持人照片，這樣同名檔案在不同KOL之間也不會互相比對錯 ── */
+function handleImportCombinedFolder(e){
+  var files=Array.from(e.target.files||[]);
+  processCombinedFiles(files);
+  e.target.value='';
+}
+function processCombinedFiles(files){
+  var imgs=files.filter(function(f){return /\.(png|jpg|jpeg|webp|gif)$/i.test(f.name);});
+  if(!imgs.length){toast('找不到圖片','err');return;}
+  _importPending.combinedMap={};_importPending.combinedCount=0;
+  var done=0;
+  pm.show('讀取整合資料夾');
+  pm.update(0, '0/'+imgs.length);
+  imgs.forEach(function(f){
+    /* 點擊選資料夾有 webkitRelativePath；拖曳資料夾沒有，改用 _bnPath 備援 */
+    var rel=f.webkitRelativePath||f._bnPath||'';
+    var folderKey='';
+    if(rel){var p=rel.split('/');if(p.length>=2)folderKey=p[p.length-2].trim();}
+    if(!folderKey) folderKey='(root)';
+    var r=new FileReader();
+    r.onload=function(ev){
+      if(!_importPending.combinedMap[folderKey]) _importPending.combinedMap[folderKey]=[];
+      _importPending.combinedMap[folderKey].push({
+        name: f.name.replace(/\.[^.]+$/,'').trim(),
+        src: ev.target.result
+      });
+      done++;
+      pm.update(done/imgs.length*100, done+'/'+imgs.length);
+      if(done>=imgs.length){
+        _importPending.combinedCount=imgs.length;
+        var folderN=Object.keys(_importPending.combinedMap).length;
+        var z=document.getElementById('import-combined-zone'),l=document.getElementById('import-combined-label');
+        if(z){z.dataset.success='1';z.style.borderStyle='solid';z.style.borderColor='var(--accent)';z.style.background='rgba(238,77,45,.06)';}
+        if(l){l.textContent='✓ 已載入 '+folderN+' 位KOL、共 '+imgs.length+' 張圖片';l.style.color='var(--accent)';}
+        _updateImportStatus();
+        pm.done('整合資料夾讀取完成');
+        pm.hide();
+      }
+    };r.readAsDataURL(f);
+  });
+}
+/* 用「資料夾名稱＝直播主名」鎖定該位KOL的資料夾，
+   再用 logoName 文字去比對哪一張是LOGO，剩下的第一張當作主持人照片 */
+/* 把名稱正規化：拿掉空白，也拿掉常見的分隔符號（-、_、.、,、、、/、\、|、括號等），
+   這樣「台灣-姑娘-阿柔」「台灣_姑娘_阿柔」都會變成「台灣姑娘阿柔」，不會因為中間被符號
+   打斷就比對不到。 */
+function normalizeNameStr(s){
+  return (s||'')
+    .replace(/[\s\-_·．.,，、\/\\|()（）\[\]【】~～]+/g, '')
+    .toLowerCase();
+}
+/* 把名稱拆成一段段：連續中文字一段、連續英數字一段（例如「巧筑Eva」拆成 ["巧筑","eva"]），
+   用來處理「順序顛倒」的檔名（例如檔名寫成「Eva巧筑」）*/
+function nameTokens(s){
+  var m = normalizeNameStr(s).match(/[\u4e00-\u9fff]+|[a-z0-9]+/g);
+  return m || [];
+}
+/* 檔名模糊比對：
+   1) 完全相同、或互相包含（去除空白/符號、忽略大小寫）就算符合
+   2) 上面沒中的話，再檢查目標名稱拆出來的每一段文字是否「不分順序」都出現在檔名裡，
+      用來抓「巧筑Eva」vs 檔名「Eva巧筑」這種順序顛倒的狀況 */
+function fuzzyNameMatch(fileName, targetName){
+  if(!targetName) return false;
+  var fn=normalizeNameStr(fileName);
+  var tn=normalizeNameStr(targetName);
+  if(!fn||!tn) return false;
+  if(fn===tn || fn.indexOf(tn)!==-1 || tn.indexOf(fn)!==-1) return true;
+  var tokens=nameTokens(targetName);
+  if(tokens.length>1 && tokens.every(function(t){ return t.length>=2 && fn.indexOf(t)!==-1; })){
+    return true;
+  }
+  return false;
+}
+
+/* allLogoNamesForBrand：同一位KOL資料夾裡「所有工單」會用到的LOGO名稱清單。
+   同一位主持人如果代播很多品牌，資料夾裡就會混著好幾張LOGO，
+   主持人照片的判斷依優先順序：
+   1) 檔名本身就有寫到「KOL／主持人名稱」（跟資料夾同名）的，最準，直接採用
+   2) 找不到，才用「排除法」：把這位主持人在整份工單裡所有會用到的LOGO名稱都排除掉，
+      剩下沒被任何LOGO名稱對到的檔案，才當作主持人照片
+   3) 上面兩種都找不到，才退回「排除目前這筆LOGO後剩下第一張」的舊邏輯（保底） */
+function matchCombinedFolder(brandName, logoName, allLogoNamesForBrand){
+  var result={hostSrc:null, logoSrc:null};
+  var map=_importPending.combinedMap||{};
+  var keys=Object.keys(map);
+  if(!brandName || !keys.length) return result;
+  var bn=brandName.trim();
+  var bnNorm=bn.replace(/\s+/g,'').toLowerCase();
+  var folderKey = keys.find(function(k){ return k===bn; }) ||
+                  keys.find(function(k){ return k.replace(/\s+/g,'').toLowerCase()===bnNorm; });
+  if(!folderKey) return result;
+  var files=(map[folderKey]||[]);
+
+  /* 目前這筆工單對應的LOGO */
+  var logoFile = logoName ? files.find(function(f){ return fuzzyNameMatch(f.name, logoName); }) : null;
+  if(logoFile) result.logoSrc = logoFile.src;
+
+  /* 優先順序 1：檔名本身有寫到KOL名稱（資料夾名稱），最準確 */
+  var byName = files.find(function(f){ return fuzzyNameMatch(f.name, bn); });
+  if(byName){
+    result.hostSrc = byName.src;
+    return result;
+  }
+
+  /* 優先順序 2：排除法，把這位主持人在整份工單裡所有LOGO名稱都排除，剩下的當主持人照片 */
+  var allLogoNames = (allLogoNamesForBrand||[]).filter(Boolean);
+  var hostCandidates = files.filter(function(f){
+    return !allLogoNames.some(function(ln){ return fuzzyNameMatch(f.name, ln); });
+  });
+  if(hostCandidates.length){
+    result.hostSrc = hostCandidates[0].src;
+    return result;
+  }
+
+  /* 優先順序 3：保底，排除目前這筆LOGO後剩下第一張 */
+  var remaining = logoFile ? files.filter(function(f){return f!==logoFile;}) : files;
+  if(remaining.length) result.hostSrc = remaining[0].src;
+  return result;
+}
 
 function handleImportLogoFolder(e){
   var files=Array.from(e.target.files||[]);
@@ -1997,6 +2108,7 @@ function _updateImportStatus(){
   var el=document.getElementById('import-status');if(!el)return;
   var lines=[];
   if(_importPending.excelFile)lines.push('📄 '+_importPending.excelFile.name);
+  if(_importPending.combinedCount)lines.push('📁 整合資料夾：'+Object.keys(_importPending.combinedMap||{}).length+' 位KOL、'+_importPending.combinedCount+' 張圖');
   if(_importPending.logoCount)lines.push('🖼 Logo：'+_importPending.logoCount+' 個');
   if(_importPending.hostCount)lines.push('👤 直播主圖片：'+_importPending.hostCount+' 個');
   el.style.display=lines.length?'block':'none';el.innerHTML=lines.join('<br>');
@@ -2091,8 +2203,24 @@ function doImport(){
       var groups=parseWorkorderGroups(rows);
       if(!groups.length){toast('找不到分頁資料','err');pm.hide();return;}
       pm.update(70, '比對 Logo／直播主圖片…');
+      /* 同一位主持人可能代播很多品牌：先把每位主持人在這份工單裡會用到的
+         所有LOGO名稱收集起來，等一下比對主持人照片時才能把這些LOGO名稱
+         全部排除掉，避免誤把其他品牌的LOGO當成主持人照片 */
+      var logoNamesByBrand = {};
       groups.forEach(function(g){
-        /* Logo 自動對應 */
+        if(!g.brand) return;
+        if(!logoNamesByBrand[g.brand]) logoNamesByBrand[g.brand] = [];
+        if(g.logoName) logoNamesByBrand[g.brand].push(g.logoName);
+      });
+      groups.forEach(function(g){
+        /* 優先用「整合資料夾」比對：資料夾名稱＝直播主名，資料夾內用 LOGO 文字找出對應的品牌LOGO，
+           剩下的圖片當主持人照片 */
+        var combined = matchCombinedFolder(g.brand, g.logoName, logoNamesByBrand[g.brand]);
+        if(combined.logoSrc && !g.logo2Img) g.logo2Img = combined.logoSrc;
+        if(combined.hostSrc && !g.hostImg){ g.hostImg = combined.hostSrc; g.hostImgUploaded = true; }
+
+        /* 向下相容：沒有整合資料夾、或整合資料夾找不到對應資料，才退回舊的
+           「Logo 資料夾」／「直播主圖片資料夾」分開比對的方式 */
         if(g.logoName&&!g.logo2Img){var s=findLogoSrcByName(g.logoName);if(s)g.logo2Img=s;}
         /* Host 自動對應：依 brand（直播主名）從 hostMap 找第一張符合的圖 */
         if(g.brand&&!g.hostImg&&_importPending.hostCount){
@@ -2114,11 +2242,10 @@ function doImport(){
   };r.readAsBinaryString(_importPending.excelFile);
 }
 function openImportModal(){
-  _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0};
-  ['import-excel-zone','import-logo-zone','import-host-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.dataset.success='';el.style.borderStyle='dashed';el.style.borderColor='';el.style.background='';}});
+  _importPending={excelFile:null,logoMap:{},logoCount:0,hostMap:{},hostCount:0,combinedMap:{},combinedCount:0};
+  ['import-excel-zone','import-combined-zone'].forEach(function(id){var el=document.getElementById(id);if(el){el.dataset.success='';el.style.borderStyle='dashed';el.style.borderColor='';el.style.background='';}});
   var el=document.getElementById('import-excel-label');if(el){el.textContent='點擊或拖曳上傳 Excel 工單';el.style.color='';}
-  var ll=document.getElementById('import-logo-label');if(ll){ll.textContent='點擊或拖曳上傳 Logo 素材資料夾（可選）';ll.style.color='';}
-  var hl=document.getElementById('import-host-label');if(hl){hl.textContent='點擊或拖曳上傳直播主圖片資料夾（可選）';hl.style.color='';}
+  var cl=document.getElementById('import-combined-label');if(cl){cl.textContent='點擊或拖曳上傳整合資料夾（可選）';cl.style.color='';}
   var st=document.getElementById('import-status');if(st)st.style.display='none';
   document.getElementById('popup-import').classList.add('open');
 }
@@ -2195,7 +2322,7 @@ function onImportZoneDropKOL(event, type){
     return;
   }
 
-  /* type === 'logo' 或 'host'：都是資料夾，遞迴讀取後分別餵進對應的處理函式 */
+  /* type === 'logo'、'host' 或 'combined'：都是資料夾，遞迴讀取後分別餵進對應的處理函式 */
   var items = event.dataTransfer.items;
   if(!items || !items.length){ toast('無法讀取拖曳內容','err'); return; }
 
@@ -2215,6 +2342,7 @@ function onImportZoneDropKOL(event, type){
     readEntryFilesRecursiveKOL(ent, allFiles, function(){
       if(--remaining === 0){
         if(type === 'logo') processLogoFiles(allFiles);
+        else if(type === 'combined') processCombinedFiles(allFiles);
         else processHostFiles(allFiles);
       }
     });
@@ -2364,7 +2492,10 @@ function parseWorkorderGroups(rows){
         ri2 = rj;
 
         var isThumbnail = /縮圖/.test(layoutName);
-        var isLpbn      = /lpbn/i.test(layoutName);
+        /* 第二版位在工單上的名稱不一定固定寫「LPBN」，也可能是「LPE」、「大廳」等其他寫法，
+           用文字比對常常會漏掉，所以改成：只要是打勾列（isMain）又不是縮圖，就當作第二版位，
+           這樣勾選/不勾選的排除邏輯才不會因為文字對不上而失效，導致沒勾的版位還是被顯示出來 */
+        var isLpbn      = !isThumbnail;
 
         if(isThumbnail){
           /* 每個 thumbnail 主行開一個新分頁（不管是否 checked）*/
