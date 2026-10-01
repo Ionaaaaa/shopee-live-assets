@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>明星直播間 編輯器</title>
 <style>
-@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
-@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
-@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('fonts/ShopeeNotoSanscontent-Bold.woff2') format('woff2'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('fonts/ShopeeNotoSanscontent-Medium.woff2') format('woff2'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('fonts/ShopeeNotoSanscontent-Regular.woff2') format('woff2'); }
 
 *,*::before,*::after { box-sizing:border-box;margin:0;padding:0; }
 :root {
@@ -627,6 +627,13 @@ input[type="file"] { display:none; }
             上傳贊助商 Logo
           </div>
           <input type="file" id="logo2Up" accept="image/*" onchange="handleLogo2Upload(event)" style="display:none">
+          <div class="toggle-row" style="height:26px;padding:6px 2px 0;cursor:default;" title="勾選後不畫 Logo 後面的底色，Logo 直接疊在背景上（每頁各自設定）">
+            <span class="toggle-label">Logo 不加底色</span>
+            <label class="sw">
+              <input type="checkbox" id="chk-logo2-nobg" onchange="onLogo2NoBgChange()">
+              <span class="sw-track"></span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -820,6 +827,7 @@ var S = {
   imgs:{ host:null, logo1:null, logo2:null },
   subLpbn: '',
   showHostPrefix: true,   /* 縮圖副標是否加「直播主」字首，名稱過長時可關閉 */
+  logo2NoBg: false,       /* 贊助商 Logo 不加底色（預設加：採樣底色／透明時補白底）*/
 };
 /* BG_TEXT_DEF → 由 themes.js 的 BN_THEME_MAP 提供，這裡建立相容別名 */
 var BG_TEXT_DEF = {};
@@ -917,6 +925,7 @@ function renderTabBar(){
     scroller = document.getElementById('nav-tabs-scroll');
   }
   scroller.innerHTML = tabsHtml;
+  enableTabDragScroll(scroller);
 
   var dropdownBtn = document.getElementById('nav-dropdown-btn');
   if(showDropdown && !dropdownBtn){
@@ -938,6 +947,42 @@ function renderTabBar(){
   }
 
   scrollActiveTabIntoView();
+}
+
+/* ── 分頁列：滑鼠按住左右拖曳捲動 ──
+   移動超過 TAB_DRAG_THRESHOLD px 才算拖曳；拖曳放開時不觸發分頁切換（避免誤點）。
+   只是輕點（沒移動）則照常切換分頁。 */
+var TAB_DRAG_THRESHOLD = 5;
+function enableTabDragScroll(scroller){
+  if(scroller.dataset.dragBound === '1') return; /* 只綁一次 */
+  scroller.dataset.dragBound = '1';
+  scroller.style.cursor = 'grab';
+  var startX = 0, startLeft = 0, down = false, dragged = false;
+  scroller.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    down = true; dragged = false;
+    startX = e.clientX; startLeft = scroller.scrollLeft;
+  });
+  window.addEventListener('mousemove', function(e){
+    if(!down) return;
+    var dx = e.clientX - startX;
+    if(!dragged && Math.abs(dx) > TAB_DRAG_THRESHOLD){
+      dragged = true;
+      scroller.style.cursor = 'grabbing';
+      scroller.style.scrollBehavior = 'auto';
+    }
+    if(dragged){ scroller.scrollLeft = startLeft - dx; e.preventDefault(); }
+  });
+  window.addEventListener('mouseup', function(){
+    if(!down) return;
+    down = false;
+    scroller.style.cursor = 'grab';
+    scroller.style.scrollBehavior = '';
+  });
+  /* 拖曳結束後的那次 click 吃掉，不切換分頁 */
+  scroller.addEventListener('click', function(e){
+    if(dragged){ e.stopPropagation(); e.preventDefault(); dragged = false; }
+  }, true);
 }
 
 /* 下拉選單：列出全部分頁，點了直接跳過去 */
@@ -995,8 +1040,9 @@ function scrollActiveTabIntoView(){
     /* 分頁在可視範圍左邊 → 往左捲，讓它出現在最前面 */
     scroller.scrollTo({ left: Math.max(0, btnLeft - GAP), behavior: 'smooth' });
   } else if(btnRight > viewRight){
-    /* 分頁在可視範圍右邊 → 往右捲，讓它剛好完整露出 */
-    scroller.scrollTo({ left: btnRight - scroller.clientWidth + GAP, behavior: 'smooth' });
+    /* 分頁在可視範圍右邊（含只露出一半）→ 捲到讓它變成最左邊第一個，
+       例如可視 5 個時，點第 6 頁 → 6~10 排到前面；點第 11 頁 → 11~15 排到前面 */
+    scroller.scrollTo({ left: Math.max(0, btnLeft - GAP), behavior: 'smooth' });
   }
   /* 已經完整可見 → 不捲動 */
 }
@@ -1028,6 +1074,7 @@ function saveCurrentTabState(cb){
   tab.data.time  = v('txt-time');
   tab.data.brand = v('txt-brand');
   tab.data.showHostPrefix = (S.showHostPrefix !== false);
+  tab.data.logo2NoBg = !!S.logo2NoBg;
   /* hostImg：來自上傳資料夾的圖才存 base64（否則載入時依 brand 名從 hosts/ 重抓）*/
   if(tab.data.hostImgUploaded && S.imgs.host){
     tab.data.hostImg = S.imgs.host;
@@ -1094,6 +1141,10 @@ function applyTabData(tab, loadHost){
   S.showHostPrefix = (d.showHostPrefix !== false);
   var chkHostPrefixEl = document.getElementById('chk-host-prefix');
   if(chkHostPrefixEl) chkHostPrefixEl.checked = S.showHostPrefix;
+  /* 「Logo 不加底色」：沒存過（舊分頁／舊暫存檔）預設 false（照舊加底色）*/
+  S.logo2NoBg = !!d.logo2NoBg;
+  var chkLogo2NoBgEl = document.getElementById('chk-logo2-nobg');
+  if(chkLogo2NoBgEl) chkLogo2NoBgEl.checked = S.logo2NoBg;
 
   /* txt-main（主標）固定為「直播灑50%蝦幣回饋」，不跟分頁切換 */
   var fields = {
@@ -1385,12 +1436,12 @@ function broadcastPayload(payload){
            02_lpbn        → S.subLpbn（LPBN 副標文案）
            01_thumbnail   → 「直播主 XXX」（brand name）
            其他版位       → payload.sub（brand name）*/
-      var p = payload;
+      var p = Object.assign({}, payload, { logo2NoBg: !!S.logo2NoBg });
       if(id === '02_lpbn'){
-        p = Object.assign({}, payload, { main: '直播灑50%蝦幣回饋', sub: S.subLpbn || '' });
+        p = Object.assign({}, p, { main: '直播灑50%蝦幣回饋', sub: S.subLpbn || '' });
       } else if(id === '01_thumbnail'){
         var hostPrefix = (S.showHostPrefix === false) ? '' : '直播主 ';
-        p = Object.assign({}, payload, { sub: hostPrefix + (payload.brand || '') });
+        p = Object.assign({}, p, { sub: hostPrefix + (payload.brand || '') });
       }
       ifr.contentWindow.postMessage({type:'BN_UPDATE', payload:p},'*');
     }
@@ -1402,6 +1453,14 @@ function onHostPrefixChange(){
   var chk = document.getElementById('chk-host-prefix');
   S.showHostPrefix = chk ? chk.checked : true;
   if(TABS[ACTIVE_TAB]) TABS[ACTIVE_TAB].data.showHostPrefix = S.showHostPrefix;
+  broadcastText();
+}
+
+/* ── 「Logo 不加底色」開關（每頁各自記住）── */
+function onLogo2NoBgChange(){
+  var chk = document.getElementById('chk-logo2-nobg');
+  S.logo2NoBg = chk ? chk.checked : false;
+  if(TABS[ACTIVE_TAB]) TABS[ACTIVE_TAB].data.logo2NoBg = S.logo2NoBg;
   broadcastText();
 }
 
@@ -1599,12 +1658,14 @@ function buildHostPopup(){
         var hsrc = host.src;
         var hname = host.name;
         closePopup('host');
+        var tabAtPick = ACTIVE_TAB; /* 縮圖是非同步的，記下當時的分頁 */
         loadSrcAsBase64(hsrc, function(b64){
-          if(b64){
+          if(!b64){ toast('圖片載入失敗','err'); return; }
+          shrinkImageSrc(b64, function(small){ /* 超過尺寸上限先縮小 */
+            if(ACTIVE_TAB !== tabAtPick) return; /* 縮圖期間已切走分頁 → 不套用，避免套到別頁 */
             TABS[ACTIVE_TAB].data.hostImgUploaded = true;
-            applyHost(b64, hname);
-          }
-          else { toast('圖片載入失敗','err'); }
+            applyHost(small, hname);
+          });
         });
       };
       body.appendChild(card);
@@ -1670,12 +1731,63 @@ function setTheme(t){
   broadcast();
 }
 
+/* ── 直播主照片尺寸上限 ──
+   相機原圖（例如 4672×7008）存成 base64 一張就上百 MB，30 頁的暫存檔會超過
+   Chrome 字串上限（約 512MB），整包下載卡在 92%（RangeError: Invalid string length）。
+   照片「進入編輯器」時，長邊超過 HOST_IMG_MAX_SIDE 就等比縮小（維持 PNG、保留透明）；
+   沒超過的照片原檔照用、不重新轉檔。
+   版位初始大小是依照片尺寸自動算的，所以縮小後畫面上看起來一樣大。
+   套用位置：整合資料夾匯入、直播主圖片資料夾匯入、個別上傳主持人、從圖庫選照片。
+   ※ 不套用在 loadHostByName（hosts/ 路徑自動載入），避免舊暫存檔的縮放比例對不上。 */
+var HOST_IMG_MAX_SIDE = 2000;   // 長邊上限（px），可調整
+var _shrinkQueue = [];          // 一次只縮一張，避免同時解碼多張大圖撐爆記憶體
+var _shrinkBusy  = false;
+function shrinkImageSrc(src, cb){
+  _shrinkQueue.push({src:src, cb:cb});
+  if(!_shrinkBusy) _runShrinkQueue();
+}
+function _runShrinkQueue(){
+  var job = _shrinkQueue.shift();
+  if(!job){ _shrinkBusy = false; return; }
+  _shrinkBusy = true;
+  function finish(out){
+    try{ job.cb(out); }catch(e){ console.error('[縮圖] callback 錯誤', e); }
+    setTimeout(_runShrinkQueue, 0);
+  }
+  if(!job.src){ finish(job.src); return; }
+  var img = new Image();
+  img.onload = function(){
+    var w = img.naturalWidth, h = img.naturalHeight, longSide = Math.max(w, h);
+    if(!longSide || longSide <= HOST_IMG_MAX_SIDE){ finish(job.src); return; } /* 沒超過：原檔照用 */
+    var sc = HOST_IMG_MAX_SIDE / longSide;
+    var cv = document.createElement('canvas');
+    cv.width  = Math.round(w * sc);
+    cv.height = Math.round(h * sc);
+    var ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    try{
+      var out = cv.toDataURL('image/png');
+      console.log('[縮圖] '+w+'×'+h+' → '+cv.width+'×'+cv.height+'，'
+        +(job.src.length/1e6).toFixed(1)+'MB → '+(out.length/1e6).toFixed(1)+'MB');
+      finish(out);
+    }catch(e){ console.warn('[縮圖] 失敗，使用原圖', e); finish(job.src); }
+  };
+  img.onerror = function(){ finish(job.src); };
+  img.src = job.src;
+}
+
 /* ── Upload ── */
 function handleUpload(e,key){
   var file=e.target.files[0]; if(!file) return;
   var reader=new FileReader();
   reader.onload=function(ev){
-    var src=ev.target.result;
+    /* 主持人照片：超過尺寸上限先縮小（見 shrinkImageSrc） */
+    if(key==='host') shrinkImageSrc(ev.target.result, applyUpload);
+    else applyUpload(ev.target.result);
+  };
+  function applyUpload(src){
     S.imgs[key]=src;
     var imgEl=document.getElementById(key+'-img');
     if(imgEl){ imgEl.src=src; imgEl.dataset.baseSrc=src; }
@@ -1684,7 +1796,7 @@ function handleUpload(e,key){
     var labels={host:'主持人已載入',logo1:'蝦皮直播 Logo 已載入',logo2:'明星直播間 Logo 已載入'};
     markUpload(key,labels[key]);
     broadcastFull(); // 上傳時才傳圖片
-  };
+  }
   reader.readAsDataURL(file);
   e.target.value='';
 }
@@ -1854,12 +1966,54 @@ function saveAllTabsState(cb){
         };
       })
     };
+    dedupeSnapshotImages(snapshot);
     cb(snapshot);
   }
 }
 
+/* ── 暫存檔圖片去重 ──
+   同一位直播主代播多個品牌時，同一張照片（base64）原本會在每個分頁各存一份，
+   30 頁的暫存 JSON 可能膨脹到 100MB 以上，整包下載會卡在 92%。
+   改成：相同內容的圖片只在 snapshot.assets 存一次，分頁裡改存 "@asset:編號"。
+   ・只比對「內容完全相同」的圖片，不同照片一定分開存
+   ・只處理下面 SNAPSHOT_IMG_FIELDS 列出的欄位；canvasState（位置／縮放）不受影響
+   ・只改 snapshot 的複本，不動編輯中的 TABS 資料
+   讀取端見 applyState() 開頭的 resolveSnapshotImages()。 */
+var SNAPSHOT_IMG_FIELDS = ['hostImg', 'logo2Img'];
+var SNAPSHOT_ASSET_PREFIX = '@asset:';
+function dedupeSnapshotImages(snapshot){
+  var assets = [], indexOf = {};
+  (snapshot.tabs || []).forEach(function(t){
+    var d = t.data;
+    if(!d) return;
+    SNAPSHOT_IMG_FIELDS.forEach(function(key){
+      var src = d[key];
+      if(typeof src !== 'string' || src.indexOf('data:') !== 0) return; /* 只處理 base64 圖片 */
+      if(!indexOf.hasOwnProperty(src)){ indexOf[src] = assets.length; assets.push(src); }
+      d[key] = SNAPSHOT_ASSET_PREFIX + indexOf[src];
+    });
+  });
+  snapshot.assets = assets;
+}
+function resolveSnapshotImages(data){
+  /* 舊格式暫存檔沒有 assets → 不處理，照原本方式讀 */
+  if(!data || !Array.isArray(data.assets)) return;
+  (data.tabs || []).forEach(function(t){
+    var d = t.data;
+    if(!d) return;
+    SNAPSHOT_IMG_FIELDS.forEach(function(key){
+      var ref = d[key];
+      if(typeof ref !== 'string' || ref.indexOf(SNAPSHOT_ASSET_PREFIX) !== 0) return;
+      var src = data.assets[parseInt(ref.slice(SNAPSHOT_ASSET_PREFIX.length), 10)];
+      if(src === undefined) console.warn('[暫存] 找不到圖片 '+ref+'（分頁 '+(t.label||t.id)+'）');
+      d[key] = src || null;
+    });
+  });
+}
+
 function applyState(data){
   if(!data) return;
+  resolveSnapshotImages(data); /* 把 "@asset:編號" 還原成圖片 */
   /* version:2 = 全分頁格式 */
   if(data.version === 2){
     if(data.theme) setTheme(data.theme);
@@ -1967,11 +2121,12 @@ function processCombinedFiles(files){
     if(rel){var p=rel.split('/');if(p.length>=2)folderKey=p[p.length-2].trim();}
     if(!folderKey) folderKey='(root)';
     var r=new FileReader();
-    r.onload=function(ev){
+    r.onload=function(ev){ shrinkImageSrc(ev.target.result, onCombinedRead); }; /* 超過尺寸上限先縮小 */
+    function onCombinedRead(src){
       if(!_importPending.combinedMap[folderKey]) _importPending.combinedMap[folderKey]=[];
       _importPending.combinedMap[folderKey].push({
         name: f.name.replace(/\.[^.]+$/,'').trim(),
-        src: ev.target.result
+        src: src
       });
       done++;
       pm.update(done/imgs.length*100, done+'/'+imgs.length);
@@ -1985,7 +2140,8 @@ function processCombinedFiles(files){
         pm.done('整合資料夾讀取完成');
         pm.hide();
       }
-    };r.readAsDataURL(f);
+    }
+    r.readAsDataURL(f);
   });
 }
 /* 用「資料夾名稱＝直播主名」鎖定該位KOL的資料夾，
@@ -2134,12 +2290,13 @@ function processHostFiles(files){
     var rel=f.webkitRelativePath||f._bnPath||'';
     if(rel){var p=rel.split('/');if(p.length>=2)folderKey=p[p.length-2].trim();}
     var r=new FileReader();
-    r.onload=function(ev){
-      _importPending.hostMap[k]=ev.target.result;
+    r.onload=function(ev){ shrinkImageSrc(ev.target.result, onHostRead); }; /* 超過尺寸上限先縮小 */
+    function onHostRead(src){
+      _importPending.hostMap[k]=src;
       /* 也用 baseName（去掉 -數字 後綴）做 key，方便 brand name 比對 */
       var baseName=k.replace(/[-_]\d+$/,'');
-      if(baseName!==k && !_importPending.hostMap[baseName]) _importPending.hostMap[baseName+'__dir']=ev.target.result;
-      if(folderKey && folderKey!==k && !_importPending.hostMap[folderKey]) _importPending.hostMap[folderKey+'__dir']=ev.target.result;
+      if(baseName!==k && !_importPending.hostMap[baseName]) _importPending.hostMap[baseName+'__dir']=src;
+      if(folderKey && folderKey!==k && !_importPending.hostMap[folderKey]) _importPending.hostMap[folderKey+'__dir']=src;
       done++;
       pm.update(done/imgs.length*100, done+'/'+imgs.length);
       if(done>=imgs.length){
@@ -2151,7 +2308,8 @@ function processHostFiles(files){
         pm.done('直播主圖片讀取完成');
         pm.hide();
       }
-    };r.readAsDataURL(f);
+    }
+    r.readAsDataURL(f);
   });
 }
 
@@ -2910,6 +3068,9 @@ function _downloadAll(){
       var themeKey = d.layout || d.theme;
       if(themeKey) setTheme(themeKey);
       S.subLpbn = d.subLpbn || '';
+      /* 每頁各自的開關：原本漏套，會導致全部頁面沿用「當下畫面那一頁」的設定 */
+      S.showHostPrefix = (d.showHostPrefix !== false);
+      S.logo2NoBg = !!d.logo2NoBg;
 
       /* txt-main 固定值，確保每頁廣播時都在 */
       var mainEl = document.getElementById('txt-main');

@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <title>02 直播大廳 LPBN</title>
 <style>
-@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('../fonts/ShopeeNotoSans(content)-Bold.ttf') format('truetype'); }
-@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('../fonts/ShopeeNotoSans(content)-Medium.ttf') format('truetype'); }
-@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('../fonts/ShopeeNotoSans(content)-Regular.ttf') format('truetype'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:700; src:url('../fonts/ShopeeNotoSanscontent-Bold.woff2') format('woff2'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:500; src:url('../fonts/ShopeeNotoSanscontent-Medium.woff2') format('woff2'); }
+@font-face { font-family:'ShopeeNoto'; font-weight:400; src:url('../fonts/ShopeeNotoSanscontent-Regular.woff2') format('woff2'); }
 *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 html, body { background:transparent; overflow:hidden; }
 
@@ -280,13 +280,23 @@ function drawLogos(){
     var bx2=x,by2=a.y+(a.h-L2_H)/2+2;
     var bgColor='#ffffff';
     try{bgColor=sampleLogo2BgColor(D.logo2);}catch(e){}
-    ctx.save();drawRoundRect(ctx,bx2,by2,L2_W,L2_H,L2_R);ctx.fillStyle=bgColor;ctx.fill();ctx.restore();
+    if(!D.logo2NoBg){ctx.save();drawRoundRect(ctx,bx2,by2,L2_W,L2_H,L2_R);ctx.fillStyle=bgColor;ctx.fill();ctx.restore();} /* 勾選「Logo 不加底色」時跳過 */
 
     var b2=_logo2Bounds;
     var l2sx=b2?b2.x:0,l2sy=b2?b2.y:0;
     var l2sw=b2?b2.w:D.logo2.naturalWidth,l2sh=b2?b2.h:D.logo2.naturalHeight;
-    var scl=Math.min(L2_W/l2sw,L2_H/l2sh)*_logo2Scale;
+    var sclBase=Math.min(L2_W/l2sw,L2_H/l2sh);
+    /* 「Logo 不加底色」時：logo2 高度最多到 LOGO 範圍高（L2_H），拉到頂就不能再放大 */
+    if(D.logo2NoBg){var maxL2Scale=(L2_H/l2sh)/sclBase;if(_logo2Scale>maxL2Scale)_logo2Scale=maxL2Scale;}
+    var scl=sclBase*_logo2Scale;
     var l2w=l2sw*scl,l2h=l2sh*scl;
+    if(D.logo2NoBg){
+      /* 不加底色：logo2 有色範圍左緣貼齊「分隔線右側 GAP(15px)」置左，不置中於隱形框、不 clip */
+      var nbX=bx2, nbY=by2+(L2_H-l2h)/2; /* 位置固定：只能縮放、不能拖動（忽略拖動偏移）*/
+      ctx.drawImage(D.logo2,l2sx,l2sy,l2sw,l2sh,nbX,nbY,l2w,l2h);
+      _logo2Box={x:nbX,y:nbY,w:l2w,h:l2h}; /* 選取框 = logo2 實際位置 */
+      return;
+    }
     var imgX=bx2+(L2_W-l2w)/2+_logo2OffX;
     var imgY=by2+(L2_H-l2h)/2+_logo2OffY;
     ctx.save();drawRoundRect(ctx,bx2,by2,L2_W,L2_H,L2_R);ctx.clip();
@@ -501,10 +511,11 @@ function updateLogo2UI(){
   if(!D.logo2||!_logo2Box)return;
   var b=_logo2Box;
   var hit=document.createElement('div');
-  hit.style.cssText='position:absolute;left:'+b.x+'px;top:'+b.y+'px;width:'+b.w+'px;height:'+b.h+'px;cursor:move;z-index:1;pointer-events:auto;';
+  hit.style.cssText='position:absolute;left:'+b.x+'px;top:'+b.y+'px;width:'+b.w+'px;height:'+b.h+'px;cursor:'+(D.logo2NoBg?'pointer':'move')+';z-index:1;pointer-events:auto;';
   hit.addEventListener('mousedown',function(e){
     e.stopPropagation();if(e.button!==0)return;
     if(!_logo2Sel){_logo2Sel=true;updateLogo2UI();}
+    if(D.logo2NoBg)return; /* 不加底色：位置固定，只能縮放，不開始拖動 */
     var rect=cv.getBoundingClientRect(),ss=W/rect.width;
     _logo2DragData={sx:(e.clientX-rect.left)*ss,sy:(e.clientY-rect.top)*ss,ox:_logo2OffX,oy:_logo2OffY};
   });
@@ -753,6 +764,7 @@ window.addEventListener('message',function(e){
   if(p.cMain!==undefined)     D.cMain=p.cMain;
   if(p.cDate!==undefined)     D.cDate=p.cDate;
   if(p.sepColor!==undefined)  D.sepColor=p.sepColor;
+  if(p.logo2NoBg!==undefined) D.logo2NoBg=!!p.logo2NoBg; /* Logo 不加底色（editor 每頁各自設定）*/
   if(p.barColor!==undefined)  D.barColor=p.barColor;
   if(p.showCTA!==undefined) D.showCTA=p.showCTA;
   /* bgBase 是資料夾路徑，自己補上版位檔名 */
