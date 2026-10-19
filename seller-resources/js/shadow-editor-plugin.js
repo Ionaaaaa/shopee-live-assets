@@ -48,7 +48,7 @@
 
   var state = {
     combo: 'D',
-    angle: 'top',
+    angle: 'left', // 預設光源在左、影子在右（全域光源角度 UI 已隱藏，要改請點選素材個別調整）
     bgDataUrl: null,
     slots: {}, // slotId -> dataUrl
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
@@ -170,6 +170,9 @@
   function renderShadowPanel(){
     var panel = document.getElementById('lc-shadow-panel');
     if (!panel) return;
+    /* 陰影 X/Y 寬度微調已停用：改用 1200 畫布裡每個素材自己的『陰影位置／光源角度』面板（跟 Circle 一致），這個舊面板永遠收起來 */
+    panel.classList.remove('show');
+    return;
     if (!activeSlotId){
       panel.classList.remove('show');
       return;
@@ -213,15 +216,15 @@
           '</div>' +
           '<div class="lc-field">' +
             '<div class="lc-field-head">' +
-              '<label>光源角度</label>' +
+              '<label>陰影開關</label>' + // 原「光源角度」標題改成開關說明；全域角度按鈕列已隱藏（DOM 保留），開關要留著
               '<span class="lc-switch" title="開啟／關閉所有素材的陰影">' +
                 '<input type="checkbox" id="lc-shadows-onoff"' + (state.shadowsEnabled ? ' checked' : '') + '>' +
                 '<label class="lc-track" for="lc-shadows-onoff"></label>' +
               '</span>' +
             '</div>' +
-            '<div class="lc-ang-group">' +
-              '<button class="lc-ang" data-ang="left">左上</button>' +
-              '<button class="lc-ang active" data-ang="top">正上</button>' +
+            '<div class="lc-ang-group" style="display:none;">' + // 隱藏全域光源角度（保留 DOM，JS 仍會綁定）
+              '<button class="lc-ang active" data-ang="left">左上</button>' +
+              '<button class="lc-ang" data-ang="top">正上</button>' +
               '<button class="lc-ang" data-ang="right">右上</button>' +
             '</div>' +
           '</div>' +
@@ -451,9 +454,9 @@
     state.slotRatios = Object.assign({}, saved.slotRatios || {});
     state.polaroid = Object.assign({}, saved.polaroid || {});
     state.slotOriginal = Object.assign({}, saved.slotOriginal || {});
-    state.shadowScale = Object.assign({}, saved.shadowScale || {});
+    state.shadowScale = {}; // 舊存檔裡的陰影 X/Y 縮放不再套用（功能已停用）
     state.shadowsEnabled = saved.shadowsEnabled !== false; // 舊存檔沒有這個欄位時，預設當作開啟
-    if(saved.angle) state.angle = saved.angle;
+    state.angle = 'left'; // 全域光源固定在左、影子在右：舊存檔存的角度不再套用
 
     /* 疊放順序：優先用存檔裡記的順序，過濾掉目前版型不會用到的 id，
        版型有但存檔順序沒提到的 id（例如舊存檔比新版型少欄位）補到最上層 */

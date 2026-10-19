@@ -36,6 +36,7 @@ var _logo2Scale = 1, _logo2OffX = 0, _logo2OffY = 0;
 var _logo2Box = null;      // 目前渲染範圍（給滑鼠命中判斷用）
 var _logo2Selected = false;
 var _logo2DragData = null, _logo2ResizeData = null;
+var _logo2LoadFailed = false; // 素材載入失敗（檔案壞掉/格式不支援）：畫面上要能看到錯誤並可移除或重新上傳
 var _logo2ChainToShadow = false; // 這次開面板是不是從匯入流程來的，決定按確認後要不要自動跳陰影面板
 
 /* ── 形狀判斷／底色採樣／有色範圍——邏輯搬自原本的 layout-logo2.js ── */
@@ -90,12 +91,24 @@ function initLogo2BigCanvasOnce(){
   var upInput = document.getElementById('logo2-compose-upload');
   if(upInput){
     upInput.addEventListener('change', function(e){
-      var f = e.target.files[0]; if(!f) return;
+      var f = e.target.files[0];
+      /* 讀完就清空 input：不清的話，上傳失敗後再選「同一個檔案」不會觸發 change，看起來像不能重新上傳 */
+      e.target.value = '';
+      if(!f) return;
       var reader = new FileReader();
       reader.onload = function(ev){ logo2LoadImageFromSrc(ev.target.result); };
+      reader.onerror = function(){ logo2MarkLoadFailed('檔案讀取失敗'); };
       reader.readAsDataURL(f);
     });
   }
+
+  /* 滾輪縮放：往上滾放大、往下滾縮小（跟資源交換專場一致），跟拖角縮放共用 _logo2Scale */
+  _logo2BigCanvas.addEventListener('wheel', function(e){
+    if(!_logo2Img) return;
+    e.preventDefault();
+    _logo2Scale = Math.max(0.1, Math.min(6, _logo2Scale + (-e.deltaY * 0.0015)));
+    drawLogo2BigCanvas();
+  }, { passive:false });
 
   _logo2BigCanvas.addEventListener('mousedown', logo2CanvasMouseDown);
   document.addEventListener('mousemove', logo2CanvasMouseMove);
@@ -122,7 +135,9 @@ function initLogo2BigCanvasOnce(){
 
 function logo2LoadImageFromSrc(src){
   var im = new Image();
+  im.onerror = function(){ logo2MarkLoadFailed('檔案格式不支援或已損毀'); };
   im.onload = function(){
+    _logo2LoadFailed = false;
     _logo2Img = im;
     _logo2RawSrc = src;
     _logo2Bounds = logo2CalcTightBounds(im);
@@ -131,8 +146,87 @@ function logo2LoadImageFromSrc(src){
     _logo2Scale = 1; _logo2OffX = 0; _logo2OffY = 0; _logo2Selected = false;
     logo2ResizeCanvasToShape();
     drawLogo2BigCanvas();
+    logo2RenderCurrent();
   };
   im.src = src;
+}
+
+/* ── 載入失敗／移除／重新上傳 ──
+   原本沒有 onerror：圖片載入失敗時畫面完全沒反應，也沒有任何地方可以刪除，
+   只能整頁重新整理。現在失敗會顯示錯誤並保留『移除』按鈕，上傳欄位也可以直接重選。 */
+function logo2MarkLoadFailed(reason){
+  _logo2LoadFailed = true;
+  _logo2Img = null; _logo2Bounds = null; _logo2Selected = false; _logo2Box = null;
+  if(_logo2BigCtx && _logo2BigCanvas) _logo2BigCtx.clearRect(0,0,_logo2BigCanvas.width,_logo2BigCanvas.height);
+  logo2RenderCurrent();
+  logo2UpdateHint();
+  toast('Logo2 素材載入失敗（'+(reason||'未知原因')+'），請按『移除』或重新上傳','err',4000);
+}
+
+/* 左欄 Logo 素材 slot（介面同資源交換專場）：有圖顯示縮圖＋右上角 × 移除；沒有圖顯示虛線框「點擊上傳」；
+   載入失敗時紅框＋「載入失敗，點擊重新上傳」，× 可移除，點框本體也能重選檔案 */
+function logo2RenderCurrent(){
+  var slot = document.getElementById('logo2-slot');
+  if(!slot) return;
+  if(_logo2LoadFailed){
+    slot.className = 'logo2-slot-item empty failed';
+    slot.innerHTML =
+      '<div class="logo2-slot-thumb add"><span class="logo2-slot-plus">!</span></div>' +
+      '<span class="logo2-slot-label" style="color:#e5484d;">載入失敗，點擊重新上傳</span>' +
+      '<span class="logo2-slot-del" onclick="event.stopPropagation();logo2ClearMaterial()" title="移除">×</span>';
+    slot.onclick = logo2TriggerUpload;
+  } else if(_logo2Img && _logo2RawSrc){
+    slot.className = 'logo2-slot-item filled';
+    slot.onclick = null;
+    slot.innerHTML =
+      '<div class="logo2-slot-thumb"><img src="' + _logo2RawSrc + '"></div>' +
+      '<span class="logo2-slot-label">Logo</span>' +
+      '<span class="logo2-slot-del" onclick="event.stopPropagation();logo2ClearMaterial()" title="移除">×</span>';
+  } else {
+    slot.className = 'logo2-slot-item empty';
+    slot.innerHTML =
+      '<div class="logo2-slot-thumb add"><span class="logo2-slot-plus">+</span></div>' +
+      '<span class="logo2-slot-label">點擊上傳</span>';
+    slot.onclick = logo2TriggerUpload;
+  }
+  logo2SyncShapeRadioUI();
+}
+
+function logo2TriggerUpload(){
+  var inp = document.getElementById('logo2-compose-upload');
+  if(inp) inp.click();
+}
+
+/* ── 方形/長型：預設自動判斷，這裡讓使用者手動覆蓋 ── */
+function logo2SyncShapeRadioUI(){
+  var group = document.getElementById('logo2-shape-group');
+  if(!group) return;
+  group.querySelectorAll('input[name="logo2-shape"]').forEach(function(r){ r.checked = (r.value === _logo2Shape); });
+}
+function logo2SetShapeOverride(shape){
+  if(shape !== 'square' && shape !== 'wide') return;
+  if(!_logo2Img){ logo2SyncShapeRadioUI(); return; }
+  _logo2Shape = shape;
+  logo2ResizeCanvasToShape();
+  drawLogo2BigCanvas();
+  logo2UpdateHint();
+}
+/* 移除目前的 logo2 素材：清掉編輯面板狀態、存檔欄位，以及已套用到各版位的 logo2 */
+function logo2ClearMaterial(){
+  _logo2Img = null; _logo2RawSrc = null; _logo2Bounds = null; _logo2LoadFailed = false;
+  _logo2Selected = false; _logo2Box = null; _logo2DragData = null; _logo2ResizeData = null;
+  _logo2Scale = 1; _logo2OffX = 0; _logo2OffY = 0; _logo2Shape = 'wide';
+  S.logo2Raw = null; S.logo2Scale = undefined; S.logo2OffX = undefined; S.logo2OffY = undefined; S.logo2Shape = undefined;
+  S.imgs.logo2 = null;
+  var imgEl = document.getElementById('logo2-img');
+  if(imgEl){ imgEl.removeAttribute('src'); imgEl.dataset.baseSrc = ''; }
+  var item = document.getElementById('logo2-item');
+  if(item) item.style.display = 'none';
+  logo2ResizeCanvasToShape();
+  drawLogo2BigCanvas();
+  logo2RenderCurrent();
+  try{ broadcastFull(); }catch(e){ console.warn('[logo2] 移除後廣播失敗：', e); }
+  toast('已移除 Logo2 素材，可以重新上傳','ok',2500);
 }
 
 function logo2ResizeCanvasToShape(){
@@ -218,6 +312,7 @@ function logo2HandleSizeCanvasPx(){
 function logo2UpdateHint(){
   var el = document.getElementById('logo2-compose-hint');
   if(!el) return;
+  if(_logo2LoadFailed){ el.textContent = '素材載入失敗：請按左側『移除』清掉，或直接重新選擇檔案上傳'; return; }
   if(!_logo2Img){ el.textContent = '請先上傳 logo2 素材'; return; }
   el.textContent = '目前判定為「' + (_logo2Shape==='square'?'方形':'長型') + '」，點一下素材可選取，選取後可拖曳移動、拖藍色角落縮放（方向鍵微調，Shift 加速）';
 }
@@ -289,7 +384,9 @@ function openLogo2Popup(chainToShadow){
     _logo2OffX  = S.logo2OffX!==undefined  ? S.logo2OffX  : 0;
     _logo2OffY  = S.logo2OffY!==undefined  ? S.logo2OffY  : 0;
     var im = new Image();
+    im.onerror = function(){ logo2MarkLoadFailed('先前存的素材無法載入'); };
     im.onload = function(){
+      _logo2LoadFailed = false;
       _logo2Img = im;
       _logo2RawSrc = S.logo2Raw;
       _logo2Bounds = logo2CalcTightBounds(im);
@@ -298,13 +395,16 @@ function openLogo2Popup(chainToShadow){
       _logo2Selected = false;
       logo2ResizeCanvasToShape();
       drawLogo2BigCanvas();
+      logo2RenderCurrent();
     };
     im.src = S.logo2Raw;
   } else if(_logo2Img){
     logo2ResizeCanvasToShape();
     drawLogo2BigCanvas();
+    logo2RenderCurrent();
   } else {
     logo2UpdateHint();
+    logo2RenderCurrent();
   }
 }
 

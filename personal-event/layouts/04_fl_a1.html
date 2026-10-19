@@ -309,6 +309,9 @@ window.addEventListener('message', function(e){
 
   var needsSyncRender = true;
 
+  /* 空值＝這個分頁沒有 Logo：清掉上一個分頁殘留的原圖/小卡，不然會沿用上一包的 Logo */
+  if(p.logo2Raw !== undefined && !p.logo2Raw){ D.logo2RawImg = null; D._logo2RawCacheSrc = null; D.logo2Bounds = null; }
+  if(p.logo2 !== undefined && !p.logo2){ D.logo2 = null; D._logo2CacheSrc = null; }
   if(p.logo2Raw !== undefined && p.logo2Raw && p.logo2Raw !== D._logo2RawCacheSrc){
     D._logo2RawCacheSrc = p.logo2Raw;
     needsSyncRender = false;

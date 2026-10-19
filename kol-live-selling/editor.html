@@ -516,7 +516,7 @@ input[type="file"] { display:none; }
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-logo"><svg viewBox="0 0 16 16"><polygon points="4,2 14,8 4,14"/></svg></div>
-    <span class="topbar-title">明星直播間</span>
+    <span class="topbar-title">KOL直播圖</span>
     <span class="topbar-badge">素材編輯器 v2</span>
   </div>
   <div class="topbar-right">
@@ -3038,12 +3038,10 @@ function _downloadAll(){
           if(!api){ collectLayout(i+1); return; }
           var fmt    = getFmt(layout.id);
           var ext    = fmt==='png' ? 'png' : 'jpg';
-          /* 檔名 = 版位編號（取 layout.id 開頭的數字，例如 01_thumbnail → 01）
-             + 版位名稱（拿掉空白，例如「直播大廳 LPBN」→「直播大廳LPBN」）
-             + 包序號，例如 01_直播時縮圖_1、02_直播大廳LPBN_1 */
-          var numPrefix = (layout.id.match(/^\d+/) || [''])[0];
+          /* 檔名 = 版位名稱（拿掉空白，例如「直播大廳 LPBN」→「直播大廳LPBN」）
+             + 包序號，例如 直播時縮圖_1、直播大廳LPBN_1（不含版位編號） */
           var cleanName = ((api.spec && api.spec.name) || layout.id).replace(/\s+/g, '');
-          var fname = (numPrefix ? numPrefix+'_' : '') + cleanName + '_' + packageNum;
+          var fname = cleanName + '_' + packageNum;
 
           var subPct = Math.round((ti/total)*92 + ((i+0.5)/activeLayouts.length)*(92/total));
           pm.update(subPct, '截圖 '+fname+'…');

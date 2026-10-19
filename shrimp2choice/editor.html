@@ -158,6 +158,7 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 .tbtn.primary { background:var(--accent-orange);border-color:var(--accent-orange);color:white; }
 .tbtn.primary:hover { background:#d4442a; }
 .tbtn svg { width:13px;height:13px;flex-shrink:0; }
+.tbtn.active { background:var(--accent-orange);border-color:var(--accent-orange);color:#fff; }
 
 /* 雙logo（共播）疊放順序：拖曳排序清單，比照商品/主持人清單(.lc-slot)的做法。
    現在單張/雙logo共用同一份清單UI：永遠顯示2個項目，沒放素材的顯示虛線＋加號
@@ -687,7 +688,7 @@ input[type="file"] { display:none; }
       <span class="popup-title">廠商 Logo2 ＋ 商品／主持人 陰影</span>
       <button class="popup-close" onclick="closePopup('logo2')">×</button>
     </div>
-    <div style="padding:20px;display:flex;gap:24px;flex-wrap:wrap;">
+    <div style="padding:20px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
 
       <!-- 左區塊：Logo2 -->
       <div style="flex:0 1 440px;min-width:320px;display:grid;grid-template-columns:200px 1fr;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
@@ -750,14 +751,25 @@ input[type="file"] { display:none; }
 
       <!-- 右區塊：陰影編輯器面板＋1200商品區畫布，同一排並排 -->
       <div style="flex:1 1 560px;min-width:420px;display:grid;grid-template-columns:240px minmax(0,1fr);gap:10px;align-items:start;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
-        <div style="grid-column:1;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+        <!-- 固定最大高度＋內部捲動：選取商品出現位移面板時，popup 不會被撐高、1200 畫布位置不會跟著位移 -->
+        <div style="grid-column:1;display:flex;flex-direction:column;gap:8px;max-height:min(78vh,640px);overflow-y:auto;padding-right:4px;">
           <div id="shadow-editor-mount"></div>
-          <div class="lc-field">
-            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
-            <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
+          <!-- 陰影位置／光源角度（選取單一素材時才出現，移植自 Circle） -->
+          <div id="shadow-offset-panel" class="lc-field" style="display:none;">
+            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">這個素材的光源角度</label>
+            <div style="display:flex;gap:6px;margin-bottom:10px;">
+              <button type="button" class="tbtn" data-slot-angle="left">左</button>
+              <button type="button" class="tbtn" data-slot-angle="top">中</button>
+              <button type="button" class="tbtn" data-slot-angle="right">右</button>
+            </div>
+            <label style="display:block;font-size:12px;color:var(--text-muted);">陰影左右位移 <span id="shadow-offset-x-val">0%</span></label>
+            <input type="range" id="shadow-offset-x" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+            <label style="display:block;font-size:12px;color:var(--text-muted);margin-top:6px;">陰影上下位移 <span id="shadow-offset-y-val">0%</span></label>
+            <input type="range" id="shadow-offset-y" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+            <button type="button" class="tbtn" id="shadow-offset-reset" style="margin-top:8px;width:100%;">重設陰影位置</button>
           </div>
         </div>
-        <div style="grid-column:2;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
+        <div style="grid-column:2;align-self:flex-start;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
           <canvas id="shadow-compose-canvas" width="1200" height="1200" style="max-width:100%;max-height:480px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
         </div>
       </div>

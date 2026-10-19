@@ -423,8 +423,20 @@ function applyTabData(tab, loadHost){
      shadowState 是新格式（包含素材圖片本身，不是只有版型代號），
      沒有的話（例如舊格式暫存檔）退回只還原版型代號 */
   if(window.ShadowEditor){
-    if(d.shadowState) window.ShadowEditor.restoreState(d.shadowState);
-    else if(d.combo) window.ShadowEditor.setCombo(d.combo);
+    if(d.shadowState){
+      window.ShadowEditor.restoreState(d.shadowState);
+      window._shadowAppliedFor = d;
+    } else if(window._shadowAppliedFor !== d){
+      /* 這個分頁沒有存過陰影素材（例如工單只匯入一部分、或素材比對不到）：一定要清空，
+         不能沿用上一個分頁留在編輯器裡的商品——不然沒匯入的分頁會顯示成第一包的商品，
+         看不出來哪些還要補上傳，離開時還會把第一包的商品存進自己的資料。
+         只在『換到另一個分頁』時清空；同一個分頁重新套用（_shadowAppliedFor 沒變）不動，
+         避免把使用者剛手動上傳、尚未存回分頁的素材清掉。 */
+      window.ShadowEditor.restoreState({ combo: d.combo, slots: {}, slotRatios: {}, polaroid: {}, slotOriginal: {} });
+      window._shadowAppliedFor = d;
+    } else if(d.combo){
+      window.ShadowEditor.setCombo(d.combo);
+    }
   }
 
   /* LOGO編輯狀態：還原這個分頁自己存過的（logo2Edit，見 saveCurrentTabState）。
@@ -460,7 +472,17 @@ function applyTabData(tab, loadHost){
         }, 300);
       }
     } else {
-      broadcast();
+      /* 這個分頁沒有曝品區合成圖（popup 沒放商品、也沒確認過）：要把上一個分頁殘留的合成圖清掉，
+         並且廣播給所有版位，版位才會變回沒有商品的樣子——不然版位會一直沿用上一個分頁的商品，
+         看不出來哪些分頁還要補上傳，離開時還會把那張圖存進自己的資料。 */
+      S.imgs.host = null;
+      var _hImg = document.getElementById('host-img');
+      if(_hImg){ _hImg.src = ''; _hImg.dataset.baseSrc = ''; }
+      var _hItem = document.getElementById('host-item');
+      if(_hItem) _hItem.style.display = 'none';
+      var _hRow = document.getElementById('host-row');
+      if(_hRow) _hRow.classList.remove('done');
+      broadcastFull();
     }
   } else {
     broadcast();

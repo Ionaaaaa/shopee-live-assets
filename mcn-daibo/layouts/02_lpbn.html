@@ -116,6 +116,8 @@ function drawLogos(){
     x += lw1;
   }
 
+  // 沒有 logo2 就不畫分隔線（只留 logo1）
+  if(!(D.logo2 && D.logo2.naturalWidth)) return;
   // 分隔線前後間距
   x += LOGO_RATIOS.gapBeforeDividerPx;
   var lineH = a.h * LOGO_RATIOS.dividerHeightRatio;
@@ -347,8 +349,10 @@ window.addEventListener('message',function(e){
      editor 的 Logo2 面板已經把圓角/底色/位置都合成好了，這裡收到的是
      一張現成的圖，當一般圖片載入即可，不用再呼叫 Logo2Plugin */
   if(p.logo2Shape!==undefined) D.logo2Shape = p.logo2Shape; // 'square' 或 'wide'，決定 logo2 高度比例
-  if(p.logo2!==undefined && p.logo2){ pending++;
-    loadImg(p.logo2, function(img){ D.logo2=img; dec(); });
+  if(p.logo2!==undefined){
+    if(p.logo2){ pending++;
+      loadImg(p.logo2, function(img){ D.logo2=img; dec(); });
+    } else { D.logo2=null; } // 空值＝使用者移除了 logo2，畫面留空
   }
   /* logo1／CTA 按鈕：隨公版款式(theme)切換不同圖檔，網址由 editor 依 themes.js 算好傳進來 */
   if(p.logo1Url!==undefined && p.logo1Url && p.logo1Url!==D._lastLogo1Url){ pending++;
@@ -405,10 +409,8 @@ function loadDefaultLogos(cb){
   i1.onload=function(){ D.logo1=i1; tick(); };
   i1.onerror=tick;
   i1.src='../logos/logo_shopee_live.png';
-  var i2=new Image();
-  i2.onload=function(){ D.logo2=i2; tick(); };
-  i2.onerror=tick;
-  i2.src='../logos/logo_star_studio.png';
+  /* logo2 沒有上傳時留空，不再放預設的明星直播間 Logo */
+  tick();
   var i3=new Image();
   i3.onload=function(){ D.ctaBtn=i3; tick(); };
   i3.onerror=tick;

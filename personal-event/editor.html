@@ -58,6 +58,7 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 .tbtn:hover { color:var(--text);background:#2e2e2e; }
 .tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
 .tbtn.primary:hover { background:#d4442a; }
+.tbtn.active { background:var(--accent);color:#fff;border-color:var(--accent); }
 .tbtn svg { width:13px;height:13px;flex-shrink:0; }
 input[type="file"] { display:none; }
 
@@ -392,7 +393,7 @@ input[type="file"] { display:none; }
       <div class="sg">
         <div class="sg-label">公版款式</div>
         <div class="sg-body">
-          <select class="theme-select" id="theme-select" onchange="setTheme(this.value)" style="width:100%;height:36px;border-radius:var(--radius-sm);"><!-- 由 renderThemeChips() 依 BN_THEMES 動態產生，勿手動寫死 --></select>
+          <select class="theme-select" id="theme-select" onchange="var _prevTheme=S.theme;setTheme(this.value);if(S.theme!==_prevTheme)showShadowStaleNotice();" style="width:100%;height:36px;border-radius:var(--radius-sm);"><!-- 由 renderThemeChips() 依 BN_THEMES 動態產生，勿手動寫死 --></select>
         </div>
       </div>
 
@@ -622,7 +623,7 @@ input[type="file"] { display:none; }
          右區塊＝曝品相關（陰影編輯器面板＋1200畫布，同一排並排，跟左區塊
          獨立分開）。B級專場逐包確認時右區塊整個隱藏（B級沒有商品/人物
          陰影可編輯）。 -->
-    <div style="padding:8px 20px 2px;display:flex;gap:24px;flex-wrap:wrap;">
+    <div style="padding:8px 20px 2px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
 
       <!-- 左區塊：LOGO -->
       <div style="flex:0 1 560px;min-width:400px;display:grid;grid-template-columns:200px 1fr;grid-template-rows:auto 1fr;gap:10px;background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:10px;">
@@ -632,6 +633,8 @@ input[type="file"] { display:none; }
           <input type="file" id="logo2-compose-upload" accept="image/*" style="display:none;">
           <button class="dl-btn secondary" onclick="document.getElementById('logo2-compose-upload').click()">上傳新 Logo</button>
           <div id="logo2-compose-hint" style="font-size:11px;color:var(--text-muted);line-height:1.6;">請先上傳 logo2 素材</div>
+          <!-- 匯入工單時這一包的 Logo 沒抓到才顯示（附工單原文），上傳後自動消失 -->
+          <div id="logo-import-warn" style="display:none;font-size:11px;line-height:1.5;color:#ffb199;background:rgba(238,77,45,.12);border:1px solid rgba(238,77,45,.45);border-radius:var(--radius);padding:6px 8px;"></div>
         </div>
 
         <!-- 左下：FL ICON示意圖，只在「直播間FL文案」欄位填 LOGO（版型L）
@@ -672,15 +675,29 @@ input[type="file"] { display:none; }
       <!-- 右區塊：陰影編輯器面板＋1200曝品區畫布，同一排並排 -->
       <div id="logo2-shadow-block" style="flex:1 1 680px !important;min-width:480px !important;display:grid !important;grid-template-columns:240px minmax(0,1fr) !important;grid-template-rows:auto !important;gap:10px !important;align-items:start !important;background:var(--surface) !important;border:1px solid var(--border2) !important;border-radius:12px !important;padding:10px !important;">
 
-        <div id="logo2-shadow-mount-col" style="grid-column:1 !important;grid-row:1 !important;width:auto !important;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+        <div id="logo2-shadow-mount-col" style="grid-column:1 !important;grid-row:1 !important;width:auto !important;display:flex;flex-direction:column;gap:8px;max-height:min(78vh,556px);overflow-y:auto;overflow-x:hidden;">
+          <!-- 匯入工單時這一包「工單有填、但沒找到素材」的商品／組合才顯示（附工單原文），補上傳後自動消失 -->
+          <div id="product-import-warn" style="display:none;font-size:11px;line-height:1.5;color:#ffb199;background:rgba(238,77,45,.12);border:1px solid rgba(238,77,45,.45);border-radius:var(--radius);padding:6px 8px;"></div>
           <div id="shadow-editor-mount"></div>
-          <div class="lc-field">
-            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">模擬背景（不會匯出，僅預覽定位用）</label>
-            <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
+          <!-- 陰影位置／光源角度（選取單一素材時才出現，移植自 Circle）。左欄固定最大高度（不超過右側 1200 畫布欄的高度 540+16）＋內部捲動：
+               選取商品出現這個面板時，popup 不會被撐高、1200 畫布位置不會跟著位移。
+               模擬背景會自動抓目前公版的背景圖，不提供手動選檔。 -->
+          <div id="shadow-offset-panel" class="lc-field" style="display:none;">
+            <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">這個素材的光源角度</label>
+            <div style="display:flex;gap:6px;margin-bottom:10px;">
+              <button type="button" class="tbtn" data-slot-angle="left">左</button>
+              <button type="button" class="tbtn" data-slot-angle="top">中</button>
+              <button type="button" class="tbtn" data-slot-angle="right">右</button>
+            </div>
+            <label style="display:block;font-size:12px;color:var(--text-muted);">陰影左右位移 <span id="shadow-offset-x-val">0%</span></label>
+            <input type="range" id="shadow-offset-x" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+            <label style="display:block;font-size:12px;color:var(--text-muted);margin-top:6px;">陰影上下位移 <span id="shadow-offset-y-val">0%</span></label>
+            <input type="range" id="shadow-offset-y" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+            <button type="button" class="tbtn" id="shadow-offset-reset" style="margin-top:8px;width:100%;">重設陰影位置</button>
           </div>
         </div>
 
-        <div id="logo2-shadow-canvas-col" style="grid-column:2 !important;grid-row:1 !important;min-width:0 !important;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
+        <div id="logo2-shadow-canvas-col" style="grid-column:2 !important;grid-row:1 !important;min-width:0 !important;align-self:flex-start;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:8px;overflow:hidden;">
           <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:auto;height:auto;max-width:100%;max-height:540px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
         </div>
 

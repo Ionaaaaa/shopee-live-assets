@@ -134,7 +134,7 @@ function buildShadowSnapshotForVendor(vendorFiles, thumbInfo, thumbnailNames, cb
   if(!window.ShadowEditor){ cb(null); return; }
   window.ShadowEditor.enterPending();
   // 每個廠商都從乾淨狀態開始比對，避免殘留上一位廠商比對到一半的東西
-  window.ShadowEditor.setFullState({ combo:'C', slots:{}, slotRatios:{}, order:[], bgDataUrl:null, angle:'top' });
+  window.ShadowEditor.setFullState({ combo:'C', slots:{}, slotRatios:{}, order:[], bgDataUrl:null, angle:'left' });
   var combo = (thumbInfo && thumbInfo.internalCombo) || 'C';
   window.ShadowEditor.setCombo(combo);
 

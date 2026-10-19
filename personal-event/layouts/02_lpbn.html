@@ -377,7 +377,7 @@ window.addEventListener('message',function(e){
   if(p.logo2Shape!==undefined) D.logo2Shape = p.logo2Shape; // 'square' 或 'wide'，決定 logo2 高度比例
   if(p.logo2!==undefined && p.logo2){ pending++;
     loadImg(p.logo2, function(img){ D.logo2=img; dec(); });
-  }
+  } else if(p.logo2!==undefined){ D.logo2=null; } // 空值＝這個分頁沒有 Logo：清掉上一個分頁殘留的，畫面留空
   /* logo1／CTA 按鈕：隨背景顏色亮度自動切換橘色版/白色版，網址由 editor 依 color-theme-engine.js 算好傳進來 */
   if(p.logo1Url!==undefined && p.logo1Url && p.logo1Url!==D._lastLogo1Url){ pending++;
     D._lastLogo1Url = p.logo1Url;

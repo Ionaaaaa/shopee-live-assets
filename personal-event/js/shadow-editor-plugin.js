@@ -54,7 +54,7 @@
 
   var state = {
     combo: 'C',
-    angle: 'top',
+    angle: 'left', // 預設光源在左、影子在右（全域光源角度 UI 已隱藏，要改請點選素材個別調整）
     bgDataUrl: null,
     slots: {}, // slotId -> dataUrl
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
@@ -150,11 +150,11 @@
             '<label>版型組合</label>' +
             '<select id="lc-combo-sel">' + comboOptions + '</select>' +
           '</div>' +
-          '<div class="lc-field">' +
+          '<div class="lc-field" style="display:none;">' +
             '<label>光源角度</label>' +
             '<div class="lc-ang-group">' +
-              '<button class="lc-ang" data-ang="left">左上</button>' +
-              '<button class="lc-ang active" data-ang="top">正上</button>' +
+              '<button class="lc-ang active" data-ang="left">左上</button>' +
+              '<button class="lc-ang" data-ang="top">正上</button>' +
               '<button class="lc-ang" data-ang="right">右上</button>' +
             '</div>' +
           '</div>' +
@@ -368,7 +368,7 @@
     state.slotRatios = Object.assign({}, saved.slotRatios || {});
     state.polaroid = Object.assign({}, saved.polaroid || {});
     state.slotOriginal = Object.assign({}, saved.slotOriginal || {});
-    if(saved.angle) state.angle = saved.angle;
+    state.angle = 'left'; // 全域光源固定在左、影子在右：舊存檔存的角度不再套用
 
     /* 疊放順序：優先用存檔裡記的順序，過濾掉目前版型不會用到的 id，
        版型有但存檔順序沒提到的 id（例如舊存檔比新版型少欄位）補到最上層 */

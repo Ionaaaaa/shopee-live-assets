@@ -233,6 +233,10 @@ function drawRoundRect(c,x,y,w,h,r){
 function drawLogos(){
   var a = LOGO;
   _logo2Box = null;
+  /* 框尺寸依 Logo 形狀（logo2Shape）：長型＝180×88；方形＝高度 1.1 倍、寬高比 245:270 */
+  var isSqL2 = (D.logo2Shape === 'square');
+  L2_H = isSqL2 ? Math.round(88 * 1.1) : 88;
+  L2_W = isSqL2 ? Math.round(L2_H * 245 / 270) : 180;
 
   /* logo1：等比縮放到 a.h 的 80%，垂直置中 */
   var lh1=0, lw1=0;
@@ -242,6 +246,8 @@ function drawLogos(){
   }
 
   var hasL2 = D.logo2 && D.logo2.naturalWidth;
+  /* 合成圖（有底色）：框的寬度跟合成圖同比例，高度維持，編輯畫布怎麼排就怎麼顯示 */
+  if(hasL2 && D.logo2BgColor){ L2_W = Math.round(L2_H * D.logo2.naturalWidth / D.logo2.naturalHeight); }
 
   /* 置中計算：固定用 L2_W（不隨縮放跑位）*/
   var sep = hasL2 ? (GAP + 1 + GAP) : 0;
@@ -477,10 +483,14 @@ window.addEventListener('message',function(e){
   }
 
   /* logo2 */
+  if(p.logo2Shape!==undefined){ D.logo2Shape = p.logo2Shape; } // 'square' 或 'wide'
   if(p.logo2!==undefined){ pending++;
     loadImg(p.logo2,function(img){
       D.logo2=img; D._logo2DataUrl=p.logo2;
-      _logo2Bounds=img?calcLogo2Bounds(img):null;
+      /* 從 Logo 編輯畫布『確認並套用』出來的圖（有帶底色）已經是使用者合成好的樣子（大小/位置都排好了），
+         整張圖直接當範圍、依原比例填滿框，才會跟編輯畫布裡看到的一樣；其他來源（沒帶底色）才自己算有色範圍 */
+      var _composed = (p.logo2BgColor!==undefined ? p.logo2BgColor : D.logo2BgColor);
+      _logo2Bounds = img ? (_composed ? {x:0,y:0,w:img.naturalWidth,h:img.naturalHeight} : calcLogo2Bounds(img)) : null;
       if(!window._downloadMode){ _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; }
       dec();
     });

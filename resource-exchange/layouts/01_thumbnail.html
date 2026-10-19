@@ -327,8 +327,11 @@ function drawLogos(){
        整體水平置中（以固定 L2_W 計算，不受縮放影響）
      ═══════════════════════════════════════════════════════ */
   var a = LOGO;
-  var L2_W = 113;   // logo2 框寬（固定，置中計算用）
-  var L2_H = 44;    // logo2 框高（= LOGO 區高度）
+  /* 框尺寸依 Logo 形狀（editor 的 Logo 編輯面板判斷/手動指定，經 logo2Shape 傳來）：
+     長型＝113×44；方形＝高度放大 1.1 倍、寬高比 245:270（PS 方形規格），垂直置中，才不會把方形 Logo 塞進長型框裡 */
+  var isSqL2 = (D.logo2Shape === 'square');
+  var L2_H = isSqL2 ? Math.round(44 * 1.1) : 44;
+  var L2_W = isSqL2 ? Math.round(L2_H * 245 / 270) : 113;
   var L2_R = 3;     // logo2 圓角
   _logo2Box = null;
 
@@ -341,6 +344,8 @@ function drawLogos(){
 
   /* logo2 有色範圍（tight bounds）→ contain 縮放 → 套 _logo2Scale */
   var hasL2 = D.logo2 && D.logo2.naturalWidth;
+  /* 合成圖（有底色）：框的寬度跟合成圖同比例，高度維持，編輯畫布怎麼排就怎麼顯示 */
+  if(hasL2 && D.logo2BgColor){ L2_W = Math.round(L2_H * D.logo2.naturalWidth / D.logo2.naturalHeight); }
   var l2sx=0, l2sy=0, l2sw=0, l2sh=0, l2w=0, l2h=0;
   if(hasL2){
     var b2 = _logo2Bounds;
@@ -899,10 +904,14 @@ if(!msg||msg.type!=='BN_UPDATE') return;
     });
   }
   // logo2 可由外部傳入（手動上傳），有傳才更新
+  if(p.logo2Shape !== undefined){ D.logo2Shape = p.logo2Shape; } // 'square' 或 'wide'，決定 logo2 框尺寸
   if(p.logo2 !== undefined){ pending++;
     loadImg(p.logo2, function(img){
       D.logo2=img; D._logo2DataUrl=p.logo2;
-      _logo2Bounds=img?calcLogo2Bounds(img):null;
+      /* 從 Logo 編輯畫布『確認並套用』出來的圖（有帶底色）已經是使用者合成好的樣子（大小/位置都排好了），
+         整張圖直接當範圍、依原比例填滿框，才會跟編輯畫布裡看到的一樣；其他來源（沒帶底色）才自己算有色範圍 */
+      var _composed = (p.logo2BgColor!==undefined ? p.logo2BgColor : D.logo2BgColor);
+      _logo2Bounds = img ? (_composed ? {x:0,y:0,w:img.naturalWidth,h:img.naturalHeight} : calcLogo2Bounds(img)) : null;
       /* 下載模式：不重置縮放，由 BN_RESTORE_STATE 恢復 */
       if(!window._downloadMode){ _logo2Scale=1; _logo2OffX=0; _logo2OffY=0; }
       dec();

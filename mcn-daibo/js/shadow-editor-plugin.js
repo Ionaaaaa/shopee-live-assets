@@ -40,7 +40,7 @@
 
   var state = {
     combo: 'D',
-    angle: 'top',
+    angle: 'left', // 預設光源在左、影子在右（全域光源角度 UI 已隱藏，要改請點選素材個別調整）
     bgDataUrl: null,
     slots: {}, // slotId -> dataUrl
     slotRatios: {}, // slotId -> 0~1 的比例（Excel「(商品)比例」欄位，第一次貼合大小要再乘上這個倍率；100%/沒填就是 1）
@@ -132,15 +132,15 @@
             '<label>版型組合</label>' +
             '<select id="lc-combo-sel">' + comboOptions + '</select>' +
           '</div>' +
-          '<div class="lc-field">' +
+          '<div class="lc-field" style="display:none;">' +
             '<label>光源角度</label>' +
             '<div class="lc-ang-group">' +
-              '<button class="lc-ang" data-ang="left">左上</button>' +
-              '<button class="lc-ang active" data-ang="top">正上</button>' +
+              '<button class="lc-ang active" data-ang="left">左上</button>' +
+              '<button class="lc-ang" data-ang="top">正上</button>' +
               '<button class="lc-ang" data-ang="right">右上</button>' +
             '</div>' +
           '</div>' +
-          '<div class="lc-field">' +
+          '<div class="lc-field" style="display:none;">' + // 背景會自動抓目前公版，不需要手動選
             '<label>背景圖（選填）</label>' +
             '<input type="file" id="lc-bg-file" accept="image/*">' +
           '</div>' +

@@ -1451,6 +1451,7 @@ function broadcastFull(){
     sepColor: (typeof BN_THEME_MAP!=='undefined' && BN_THEME_MAP[S.theme]) ? BN_THEME_MAP[S.theme].sepColor : '#ffffff',
     logo2:   S.imgs.logo2,
     logo2BgColor: S.logo2BgColor, // 明確指定底色，見 applyLogo2() 的說明
+    logo2Shape: S.logo2Shape || 'wide', // 'square' 或 'wide'，版位依此決定 logo2 框的尺寸
   });
 }
 
@@ -2468,8 +2469,26 @@ function downloadSingle(id){
 }
 
 /* ── 整頁下載：當前分頁所有製作物打包 ZIP ── */
+/* 整頁下載的 zip 檔名＝整包下載裡該分頁的資料夾名稱（日期補零_Logo名稱_購物專家），
+   兩邊共用同一個函式，避免命名規則不一致 */
+function getTabFolderName(ti){
+  var tab = TABS[ti];
+  var d = (tab && tab.data) || {};
+  function padDate(s){
+    s = String(s||'').replace(/\//g,'');
+    if(s.length===3) return '0'+s;
+    if(s.length===2) return '0'+s[0]+'0'+s[1];
+    return s;
+  }
+  return [padDate(d.date), d.logoName||'', d.brand||''].filter(Boolean).join('_') || ('tab'+(ti+1));
+}
+
 function downloadPage(){
-  var datePrefix = getTabDate() || '分頁'+(ACTIVE_TAB+1);
+  /* 先把目前畫面存回這個分頁的資料，檔名才是最新的日期/Logo/購物專家 */
+  saveCurrentTabState(function(){ _downloadPage(); });
+}
+function _downloadPage(){
+  var datePrefix = getTabFolderName(ACTIVE_TAB);
   var layouts = LAYOUTS;
   var total = layouts.length;
   var collected = [];
@@ -2510,7 +2529,7 @@ function downloadPage(){
         collect(i+1);
       });
     } else {
-      var _q=(id==='06_opening'?0.82:(id==='01_thumbnail'?0.75:(fmt==='png'?1:0.95))); api.getBlob(fmt, _q, function(blob){
+      var _q=(layout.id==='06_opening'?0.82:(layout.id==='01_thumbnail'?0.75:(fmt==='png'?1:0.95))); api.getBlob(fmt, _q, function(blob){
         addAndNext(blob, '');
       });
     }
@@ -2594,11 +2613,7 @@ function downloadAll(){
         if(s.length===2) return '0'+s[0]+'0'+s[1]; /* 57 → 0507 */
         return s;
       }
-      var folderName = [
-        padDate(d.date||''),
-        d.logoName||'',
-        d.brand||''
-      ].filter(Boolean).join('_') || ('tab'+(ti+1));
+      var folderName = getTabFolderName(ti);
 
       var pct = Math.round((ti / total) * 92);
       pm.update(pct, '渲染第 '+(ti+1)+'/'+total+' 頁　'+folderName+'…');

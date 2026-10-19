@@ -40,6 +40,7 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 .tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
 .tbtn.primary:hover { background:#d4442a; }
 .tbtn svg { width:13px;height:13px;flex-shrink:0; }
+.tbtn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 input[type="file"] { display:none; }
 
 /* Layout */
@@ -453,7 +454,6 @@ input[type="file"] { display:none; }
 
       <!-- 左：上傳/操作說明/下一步 -->
       <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;">
-        <div style="font-size:11px;color:var(--text-dim);">已依工單自動比對（如果有），也可以手動上傳；系統會自動判斷方形/長型、自動吸底色、固定圓角，畫布上可直接拖曳移動、拖角落縮放</div>
         <div class="lc-field">
           <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">上傳 logo2 素材</label>
           <input type="file" id="logo2-compose-upload" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
@@ -479,21 +479,34 @@ input[type="file"] { display:none; }
       <span class="popup-title">商品／主持人 陰影編輯</span>
       <button class="popup-close" onclick="closePopup('shadow')">×</button>
     </div>
-    <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;">
+    <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
 
       <!-- 左：版型/角度/素材控制（素材清單本身可拖曳排序前後、右上角 × 刪除，點縮圖可直接選取） -->
-      <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;">
+      <!-- 外層高度由右側畫布決定（align-self:stretch，內層絕對定位不撐高），內層固定 max-height＋捲動：選取商品出現位移面板時，popup 不會被撐高、1200 畫布位置不會跟著位移 -->
+      <div style="width:260px;flex-shrink:0;align-self:stretch;position:relative;min-height:420px;">
+      <div style="position:absolute;left:0;top:0;right:0;bottom:0;max-height:min(78vh,640px);overflow-y:auto;padding-right:4px;display:flex;flex-direction:column;gap:12px;">
         <div style="font-size:11px;color:var(--text-dim);">畫布上可拖曳移動，縮圖右上角 × 可刪除。</div>
         <div id="shadow-editor-mount"></div>
-        <div class="lc-field">
-          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">模擬背景（已預設 backgrounds/1200bg.jpg，僅預覽用不會匯出，也可換成別張）</label>
-          <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
+        <!-- 陰影位置／光源角度（選取單一素材時才出現，移植自 Circle） -->
+        <div id="shadow-offset-panel" class="lc-field" style="display:none;">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">這個素材的光源角度</label>
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button type="button" class="tbtn" data-slot-angle="left">左</button>
+            <button type="button" class="tbtn" data-slot-angle="top">中</button>
+            <button type="button" class="tbtn" data-slot-angle="right">右</button>
+          </div>
+          <label style="display:block;font-size:12px;color:var(--text-muted);">陰影左右位移 <span id="shadow-offset-x-val">0%</span></label>
+          <input type="range" id="shadow-offset-x" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-top:6px;">陰影上下位移 <span id="shadow-offset-y-val">0%</span></label>
+          <input type="range" id="shadow-offset-y" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+          <button type="button" class="tbtn" id="shadow-offset-reset" style="margin-top:8px;width:100%;">重設陰影位置</button>
         </div>
         <button class="dl-btn" onclick="exportShadowComposite()">確認並匯出到主持人圖層</button>
       </div>
+      </div>
 
       <!-- 右：1200x1200 合成畫布 -->
-      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
+      <div style="flex:1;min-width:280px;align-self:flex-start;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
         <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:560px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 

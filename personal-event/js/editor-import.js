@@ -556,6 +556,7 @@ function parsePersonalEventALevel(rows, startIdx){
       sub: ieTxt(ieCell(r2, 5)),
       time: ieFormatDateTime(ieCell(r3, 5)),
       combo: comboLetter,
+      comboRaw: comboRaw, // 工單原文（程式對不上已知組合時，匯入報告要附上原文）
       host1Name: ieNameField(ieCell(r5, 4), 'host1Name'),
       host2Name: ieNameField(ieCell(r5, 5), 'host2Name'),
       product1Name: ieNameField(ieCell(r6, 4), 'product1Name'),
@@ -631,6 +632,62 @@ function parsePersonalEventSheet(rows){
 
    全部跑完才呼叫 cb()，讓外部（afterExcel）等這批比對完成後再接著開確認彈窗，
    避免兩邊同時搶著操作 ShadowEditor 的當前狀態互相打架。 */
+/* ── 匯入比對輔助 ── */
+function _impNorm(s){ return String(s || '').toLowerCase().replace(/[\s\u3000]+/g, ''); }
+function _impPath(f){ return String(f.webkitRelativePath || f._bnPath || f.name || ''); }
+function _impBase(f){ return String(f.name || '').replace(/\.[^.]+$/, ''); }
+
+/* 這一家對應的資料夾裡的所有檔案（嚴格版，找不到回傳空陣列，不退回全部檔案）：
+   1) 路徑（資料夾名）含工單 LOGO 名稱（不分大小寫、忽略空白）
+   2) 否則資料夾名稱以這包開播日期 MMDD 開頭（例如 1013_xxx 對應 10/13） */
+function strictScopeFilesForGroup(files, g){
+  var hint = _impNorm(g.logoName);
+  var scoped = hint ? files.filter(function(f){ return _impNorm(_impPath(f)).indexOf(hint) !== -1; }) : [];
+  if(!scoped.length && g.time){
+    var m = String(g.time).match(/^\s*(\d{1,2})\/(\d{1,2})/);
+    if(m){
+      var mmdd = ieNumPad2(m[1]) + ieNumPad2(m[2]);
+      scoped = files.filter(function(f){
+        return _impPath(f).split(/[\\/]/).some(function(seg){ return seg.indexOf(mmdd) === 0 && /^\d{4}[_\-\s]/.test(seg); });
+      });
+    }
+  }
+  return scoped;
+}
+
+/* 在對應資料夾裡找檔名含「logo」字樣的檔案；多個時優先「(logo)」開頭的，其次檔名最短的 */
+function findLogoFileForGroup(files, g){
+  var scoped = strictScopeFilesForGroup(files, g);
+  var cands = scoped.filter(function(f){ return /logo/i.test(_impBase(f)); });
+  if(!cands.length) return null;
+  cands.sort(function(a, b){
+    var pa = /^\s*[\(（]\s*logo/i.test(_impBase(a)) ? 0 : 1, pb = /^\s*[\(（]\s*logo/i.test(_impBase(b)) ? 0 : 1;
+    return pa - pb || _impBase(a).length - _impBase(b).length;
+  });
+  return cands[0];
+}
+
+/* 工單有填、但沒比對到素材的欄位 → 警告清單（附工單原文） */
+function collectSlotWarnings(g, shadowState){
+  var warns = [];
+  var slots = (shadowState && shadowState.slots) || {};
+  [['host1','人物1',g.host1Name],['host2','人物2',g.host2Name],
+   ['product1','商品1',g.product1Name],['product2','商品2',g.product2Name],['product3','商品3',g.product3Name]].forEach(function(x){
+    if(x[2] && !slots[x[0]]) warns.push({ kind: x[0].indexOf('host') === 0 ? 'host' : 'product', slot:x[1], wo:x[2] });
+  });
+  if(g.comboRaw && !g.combo) warns.push({ kind:'combo', slot:'商品組合', wo:g.comboRaw });
+  return warns;
+}
+
+/* 匯入比對提示：不再一次把所有分頁的缺漏全列出來。沒抓到的內容改成逐包確認時，
+   在對應的 popup 區塊（Logo 上傳區、曝品區）只顯示『這一包、這個區塊』要補上傳的項目，
+   見 editor-logo2-canvas.js 的 renderImportWarnings()。這裡只用 toast 簡短提醒有幾個分頁需要補。 */
+function showImportReport(tabs){
+  var old = document.getElementById('import-report-card'); if(old) old.remove();
+  var n = (tabs || []).filter(function(t){ return t.data && t.data.importWarnings && t.data.importWarnings.length; }).length;
+  if(n && typeof toast === 'function') toast('有 ' + n + ' 個分頁的內容沒從素材抓到，逐包確認時會在對應位置提示手動上傳', 'err', 5000);
+}
+
 function prematchAllTabAssets(groups, files, cb){
   if(!files || !files.length || !window.ShadowEditor){ if(cb) cb(); return; }
   var levelGroups = groups.filter(function(g){ return g.level === 'A' || g.level === 'B'; });
@@ -645,10 +702,17 @@ function prematchAllTabAssets(groups, files, cb){
   }
 
   function matchLogoForGroup(g, cbLogo){
-    var logoFile = g.logoName ? matchFileByAliases(files, [g.logoName]) : null;
-    if(!logoFile){ cbLogo(); return; }
-    var reader = new FileReader();
-    reader.onload = function(ev){
+    /* Logo 找法（照使用者目前的素材習慣）：先找到「這一家對應的資料夾」（路徑含工單 LOGO 名稱，
+       或資料夾以開播日期 MMDD 開頭），只在那個資料夾裡找檔名含「logo」字樣的檔案
+       （大小寫、前後綴、副檔名都不拘，例如 (logo)xxx.webp、LOGO.webp、xxx_Logo.png），
+       不再拿整包素材去找，避免抓到別家或 B級專場資料夾裡的副本。
+       找不到對應資料夾、或資料夾裡沒有含 logo 字樣的檔案，就不猜，記進匯入警告請使用者手動上傳。 */
+    var logoFile = g.logoName ? findLogoFileForGroup(files, g) : null;
+    if(!logoFile){
+      if(g.logoName){ g.importWarnings = g.importWarnings || []; g.importWarnings.push({ kind:'logo', slot:'Logo', wo:g.logoName }); }
+      cbLogo(); return;
+    }
+    var reader = new FileReader();    reader.onload = function(ev){
       g.logo2Edit = { raw: ev.target.result, scale:undefined, offX:undefined, offY:undefined, shape:undefined };
       /* A級專場方形FL ICON的底色固定吸Logo素材本身的顏色（跟 editor-logo2-canvas.js
          的 logo2LoadImageFromSrc()／openLogo2Popup() 是同一條規則），這裡批次比對
@@ -693,12 +757,26 @@ function prematchAllTabAssets(groups, files, cb){
     if(g.combo) window.ShadowEditor.setCombo(g.combo);
     matchAndApplyHostFiles(files, g, function(){
       g.shadowState = window.ShadowEditor.getFullState();
+      /* 工單有填名稱、但沒比對到素材的，記進這個分頁的匯入警告（附上工單原文），不開額外分頁 */
+      g.importWarnings = collectSlotWarnings(g, g.shadowState);
       /* LOGO：存進「這個分頁自己」的 g.logo2Edit，不是存進全域 S.logo2Raw
          （那個是目前畫面即時顯示用的，批次比對階段不該去動它，避免畫面閃爍）。 */
       matchLogoForGroup(g, next);
     });
   }
   next();
+}
+
+/* 個人專場分頁只收「真的有內容」的組別，不額外開空白分頁：
+   工單裡常有舊範本工作表（版面不同，照固定列距硬讀會讀出一堆空組別）、
+   或是沒刪掉的殘留列（沒有 Logo、沒有文案，只剩舊範例的商品名）。
+   A級：Logo、主標、副標、時間任一個有填就算有內容；
+   B級：Logo 名稱或文案有填才算（只有版型分類沒有內容的不開）。 */
+function isMeaningfulPersonalGroup(g){
+  if(!g) return false;
+  if(g.level === 'A') return !!(g.logoName || g.main || g.sub || g.time);
+  if(g.level === 'B') return !!(g.logoName || (g.flText && g.flText !== 'logo'));
+  return true;
 }
 
 /* 解析 Excel 檔案（不含 UI 副作用之外的東西），成功回傳 tabs 陣列 */
@@ -712,7 +790,7 @@ function processExcelFile(file, cb){
         var ws = wb.Sheets[sheetName];
         var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
         var personalGroups = parsePersonalEventSheet(rows);
-        groups = groups.concat(personalGroups || parseWorkorderGroups(rows));
+        groups = groups.concat(personalGroups ? personalGroups.filter(isMeaningfulPersonalGroup) : parseWorkorderGroups(rows));
       });
       cb(null, groups);
     }catch(err){
@@ -872,6 +950,7 @@ function confirmImport(){
       buildTabs(tabs, personalFirstIdx >= 0 ? personalFirstIdx : 0);
       pm.update(60, '比對主持人／商品圖片…');
       prematchAllTabAssets(groups, st.assetFiles, function(){
+        if(typeof showImportReport === 'function') showImportReport(tabs);
         var personalFirst = personalFirstIdx >= 0 ? groups[personalFirstIdx] : null;
         afterExcel(personalFirst || groups[0] || null);
       });

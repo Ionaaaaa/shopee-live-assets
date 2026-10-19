@@ -3,7 +3,7 @@
   給任何 layout 頁面（layouts/*.html）掛載用的共用模組。
 
   設計原則：這支模組「不」霸佔你的 canvas 或 draw()——它只負責：
-    1. 管理商品/主持人的素材狀態（上傳的圖、位置、縮放）
+    1. 管理商品/人物的素材狀態（上傳的圖、位置、縮放）
     2. 接收 editor 端 shadow-editor-plugin.js 廣播來的 postMessage
     3. 提供一個 drawItems(ctx) 函式，你在自己的 draw() 裡想畫的時候呼叫它
     4. （選用）提供拖曳/縮放控制點互動，你決定要不要接上
@@ -19,7 +19,7 @@
       function draw(){
         ctx.clearRect(0,0,canvas.width,canvas.height);
         drawMyBackground();       // 你自己的背景畫法
-        receiver.drawItems(ctx);  // 畫商品/主持人+陰影
+        receiver.drawItems(ctx);  // 畫商品/人物+陰影
       }
 
       window.addEventListener('message', function(e){ receiver.handleMessage(e.data, draw); });
@@ -29,7 +29,7 @@
     </script>
 
   ── 接到你「現有」的複雜版位（例如 02_lpbn.html，已經有自己的 draw()、文案、LOGO） ──
-    只要在你原本 draw() 裡，想讓商品/主持人出現的那一行插入 receiver.drawItems(ctx) 即可，
+    只要在你原本 draw() 裡，想讓商品/人物出現的那一行插入 receiver.drawItems(ctx) 即可，
     例如放在畫完背景之後、畫文案 LOGO 之前（或之後，看你要商品在文字上面還下面）：
 
       function draw(){
@@ -54,7 +54,7 @@
 */
 window.ShadowLayoutReceiver = (function () {
   'use strict';
-  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-07-25-v5（修正換圖w0變形bug＋有色範圍整體置中＋旋轉＋畫布多選點擊＋Ctrl+Z復原）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+  console.log('%c[shadow-layout-receiver.js] 版本確認：2026-10-14-v6（新增：KV 1200畫布對齊參考線與吸附）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
 
   /* ★ 旋轉功能（角落四個縮放控制點之外，選取單一項目時頂部會多一個綠色旋轉把手）。
      設計原則「旋轉解耦」：旋轉「只」影響最後畫到 canvas 上的視覺效果（照片+貼地陰影/
@@ -63,7 +63,55 @@ window.ShadowLayoutReceiver = (function () {
      再用旋轉把手轉角度，兩件事互不干擾。實際畫出旋轉效果的地方在 shadow-plugin.js
      （drawGroundShadow/drawPersonGlow 那邊用 ctx.rotate 包起來），這支檔案只負責
      「使用者怎麼用滑鼠把角度轉出來、存到哪裡」。 */
-  var ROT_SNAP_DEG = 15; // 拖曳旋轉把手時按住 Shift 的吸附角度
+  var ROT_SNAP_DEG = 15; // 拖曳旋轉把手時按住 Shift 的吸附角度（沒開對齊參考線的畫布才用，見下方GUIDE_*）
+
+  /* ══════════════════ 對齊參考線與吸附（2026-10，只給KV 1200畫布用） ══════════════════
+     移植自 Mall SKBN 編輯器的「對齊參考線與吸附」規格，只有 create(canvas, {guides:true})
+     的畫布才啟用（目前只有 shadow-popup.js 的 KV「調整商品／人物」1200畫布），SKBN單品
+     popup 等其他呼叫端完全不受影響。
+       - 選取單一素材(商品/人物)：畫出穿過「有色範圍中心」的一直一橫藍色虛線，中心剛好
+         對到畫布正中間時該條變紅色實線。多選時改用整組有色範圍的中心。
+       - 拖曳移動：有色範圍中心距離畫布中線在 GUIDE_SNAP_PX(螢幕px)以內就吸過去，
+         兩軸各自判斷；縮放、旋轉不吸位置。多選整組拖曳也一樣吸(以整組中心判斷)。
+       - 旋轉：靠近 0/±45/±90/±135/180 度 GUIDE_ROT_SNAP_DEG 以內自動吸附，吸住時選取框
+         變紅；拿掉原本 Shift 15° 的快捷鍵，角度數字照舊顯示。
+       - 參考線跟選取框一樣只畫在編輯畫面(skipSelection時不畫)，不會進匯出圖。 */
+  var GUIDE_BLUE = '#5ab8ff';
+  var GUIDE_RED = '#ff2d2d';
+  var GUIDE_SNAP_PX = 6;        // 位置吸附門檻（螢幕px，會換算回畫布座標，跟顯示縮放無關）
+  var GUIDE_ALIGN_EPS = 0.5;    // 判定「剛好對齊」的誤差（畫布px）
+  var GUIDE_ROT_SNAP_DEG = 4;   // 旋轉吸附範圍（±度）
+  var GUIDE_SCAN = 200;         // 輪廓掃描解析度——一定要跟 calcTightBoundsRatio() 的 SCAN 一致
+
+  function snapAngle(deg){
+    var n = normalizeDeg(deg);
+    var t = Math.round(n / 45) * 45;
+    if (Math.abs(n - t) <= GUIDE_ROT_SNAP_DEG) return { deg: normalizeDeg(t === -180 ? 180 : t), snapped: true };
+    return { deg: n, snapped: false };
+  }
+  // 在thr內、距離最近的那組，回傳要補的位移；沒有就null
+  function bestSnap(points, targets, thr){
+    var d = null;
+    points.forEach(function(p){
+      targets.forEach(function(t){
+        var x = t - p;
+        if (Math.abs(x) <= thr && (d === null || Math.abs(x) < Math.abs(d))) d = x;
+      });
+    });
+    return d;
+  }
+
+  /* ★ 圓柱舞台（毛孩衝蝦米新增）：固定壓在商品/人物最下方的裝飾素材，跟 ground shadow
+     一樣「不能旋轉、依版型組合(A/B/C/D)自動算水平置中位置、位置/大小由 stage-defaults.js
+     控制」，唯一差異是保留一個「整體縮放倍率」手動微調逃生口（setStageScale），
+     因為自動位置不一定每次都跟商品貼合，見 drawStage() 說明。
+     圖檔路徑：只有 02_lpbn／01_thumbnail／05_opening 這三個版位的 render() 會呼叫
+     drawStage()，07_fl／09_tab／IG／MSBN／天空標都不會用到，找不到圖檔也只是
+     drawStage() 靜靜跳過，不影響其他版位。 */
+  var _stageImgSrc = (location.pathname.indexOf('/layouts/') !== -1) ? '../logos/stage-cylinder.png' : 'logos/stage-cylinder.png';
+  var _stageImg = new Image();
+  _stageImg.onerror = function(){ console.warn('[stage] 找不到圓柱舞台圖：' + _stageImgSrc); };
+  _stageImg.src = _stageImgSrc;
 
   function normalizeDeg(deg){
     deg = deg % 360;
@@ -72,7 +120,8 @@ window.ShadowLayoutReceiver = (function () {
     return deg;
   }
 
-  function create(canvas){
+  function create(canvas, opts){
+    var stageIdOverride = (opts && opts.stageId) || null; // 給1200畫布用：location.pathname抓不到對應的StageDefaults key，靠這個明確指定
     var slots = {};        // slotId -> { x,y,w0,h0,scaleMul,rot,tight:{tx,ty,tw,th}(0~1比例) }
     var slotType = {};     // slotId -> 'person' | 'product'
     var enabledIds = [];   // 陣列順序＝手動疊放順序（前面＝後方，後面＝前方）
@@ -80,6 +129,8 @@ window.ShadowLayoutReceiver = (function () {
     var selectedIds = [];  // 目前選取的素材（可能多個），activeSlotId 是只有選一個時的別名，向下相容
     var activeSlotId = null;
     var interaction = null;
+    var guidesOn = !!(opts && opts.guides); // 對齊參考線與吸附，見檔案上方GUIDE_*說明
+    var outlines = {};     // slotId -> 輪廓點陣列[[nx,ny],...]（0~1，相對整張圖），只在guidesOn時計算
 
     /* ── 復原（Ctrl+Z）：只記錄「位置/縮放/旋轉」這幾個欄位的微調，不含
        上傳/刪除素材、版型組合切換——範圍刻意縮小，最多存5步。每次開始一個新的
@@ -119,7 +170,7 @@ window.ShadowLayoutReceiver = (function () {
 
     // 多選時的整體外框（所有選取素材 itemBounds 的聯集），拿來畫外框跟算縮放控制點
     function groupBounds(ids){
-      var boxes = ids.map(itemBounds).filter(Boolean);
+      var boxes = ids.map(boundsOfAny).filter(Boolean);
       if (!boxes.length) return null;
       var left = Math.min.apply(null, boxes.map(function(b){ return b.left; }));
       var top = Math.min.apply(null, boxes.map(function(b){ return b.top; }));
@@ -187,6 +238,36 @@ window.ShadowLayoutReceiver = (function () {
       }
     }
 
+    /* 對齊參考線用：掃出「不透明、且旁邊有透明像素(或在圖片邊緣)」的邊緣像素，
+       每個邊緣像素存四個角(0~1比例)。用四個角而不是像素中心，是為了讓「沒旋轉時
+       輪廓點的外框」跟 calcTightBoundsRatio() 的緊密框完全一樣大(x0/sw ~ (x1+1)/sw)，
+       兩者差1~2px的話，預設置中的素材會顯示藍線而不是紅線。解析度用同一個GUIDE_SCAN。 */
+    function calcOutlinePts(img){
+      try{
+        var sc = Math.min(1, GUIDE_SCAN / Math.max(img.naturalWidth, img.naturalHeight));
+        var sw = Math.max(1, Math.floor(img.naturalWidth * sc));
+        var sh = Math.max(1, Math.floor(img.naturalHeight * sc));
+        var tmp = document.createElement('canvas');
+        tmp.width = sw; tmp.height = sh;
+        var tctx = tmp.getContext('2d');
+        tctx.drawImage(img, 0, 0, sw, sh);
+        var d = tctx.getImageData(0,0,sw,sh).data;
+        function op(x, y){ return x>=0 && y>=0 && x<sw && y<sh && d[(y*sw+x)*4+3] > 10; }
+        var pts = [];
+        for (var y=0; y<sh; y++){
+          for (var x=0; x<sw; x++){
+            if (!op(x,y)) continue;
+            if (op(x-1,y) && op(x+1,y) && op(x,y-1) && op(x,y+1)) continue; // 內部像素
+            pts.push([x/sw, y/sh], [(x+1)/sw, y/sh], [x/sw, (y+1)/sh], [(x+1)/sw, (y+1)/sh]);
+          }
+        }
+        return pts;
+      } catch(e){
+        console.warn('[shadow-layout-receiver] 無法掃描輪廓，旋轉後的對齊改用未旋轉的緊密框', e);
+        return null;
+      }
+    }
+
     // 掃描圖片，估算「頭部」的中心位置與寬度比例 {xRatio, yRatio, widthRatio}（0~1，相對整張圖）。
     // 做法：固定取最頂端往下 10% 這一小段當頭部範圍（不去猜肩膀在哪），
     // 再抓這段範圍的左右邊界算水平中心跟寬度。只給人物用，商品不需要。
@@ -245,12 +326,18 @@ window.ShadowLayoutReceiver = (function () {
     function getState(slotId){
       var s = slots[slotId];
       if (!s) return null;
-      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0 };
+      return { id: slotId, x: s.x, y: s.y, w: s.w0*s.scaleMul, h: s.h0*s.scaleMul, rot: s.rot || 0,
+        shadowScaleX: s.shadowScaleX || 1, shadowScaleY: s.shadowScaleY || 1,
+        shadowOffsetX: s.shadowOffsetX || 0, shadowOffsetY: s.shadowOffsetY || 0,
+        lightAngle: s.lightAngle || null }; // 2026-10：每個素材自己的光源角度(null＝跟全部一樣)
     }
     // 商品圖片下緣透明留白的補償量（跟 shadow-plugin.js 畫圖邏輯共用同一份 trim 資料，
     // 不各自重新計算——避免選取框跟實際畫面位置對不上，詳見「選取框與陰影位移」問題報告）
-    function getTrimBottomPad(slotId){
-      var s = slots[slotId];
+    // ★2026-09調整：多接受一個sOverride參數——resize拖曳時要用「拖曳起點snapshot(s)+
+    // 正在試算中的newScale」去算，不能直接讀slots[slotId]目前的即時值（見下面
+    // itemBoundsForState()/resize分支的說明），不傳的話維持原本行為(讀即時slots[slotId])。
+    function getTrimBottomPad(slotId, sOverride){
+      var s = sOverride || slots[slotId];
       if (!s) return 0;
       var fullH = s.h0*s.scaleMul;
       var product = window.ShadowPlugin && window.ShadowPlugin._products && window.ShadowPlugin._products[slotId];
@@ -258,10 +345,14 @@ window.ShadowLayoutReceiver = (function () {
     }
 
     // 選取框／點擊判定用的範圍：優先用「有色部分」的緊密邊框，偵測失敗才退回整張圖範圍
-    function itemBounds(slotId){
-      var s = slots[slotId];
+    // ★2026-09拆成兩層：itemBoundsForState(slotId, s)吃「任意一組x/y/w0/h0/scaleMul/tight
+    // 狀態」算範圍，itemBounds(slotId)只是套用即時slots[slotId]的薄包裝——拆出來是因為
+    // 下面resize拖曳的錨點計算也需要用「同一套緊密框算法」，但算的對象是拖曳起點的
+    // snapshot(interaction.startSlot)，不是即時slots[slotId]，兩處分開各寫一份算法之前
+    // 兩邊公式會兜不起來（這正是「拖控制桿感覺很遠」那個bug的成因，見resize分支說明）。
+    function itemBoundsForState(slotId, s){
       var fullW = s.w0*s.scaleMul, fullH = s.h0*s.scaleMul;
-      var trimBottomPad = getTrimBottomPad(slotId);
+      var trimBottomPad = getTrimBottomPad(slotId, s);
       var imgLeft = s.x - fullW/2, imgTop = s.y + trimBottomPad - fullH;
       if (s.tight){
         var w = s.tight.tw * fullW, h = s.tight.th * fullH;
@@ -269,6 +360,143 @@ window.ShadowLayoutReceiver = (function () {
         return { left: left, top: top, right: left+w, bottom: top+h, w: w, h: h };
       }
       return { left: imgLeft, top: imgTop, right: imgLeft+fullW, bottom: imgTop+fullH, w: fullW, h: fullH };
+    }
+    /* 商品(有色範圍)＋影子大概會佔到的範圍：extraL/extraR是影子往左/右多伸出去的比例
+       (相對商品有效高度)，extraB往下；陰影位移滑桿(offX/offY，畫布比例)也算進去。
+       constrainSlot()/shadowOverflow()共用這一份算法。 */
+    /* 2026-10：實際量出來的「看得到的影子」範圍(ShadowPlugin.measureShadowBox)，
+       依大小/角度/旋轉/位移快取——拖曳移動只改位置，不用重量。量不到回傳null。 */
+    var SHADOW_VISIBLE_ALPHA = 0.3; // 不透明度≥30%才算「看得到」(依使用者圈的範圍校準：約到影子比較濃的那段為止)，更淡的尾巴允許超出畫布(邊緣會淡出，見shadow-plugin.js setEdgeFade)
+    var _shadowBoxCache = {};
+    function _measuredShadowRel(slotId, s, W, H){
+      if (typeof ShadowPlugin === 'undefined' || !ShadowPlugin.measureShadowBox) return null;
+      var st = getState(slotId);
+      if (!st) return null;
+      st.x = s.x; st.y = s.y; st.w = s.w0*s.scaleMul; st.h = s.h0*s.scaleMul; st.rot = s.rot || 0;
+      st.shadowOffsetX = s.shadowOffsetX || 0; st.shadowOffsetY = s.shadowOffsetY || 0;
+      var ang = ShadowPlugin.snapshotAngleZone ? ShadowPlugin.snapshotAngleZone().angle : 0;
+      var key = [Math.round(st.w), Math.round(st.h), st.rot, st.shadowOffsetX, st.shadowOffsetY,
+        st.shadowScaleX, st.shadowScaleY, st.lightAngle || ang, W, H].join('|');
+      var c = _shadowBoxCache[slotId];
+      if (c && c.key === key) return c.rel;
+      var box = ShadowPlugin.measureShadowBox(st, SHADOW_VISIBLE_ALPHA, W, H);
+      var rel = box ? { l: box.l - s.x, r: box.r - s.x, t: box.t - s.y, b: box.b - s.y, empty: !!box.empty } : null;
+      if (rel) _shadowBoxCache[slotId] = { key: key, rel: rel };
+      return rel;
+    }
+    function _shadowExtent(slotId, s, W, H, extraL, extraR, extraB){
+      var b = itemBoundsForState(slotId, s);
+      /* 2026-10修正：有旋轉時改用「轉完之後實際看得到的輪廓」外框——原本用的是沒旋轉
+         的有色範圍框(跟選取框同一個)，商品轉了角度後，框的左邊/上面常常是空的，
+         但還是被當成商品擋在畫布邊緣，看起來明明還有空間卻拖不過去。 */
+      if (s.rot){
+        var cb = contentBoundsForState(slotId, s);
+        b = { left: cb.x0, top: cb.y0, right: cb.x1, bottom: cb.y1, w: cb.x1-cb.x0, h: b.h };
+      }
+      var m = _measuredShadowRel(slotId, s, W, H);
+      if (m){
+        if (m.empty) return { b:b, l:b.left, r:b.right, t:b.top, btm:b.bottom };
+        return { b:b,
+          l: Math.min(b.left, s.x + m.l),
+          r: Math.max(b.right, s.x + m.r),
+          t: b.top,
+          btm: Math.max(b.bottom, s.y + m.b) };
+      }
+      var offX = (s.shadowOffsetX||0)*W, offY = (s.shadowOffsetY||0)*H;
+      return { b:b,
+        l: b.left  - (extraL*b.h + Math.max(0,-offX)),
+        r: b.right + (extraR*b.h + Math.max(0, offX)),
+        t: b.top,
+        btm: b.bottom + (extraB*b.h + Math.max(0, offY)) };
+    }
+    /* 2026-10：選取框/控制點/點選範圍——有旋轉時改成「轉完之後的有色範圍」外框(緊貼
+       看得到的商品)，不再是沒旋轉時的框(轉了角度後框會比商品大一圈、空出一塊)。
+       只有開了對齊參考線的1200畫布才有輪廓資料(outlines)，其他畫布維持原本的框。 */
+    function rotatedBoxActive(slotId, s){ return !!(s && s.rot && outlines[slotId] && outlines[slotId].length); }
+    function itemBounds(slotId){
+      var s = slots[slotId];
+      if (!s) return null;
+      if (rotatedBoxActive(slotId, s)){
+        var cb = contentBoundsForState(slotId, s);
+        return { left: cb.x0, top: cb.y0, right: cb.x1, bottom: cb.y1, w: cb.x1-cb.x0, h: cb.y1-cb.y0 };
+      }
+      return itemBoundsForState(slotId, s);
+    }
+
+    /* 對齊參考線用的「有色範圍」{x0,y0,x1,y1,cx,cy}：
+       沒旋轉＝緊密框(跟選取框同一個)；有旋轉＝把輪廓點轉到實際畫出來的位置再取外框。
+       旋轉樞紐一定要跟 shadow-plugin.js 畫照片時一致：(state.x, state.y - h/2)，
+       照片本體畫在 (x - w/2, y + trimBottomPad - h, w, h)。 */
+    function contentBoundsForState(slotId, s){
+      var b = itemBoundsForState(slotId, s);
+      var rot = s.rot || 0;
+      var pts = outlines[slotId];
+      if (!rot || !pts || !pts.length){
+        return { x0:b.left, y0:b.top, x1:b.right, y1:b.bottom, cx:(b.left+b.right)/2, cy:(b.top+b.bottom)/2 };
+      }
+      var fullW = s.w0*s.scaleMul, fullH = s.h0*s.scaleMul;
+      var imgLeft = s.x - fullW/2, imgTop = s.y + getTrimBottomPad(slotId, s) - fullH;
+      var pvx = s.x, pvy = s.y - fullH/2;
+      var r = rot*Math.PI/180, co = Math.cos(r), si = Math.sin(r);
+      var x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity;
+      for (var i=0; i<pts.length; i++){
+        var dx = imgLeft + pts[i][0]*fullW - pvx, dy = imgTop + pts[i][1]*fullH - pvy;
+        var X = pvx + dx*co - dy*si, Y = pvy + dx*si + dy*co;
+        if (X<x0) x0=X; if (X>x1) x1=X; if (Y<y0) y0=Y; if (Y>y1) y1=Y;
+      }
+      return { x0:x0, y0:y0, x1:x1, y1:y1, cx:(x0+x1)/2, cy:(y0+y1)/2 };
+    }
+    // 跟contentBoundsForState一樣的形狀，但認得舞台虛擬id；多選時取所有成員的聯集
+    function groupContentBounds(ids){
+      var x0=Infinity, y0=Infinity, x1=-Infinity, y1=-Infinity, any=false;
+      ids.forEach(function(id){
+        var c;
+        if (id === STAGE_GROUP_ID){
+          var sb = getStageBounds();
+          if (!sb) return;
+          c = { x0:sb.left, y0:sb.top, x1:sb.right, y1:sb.bottom };
+        } else {
+          if (!slots[id]) return;
+          c = contentBoundsForState(id, slots[id]);
+        }
+        any = true;
+        if (c.x0<x0) x0=c.x0; if (c.x1>x1) x1=c.x1; if (c.y0<y0) y0=c.y0; if (c.y1>y1) y1=c.y1;
+      });
+      if (!any) return null;
+      return { x0:x0, y0:y0, x1:x1, y1:y1, cx:(x0+x1)/2, cy:(y0+y1)/2 };
+    }
+    // 畫布px / 螢幕px 的比例：吸附門檻、線寬都用它換算，顯示縮小(1200→560)也維持螢幕上一樣粗細
+    function canvasPerScreenPx(){
+      var rect = canvas.getBoundingClientRect();
+      return rect.width > 0 ? canvas.width / rect.width : 1;
+    }
+    // 依有色範圍中心算吸附位移（只吸畫布正中間），回傳 {dx,dy}
+    function centerSnapDelta(cb){
+      if (!cb) return { dx:0, dy:0 };
+      var thr = GUIDE_SNAP_PX * canvasPerScreenPx();
+      var sx = bestSnap([cb.cx], [canvas.width/2], thr);
+      var sy = bestSnap([cb.cy], [canvas.height/2], thr);
+      return { dx: sx === null ? 0 : sx, dy: sy === null ? 0 : sy };
+    }
+    // 穿過有色範圍中心的一直一橫基準線；剛好對到畫布中線時變紅色實線
+    function drawGuides(ctx, cb){
+      if (!cb) return;
+      var k = canvasPerScreenPx();
+      var onX = Math.abs(cb.cx - canvas.width/2) < GUIDE_ALIGN_EPS;
+      var onY = Math.abs(cb.cy - canvas.height/2) < GUIDE_ALIGN_EPS;
+      function line(vertical, pos, red){
+        ctx.save();
+        ctx.setLineDash(red ? [] : [6*k, 4*k]);
+        ctx.strokeStyle = red ? GUIDE_RED : GUIDE_BLUE;
+        ctx.lineWidth = 1.5*k;
+        ctx.beginPath();
+        if (vertical){ ctx.moveTo(pos, 0); ctx.lineTo(pos, canvas.height); }
+        else { ctx.moveTo(0, pos); ctx.lineTo(canvas.width, pos); }
+        ctx.stroke();
+        ctx.restore();
+      }
+      line(true,  onX ? canvas.width/2  : cb.cx, onX);
+      line(false, onY ? canvas.height/2 : cb.cy, onY);
     }
 
     // 這個版位的整體縮放倍率——只影響畫在畫布上的大小/位置，不影響共用的素材資料本身
@@ -281,24 +509,121 @@ window.ShadowLayoutReceiver = (function () {
       return table._default !== undefined ? table._default : 1;
     }
 
-    // 畫商品/主持人＋陰影。不會清畫布、不會畫背景，插入到你自己的 draw() 需要的位置即可。
+    // 圓柱舞台（毛孩衝蝦米）：獨立於 slots/products 系統之外的物件（不吃陰影/光暈特效、
+    // 不能旋轉），但可以拖曳移動、拖角縮放——狀態只存 cx/cy（中心點）跟 scaleMul，
+    // 第一次畫（或版位/combo改變、還沒手動調過）時用 stage-defaults.js 的 xPct/wPct/bottomPct
+    // 算出預設位置；使用者拖過之後 stageState.moved=true，之後就不會再被預設值蓋掉。
+    // 2026-08：opts.savedStage（{cx,cy,scaleMul}，來自S.stageTransform）——popup每次重開
+    // 都會呼叫一次新的create()，stageState原本是全新的空物件，使用者上次調整過的舞台
+    // 大小/位置會跟著不見（跟商品slot「沒有savedTransform就會被預設值蓋掉」是同一個
+    // bug）。這裡如果呼叫端有帶savedStage，直接拿來初始化stageState並標記moved=true，
+    // 就不會被下面getStageBounds()的預設值計算蓋掉，效果跟商品slot的savedTransform一致。
+    var stageState = { cx: null, cy: null, scaleMul: 1, selected: false, moved: false };
+    if(opts && opts.savedStage && typeof opts.savedStage.cx === 'number' && typeof opts.savedStage.cy === 'number'){
+      stageState.cx = opts.savedStage.cx;
+      stageState.cy = opts.savedStage.cy;
+      stageState.scaleMul = (typeof opts.savedStage.scaleMul === 'number' && opts.savedStage.scaleMul > 0) ? opts.savedStage.scaleMul : 1;
+      stageState.moved = true;
+    }
+
+    function getLayoutId(){
+      if (stageIdOverride) return stageIdOverride;
+      try{ return location.pathname.split('/').pop().replace(/\.html?$/i, ''); }catch(e){ return null; }
+    }
+    function getStageCfg(){
+      var id = getLayoutId();
+      return id && window.StageDefaults && window.StageDefaults[id];
+    }
+    // 舞台目前的畫面範圍（中心點+寬高），找不到設定或圖片還沒載入完成就回傳 null
+    function getStageBounds(){
+      var cfg = getStageCfg();
+      if (!cfg || !_stageImg.complete || !_stageImg.naturalWidth) return null;
+      var unitW = canvas.width * cfg.wPct; // scaleMul=1時的基準寬度
+      var w = unitW * stageState.scaleMul;
+      var h = w * (_stageImg.naturalHeight / _stageImg.naturalWidth);
+      if (stageState.cx === null || stageState.cy === null || !stageState.moved){
+        var xPct = cfg.xPct !== undefined ? cfg.xPct : 0.5;
+        stageState.cx = canvas.width * xPct;
+        stageState.cy = canvas.height * cfg.bottomPct - h / 2;
+      }
+      return { left: stageState.cx - w/2, top: stageState.cy - h/2, right: stageState.cx + w/2, bottom: stageState.cy + h/2, w: w, h: h, unitW: unitW };
+    }
+    // opts.skipSelection=true：匯出攤平成品時用，不能把選取框/控制點一起烤進最終PNG
+    function drawStage(ctx, opts){
+      var b = getStageBounds();
+      if (!b) return;
+      ctx.drawImage(_stageImg, b.left, b.top, b.w, b.h);
+      /* 舞台如果是跟商品一起被選成一個群組(selectedIds還有其他東西)，就不要
+         再額外畫這個舞台專屬的藍色選取框——drawItems()裡的drawGroupSelectionBox()
+         已經會幫舞台畫一個細框+外面共用的橘色聯集外框，兩個一起畫視覺上會太亂。
+         只有「純粹只選舞台自己一個」的情況才畫這個。 */
+      if (stageState.selected && selectedIds.length === 0 && !(opts && opts.skipSelection)) drawStageSelectionBox(ctx, b);
+    }
+    function drawStageSelectionBox(ctx, b){
+      ctx.save();
+      ctx.strokeStyle = '#4a90e2';
+      ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
+      ctx.setLineDash([]);
+      ctx.strokeRect(b.left, b.top, b.w, b.h);
+      var hs = Math.max(8, canvas.width*0.012);
+      ctx.fillStyle = '#4a90e2';
+      [[b.left,b.top],[b.right,b.top],[b.left,b.bottom],[b.right,b.bottom]].forEach(function(c){
+        ctx.beginPath(); ctx.arc(c[0], c[1], hs*0.6, 0, Math.PI*2); ctx.fill();
+      });
+      ctx.restore();
+    }
+    // 手動縮放逃生口：目前還沒有拖曳UI，先開放用程式呼叫（例如之後要加縮放滑桿/控制點時直接接這兩支）
+    function setStageScale(mul, redraw){ stageState.scaleMul = mul > 0 ? mul : 1; if (redraw) redraw(); }
+    function getStageScale(){ return stageState.scaleMul; }
+    function isStageSelected(){ return stageState.selected; }
+    function deselectStage(){ stageState.selected = false; }
+
+    /* ══════════════════ 舞台跟商品「一起被選取」群組操作 ══════════════════
+       舞台(stageState)跟商品/人物(slots{})原本是完全獨立的兩套選取狀態，
+       使用者反映想要shift+點選舞台+商品之後可以一起拖曳/縮放（相對位置不變）。
+       做法：不把舞台塞進selectedIds真正污染那個陣列（selectedIds只裝真正的
+       slotId，getSelectedSlots()/LC_SELECTION_CHANGED這些對外介面維持原樣，
+       不會有呼叫端不認得的怪id混進去）——而是用一個虛擬id(STAGE_GROUP_ID)
+       在「群組操作」這幾個函式內部暫時代表舞台，實際讀寫還是導回stageState，
+       跟商品(slots[id])分開處理，只有計算「這次群組總共包含誰」跟「聯集外框
+       多大」這兩件事需要把舞台也算進去。 */
+    var STAGE_GROUP_ID = '__stage__';
+
+    // 目前真正「參與群組」的所有id：selectedIds(商品/人物) + 舞台被選取的話多一個虛擬id
+    function currentGroupIds(){
+      var ids = selectedIds.slice();
+      if (stageState.selected) ids.push(STAGE_GROUP_ID);
+      return ids;
+    }
+    // 跟itemBounds()同樣的回傳形狀({left,top,right,bottom,w,h})，但認得STAGE_GROUP_ID這個虛擬id
+    function boundsOfAny(id){
+      return (id === STAGE_GROUP_ID) ? getStageBounds() : itemBounds(id);
+    }
+
+    // 畫商品/人物＋陰影。不會清畫布、不會畫背景，插入到你自己的 draw() 需要的位置即可。
     // opts.skipSelection = true 時不畫選取框（給匯出用，避免選取框被一起輸出）
+    /* opts.onlyIds：只畫指定的slot id子集合，順序仍照這個子集合陣列本身的順序
+       （呼叫端傳進來之前就要排好），不用另外查enabledIds再篩選一次。不傳
+       就維持原本行為，畫全部enabledIds——這是為了「舞台前/舞台後」分兩批畫
+       用的（見shadow-popup.js的drawShadowCanvas()跟exportShadowComposite()），
+       選取框(selection box)邏輯完全不受這個參數影響，永遠照實際selectedIds畫，
+       不會因為只畫一半的slot就漏掉選取框。 */
     function drawItems(ctx, opts){
-      var states = enabledIds.map(getState).filter(Boolean);
+      var idsToUse = (opts && opts.onlyIds) ? opts.onlyIds : enabledIds;
+      var states = idsToUse.map(getState).filter(Boolean);
       if (states.length){
         var scale = getSceneScale();
         if(scale !== 1){
           // 以畫布正中心為準等比縮放：位置往中心點內縮/外推，大小一起等比縮放
           var cx = canvas.width/2, cy = canvas.height/2;
           states = states.map(function(s){
-            return {
-              id: s.id,
-              x: cx + (s.x - cx) * scale,
-              y: cy + (s.y - cy) * scale,
-              w: s.w * scale,
-              h: s.h * scale,
-              rot: s.rot // 旋轉角度不受縮放影響，原樣帶過去
-            };
+            var o = {};
+            for (var k in s) o[k] = s[k]; // 2026-10：陰影位移/光源角度等欄位也要一起帶過去
+            o.x = cx + (s.x - cx) * scale;
+            o.y = cy + (s.y - cy) * scale;
+            o.w = s.w * scale;
+            o.h = s.h * scale; // 旋轉角度不受縮放影響，原樣帶過去
+            return o;
           });
         }
         ShadowPlugin.configureZone(canvas.height*0.1, canvas.height*0.95);
@@ -306,11 +631,19 @@ window.ShadowLayoutReceiver = (function () {
       }
       if (opts && opts.skipSelection) return;
       var validSelected = selectedIds.filter(function(id){ return slots[id] && enabledIds.indexOf(id) !== -1; });
-      if (validSelected.length === 1){
-        drawSelectionBox(ctx, validSelected[0]);
-      } else if (validSelected.length > 1){
-        drawGroupSelectionBox(ctx, validSelected);
+      var groupIds = validSelected.slice();
+      if (stageState.selected) groupIds.push(STAGE_GROUP_ID);
+      // 對齊參考線：畫在素材之上、選取框之下（只有商品/人物被選取時才畫，只選舞台不畫）
+      if (guidesOn && validSelected.length){
+        if (groupIds.length > 1) drawGuides(ctx, groupContentBounds(groupIds));
+        else drawGuides(ctx, contentBoundsForState(validSelected[0], slots[validSelected[0]]));
       }
+      if (groupIds.length > 1){
+        drawGroupSelectionBox(ctx, groupIds);
+      } else if (validSelected.length === 1){
+        drawSelectionBox(ctx, validSelected[0]);
+      }
+      // 只有舞台自己被選、沒有商品一起入群組的情況，維持原本drawStage()裡畫的舞台專屬選取框，這裡不用重複處理
     }
 
     // 旋轉把手離選取框頂邊的距離、把手半徑，統一算式跟 hitTestRotateHandle 共用
@@ -321,18 +654,24 @@ window.ShadowLayoutReceiver = (function () {
 
     function drawSelectionBox(ctx, slotId){
       var b = itemBounds(slotId);
+      /* 開了對齊參考線的畫布：選取框改成跟基準線同一個藍的實線，旋轉吸住45°倍數時變紅 */
+      var boxColor = '#4a90e2';
+      if (guidesOn){
+        boxColor = (interaction && interaction.mode === 'rotate' && interaction.slotId === slotId && interaction.snapped) ? GUIDE_RED : GUIDE_BLUE;
+      }
       ctx.save();
-      ctx.strokeStyle = '#4a90e2';
+      ctx.strokeStyle = boxColor;
       ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
-      if (slotType[slotId] === 'person') ctx.setLineDash([canvas.width*0.01, canvas.width*0.007]);
-      else ctx.setLineDash([]);
+      /* 選取框一律用虛線（原本只有代言人是虛線、商品是實線，統一成虛線比較
+         好跟畫布上其他實線內容區分開來）。開了對齊參考線的畫布例外：虛線留給基準線，選取框用實線。 */
+      if (!guidesOn) ctx.setLineDash([canvas.width*0.01, canvas.width*0.007]);
       ctx.strokeRect(b.left, b.top, b.w, b.h);
       ctx.setLineDash([]);
       var hs = Math.max(8, canvas.width*0.012);
       var corners = [[b.left,b.top],[b.right,b.top],[b.left,b.bottom],[b.right,b.bottom]];
       corners.forEach(function(c){
         ctx.fillStyle = '#fff';
-        ctx.strokeStyle = '#4a90e2';
+        ctx.strokeStyle = boxColor;
         ctx.lineWidth = Math.max(1.5, canvas.width*0.0015);
         ctx.beginPath();
         ctx.rect(c[0]-hs/2, c[1]-hs/2, hs, hs);
@@ -385,8 +724,8 @@ window.ShadowLayoutReceiver = (function () {
       ctx.strokeStyle = 'rgba(255,152,0,0.6)';
       ctx.lineWidth = Math.max(1, canvas.width*0.001);
       ids.forEach(function(id){
-        var b = itemBounds(id);
-        ctx.strokeRect(b.left, b.top, b.w, b.h);
+        var b = boundsOfAny(id);
+        if (b) ctx.strokeRect(b.left, b.top, b.w, b.h);
       });
       ctx.strokeStyle = '#ff9800';
       ctx.lineWidth = Math.max(1.5, canvas.width*0.0018);
@@ -442,7 +781,7 @@ window.ShadowLayoutReceiver = (function () {
     // 1) headWidthPct（頭大小優先）：頭的寬度、頭的座標(x,y)都直接鎖定，
     //    縮放倍率＝目標頭寬 ÷ 這張照片實際頭寬，不管腳最後在哪裡
     //    （身材長的人腳可能超出畫布下緣、身材短的人腳可能貼不到底，兩者都不處理，直接裁切/留白）。
-    //    這個模式下兩位主持人「頭一樣大、一樣高」是保證成立的，不會因為身材比例不同跑掉。
+    //    這個模式下兩位人物「頭一樣大、一樣高」是保證成立的，不會因為身材比例不同跑掉。
     //
     // 2) feetAtBottom（腳貼底優先）：頭部中心要對齊 headYPct、腳（緊密邊框下緣）要貼在畫布底部，
     //    兩個條件同時滿足只有一組大小符合，代價是頭大小會因每張照片身材比例不同而有落差。
@@ -482,13 +821,69 @@ window.ShadowLayoutReceiver = (function () {
       return { x: imgLeft + w0/2, y: imgTop + h0, w0: w0, h0: h0 };
     }
 
-    function upsertSlot(slotId, type, dataUrl, redraw, ratio){
+    /* ══════════════════ 第一次自動貼合的安全防呆（1200畫布不超出） ══════════════════
+       商品照片的長寬比五花八門（例如很寬的橫向商品照），套用layout預設的
+       固定hPct（只決定高度、寬度照原圖比例自動算）之後，如果原圖偏寬，
+       算出來的w0可能很大——加上x本身是靠左/靠右的位置（不是正中央），
+       有色範圍左緣或右緣就可能超出1200畫布邊界；如果比例本身偏縮放
+       (initScaleMul，Excel商品比例「大」可以到120%甚至更高)，也可能讓
+       頂部超出畫布上緣（bottom-center錨點，往上長）。
+       這裡只調整「大小」(scaleMul)，錨點(x,y)完全不動——用跟itemBounds()
+       同一套「扣掉透明留白的有色範圍」算法，找出最多還能放大到多少倍
+       才會剛好貼齊最接近的那個邊界，取最保守(最小)的那個上限。
+       只在「素材第一次被加進來、還沒有savedTransform」時做這個檢查
+       （呼叫端只在upsertSlot的全新建立分支才用得到），使用者之後自己
+       拖曳/縮放調整過的結果完全不受影響，不會被這裡攔住。 */
+    function clampInitialSlotScale(x, y, w0, h0, scaleMul, tight){
+      var tx = tight ? tight.tx : 0, ty = tight ? tight.ty : 0;
+      var tw = tight ? tight.tw : 1;
+      var limits = [scaleMul];
+
+      var kRight = tx + tw - 0.5; // >0：有色範圍的右緣比水平中心點還要偏右
+      if (kRight > 0.0001) limits.push((canvas.width - x) / (w0 * kRight));
+
+      var kLeft = tx - 0.5; // <0：有色範圍的左緣比水平中心點還要偏左
+      if (kLeft < -0.0001) limits.push(x / (w0 * -kLeft));
+
+      var kTop = 1 - ty; // 幾乎必為正值：有色範圍底部到頂部的「淨高度佔比」
+      if (kTop > 0.0001) limits.push(y / (h0 * kTop));
+
+      var clamp = Math.min.apply(null, limits.filter(function(v){ return v > 0; }));
+      return Math.max(0.15, Math.min(scaleMul, clamp));
+    }
+
+    function upsertSlot(slotId, type, dataUrl, redraw, ratio, savedTransform){
       var img = new Image();
       img.onload = function(){
         ShadowPlugin.registerProduct(slotId, img, type).then(function(){
           slotType[slotId] = type;
           var tight = calcTightBoundsRatio(img);
+          if (guidesOn) outlines[slotId] = calcOutlinePts(img); // 換圖也會重算，跟tight同步
           if (!slots[slotId]){
+            /* ★重新開啟1200畫布（popup每次重開，receiver.slots都是全新的空物件）
+               時，如果呼叫端有帶savedTransform（S.shadowSlots[slotId].transform，
+               上次關閉/操作時存下來的x/y/w0/h0/scaleMul/rot），直接套用它，
+               不要再走下面「重新用預設版型位置計算」那條路——不然使用者上次
+               手動拖曳/縮放/旋轉調整過的結果，重開popup就會被蓋回預設位置，
+               等於「調整內容消失」。只有真正第一次加入這個素材（沒有savedTransform）
+               才會用layout預設值去算初始位置。 */
+            if (savedTransform && typeof savedTransform.x === 'number' && typeof savedTransform.y === 'number'
+                && typeof savedTransform.w0 === 'number' && typeof savedTransform.h0 === 'number'){
+              slots[slotId] = {
+                x: savedTransform.x, y: savedTransform.y,
+                w0: savedTransform.w0, h0: savedTransform.h0,
+                scaleMul: (typeof savedTransform.scaleMul === 'number') ? savedTransform.scaleMul : 1,
+                rot: savedTransform.rot || 0,
+                shadowScaleX: (typeof savedTransform.shadowScaleX === 'number') ? savedTransform.shadowScaleX : 1,
+                shadowScaleY: (typeof savedTransform.shadowScaleY === 'number') ? savedTransform.shadowScaleY : 1,
+                shadowOffsetX: (typeof savedTransform.shadowOffsetX === 'number') ? savedTransform.shadowOffsetX : 0,
+                shadowOffsetY: (typeof savedTransform.shadowOffsetY === 'number') ? savedTransform.shadowOffsetY : 0,
+                lightAngle: savedTransform.lightAngle || null,
+                tight: tight
+              };
+              if (redraw) redraw();
+              return;
+            }
             var layout = getSlotLayout(slotId);
             var h0, w0, x, y;
             if (layout){
@@ -519,8 +914,13 @@ window.ShadowLayoutReceiver = (function () {
             }
             /* 商品比例（Excel「(商品)比例」欄位，0~1）：100% 或沒填就是 1（維持這裡算出來的最大尺寸），
                填了更小的比例，就從第一次貼合的當下直接縮小；之後使用者拖曳調整過，就照使用者調整的結果。 */
-            var initScaleMul = (typeof ratio === 'number' && ratio > 0 && ratio <= 1) ? ratio : 1;
-            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, tight: tight };
+            /* ★跟pet-frenzy原始碼不一樣的地方：原本這裡只接受 0~1（100%以內，只能縮小
+               不能放大），但Circle的工單商品比例有「大=120%」這種超過100%的情況，
+               所以把上限從1放寬到3（300%），下限維持>0。這是唯一一處刻意偏離原始
+               搬過來的邏輯，其他都原封不動。 */
+            var initScaleMul = (typeof ratio === 'number' && ratio > 0 && ratio <= 3) ? ratio : 1;
+            initScaleMul = clampInitialSlotScale(x, y, w0, h0, initScaleMul, tight);
+            slots[slotId] = { x: x, y: y, w0: w0, h0: h0, scaleMul: initScaleMul, shadowScaleX: 1, shadowScaleY: 1, shadowOffsetX: 0, shadowOffsetY: 0, tight: tight };
             /* 這個版型的素材是不是第一次全部到齊了？到齊的話做一次整體水平置中校正，
                見上面 maybeApplyGroupCenter() 的說明。 */
             maybeApplyGroupCenter();
@@ -542,6 +942,7 @@ window.ShadowLayoutReceiver = (function () {
     function removeSlot(slotId, redraw){
       delete slots[slotId];
       delete slotType[slotId];
+      delete outlines[slotId];
       ShadowPlugin.removeProduct(slotId);
       setSelection(selectedIds.filter(function(id){ return id !== slotId; }));
       if (redraw) redraw();
@@ -562,7 +963,7 @@ window.ShadowLayoutReceiver = (function () {
           if (redraw) redraw();
           break;
         case 'LC_UPSERT_SLOT':
-          upsertSlot(msg.slotId, msg.slotType, msg.dataUrl, redraw, msg.ratio);
+          upsertSlot(msg.slotId, msg.slotType, msg.dataUrl, redraw, msg.ratio, msg.transform);
           break;
         case 'LC_REMOVE_SLOT':
           removeSlot(msg.slotId, redraw);
@@ -592,7 +993,7 @@ window.ShadowLayoutReceiver = (function () {
       }
       function hitTestHandle(slotId, p){
         var b = itemBounds(slotId);
-        var hs = Math.max(8, canvas.width*0.012) * 1.4;
+        var hs = Math.max(8, canvas.width*0.012) * 2.2; /* 放寬四角控制點的可點擊範圍，四個角都比照同一個尺寸，方便從任一角拖曳縮放，不會只有右下角好點 */
         var corners = { tl:[b.left,b.top], tr:[b.right,b.top], bl:[b.left,b.bottom], br:[b.right,b.bottom] };
         for (var k in corners){ var c = corners[k]; if (Math.abs(p.x-c[0])<=hs && Math.abs(p.y-c[1])<=hs) return k; }
         return null;
@@ -603,7 +1004,7 @@ window.ShadowLayoutReceiver = (function () {
       }
       // 跟 hitTestHandle 一樣，但用在多選的聯集外框上
       function hitTestHandleBox(gb, p){
-        var hs = Math.max(8, canvas.width*0.012) * 1.4;
+        var hs = Math.max(8, canvas.width*0.012) * 2.2; /* 放寬四角控制點的可點擊範圍，四個角都比照同一個尺寸，方便從任一角拖曳縮放，不會只有右下角好點 */
         var corners = { tl:[gb.left,gb.top], tr:[gb.right,gb.top], bl:[gb.left,gb.bottom], br:[gb.right,gb.bottom] };
         for (var k in corners){ var c = corners[k]; if (Math.abs(p.x-c[0])<=hs && Math.abs(p.y-c[1])<=hs) return k; }
         return null;
@@ -618,22 +1019,47 @@ window.ShadowLayoutReceiver = (function () {
         var hr = Math.max(7, canvas.width*0.009) * 1.8;
         return Math.hypot(p.x-rp.x, p.y-rp.y) <= hr;
       }
+      // 舞台（毛孩衝蝦米）：跟上面 hitTestHandle/hitTestBody 邏輯一樣，但用 getStageBounds() 取代 itemBounds()
+      function hitTestStageHandle(p){
+        var b = getStageBounds();
+        if (!b) return null;
+        var hs = Math.max(8, canvas.width*0.012) * 2.2; /* 放寬四角控制點的可點擊範圍，四個角都比照同一個尺寸，方便從任一角拖曳縮放，不會只有右下角好點 */
+        var corners = { tl:[b.left,b.top], tr:[b.right,b.top], bl:[b.left,b.bottom], br:[b.right,b.bottom] };
+        for (var k in corners){ var c = corners[k]; if (Math.abs(p.x-c[0])<=hs && Math.abs(p.y-c[1])<=hs) return k; }
+        return null;
+      }
+      function hitTestStageBody(p){
+        var b = getStageBounds();
+        if (!b) return false;
+        return p.x>=b.left && p.x<=b.right && p.y>=b.top && p.y<=b.bottom;
+      }
 
       canvas.addEventListener('pointerdown', function(e){
         var p = pos(e);
 
-        // 多選狀態下：先檢查是不是要整組縮放／整組拖曳
-        if (selectedIds.length > 1){
-          var gb = groupBounds(selectedIds);
+        /* 多選群組（shift+點選舞台+商品湊出來的組合，或單純多選好幾個商品）：
+           優先檢查是不是要整組縮放／整組拖曳——要放在「舞台單獨選取」跟
+           「單一商品選取」這兩個檢查之前，不然舞台/商品各自的handle判定範圍
+           比較小，容易在還沒進到這裡之前就先被單獨攔走，永遠進不了群組模式。 */
+        var groupIds = currentGroupIds();
+        if (groupIds.length > 1){
+          var gb = groupBounds(groupIds);
           if (gb){
             var gcorner = hitTestHandleBox(gb, p);
             if (gcorner){
               pushUndoSnapshot();
+              var gcornerPt = (gcorner==='br') ? {x:gb.right,y:gb.bottom} : (gcorner==='bl') ? {x:gb.left,y:gb.bottom} :
+                (gcorner==='tr') ? {x:gb.right,y:gb.top} : {x:gb.left,y:gb.top};
+              var gAxisX = gcornerPt.x - gb.cx, gAxisY = gcornerPt.y - gb.cy;
+              var gAxisLen = Math.hypot(gAxisX, gAxisY) || 1;
               interaction = {
                 mode: 'group-resize', corner: gcorner, startPointer: p,
                 center: { x: gb.cx, y: gb.cy },
-                startRadius: Math.hypot(p.x-gb.cx, p.y-gb.cy) || 1,
-                startSlots: selectedIds.map(function(id){ return { id:id, x:slots[id].x, y:slots[id].y, scaleMul:slots[id].scaleMul }; })
+                axis: { x: gAxisX/gAxisLen, y: gAxisY/gAxisLen }, axisLen: gAxisLen,
+                startSlots: groupIds.map(function(id){
+                  if (id === STAGE_GROUP_ID) return { id:id, x:stageState.cx, y:stageState.cy, scaleMul:stageState.scaleMul };
+                  return { id:id, x:slots[id].x, y:slots[id].y, scaleMul:slots[id].scaleMul };
+                })
               };
               canvas.setPointerCapture(e.pointerId);
               return;
@@ -642,7 +1068,10 @@ window.ShadowLayoutReceiver = (function () {
               pushUndoSnapshot();
               interaction = {
                 mode: 'group-move', startPointer: p,
-                startSlots: selectedIds.map(function(id){ return { id:id, x:slots[id].x, y:slots[id].y }; })
+                startSlots: groupIds.map(function(id){
+                  if (id === STAGE_GROUP_ID) return { id:id, x:stageState.cx, y:stageState.cy };
+                  return { id:id, x:slots[id].x, y:slots[id].y };
+                })
               };
               canvas.setPointerCapture(e.pointerId);
               return;
@@ -650,11 +1079,23 @@ window.ShadowLayoutReceiver = (function () {
           }
         }
 
+        // 舞台已選取時（且不是上面那種多選群組情況），優先檢查是不是要拖角縮放（handle 通常比商品小，優先判定避免被商品搶走）
+        if (stageState.selected){
+          var stageCorner = hitTestStageHandle(p);
+          if (stageCorner){
+            var sb0 = getStageBounds();
+            interaction = { mode:'stage-resize', corner: stageCorner, startPointer: p,
+              startStage: { cx: stageState.cx, cy: stageState.cy, scaleMul: stageState.scaleMul, unitW: sb0.unitW } };
+            canvas.setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+
         // 單選狀態：旋轉把手／拖角縮放／拖曳移動
         if (activeSlotId && slots[activeSlotId] && enabledIds.indexOf(activeSlotId)!==-1){
           if (hitTestRotateHandle(activeSlotId, p)){
-            var b = itemBounds(activeSlotId);
-            var center = { x: (b.left+b.right)/2, y: (b.top+b.bottom)/2 }; // 旋轉樞紐＝選取框幾何中心，要跟 shadow-plugin.js 的 pivot 定義一致
+            var rs = slots[activeSlotId];
+            var center = { x: rs.x, y: rs.y - rs.h0*rs.scaleMul/2 }; // 旋轉樞紐＝shadow-plugin.js畫照片的pivot(整張圖中心)；2026-10選取框改貼旋轉後輪廓，不能再用框中心
             var startAngle = Math.atan2(p.y-center.y, p.x-center.x) * 180/Math.PI;
             pushUndoSnapshot();
             interaction = { mode:'rotate', slotId: activeSlotId, center: center, startAngle: startAngle, baseRot: slots[activeSlotId].rot || 0 };
@@ -677,35 +1118,55 @@ window.ShadowLayoutReceiver = (function () {
         }
 
         // 點到畫布空白處或其他素材：
-        // 有按shift/ctrl/cmd＝多選切換（跟左側清單同一套規則，已選取就移除、沒選取就加入）；
-        // 沒按＝重新做單選（會清掉多選狀態）。並通知外部（左側清單）同步。
+        // 有按shift/ctrl/cmd＝多選切換（跟左側清單同一套規則，已選取就移除、沒選取就加入，
+        // 舞台也適用——shift+點舞台就是把舞台加入/移出目前的群組，不影響其他已選商品）；
+        // 沒按＝重新做單選（會清掉多選狀態，包含舞台）。並通知外部（左側清單）同步。
         var candidates = enabledIds.filter(function(id){ return slots[id]; }).slice().reverse(); // enabledIds 陣列後面＝前景，反轉後優先檢查最上層
         var hit = candidates.find(function(id){ return hitTestBody(id, p); });
         var multiKey = e.shiftKey || e.ctrlKey || e.metaKey;
 
-        if (hit && multiKey){
-          var idx = selectedIds.indexOf(hit);
-          var next = selectedIds.slice();
-          if (idx === -1) next.push(hit); else next.splice(idx, 1);
-          setSelection(next);
+        if (multiKey && (hit || hitTestStageBody(p))){
+          if (hit){
+            var idx = selectedIds.indexOf(hit);
+            var next = selectedIds.slice();
+            if (idx === -1) next.push(hit); else next.splice(idx, 1);
+            setSelection(next);
+          } else {
+            // 沒點到商品，但點在舞台範圍內：切換舞台是否加入目前的群組（不動selectedIds）
+            stageState.selected = !stageState.selected;
+          }
           parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: selectedIds.slice() }, '*');
           if (redraw) redraw();
           return; // 這次mousedown只切換選取狀態，不順便開始拖曳，避免手勢衝突
         }
 
         if (hit){
+          stageState.selected = false; // 沒按shift、直接點商品＝重新單選，舞台自動取消選取
           setSelection([hit]);
           pushUndoSnapshot();
           interaction = { mode:'move', startPointer: p, startSlot: Object.assign({}, slots[hit]) };
           canvas.setPointerCapture(e.pointerId);
           parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: [hit] }, '*');
+        } else if (hitTestStageBody(p)){
+          // 沒點到任何商品/人物，但點在舞台範圍內：選取舞台，並直接開始拖曳（跟商品同樣手感）
+          setSelection([]);
+          stageState.selected = true;
+          interaction = { mode:'stage-move', startPointer: p, startStage: { cx: stageState.cx, cy: stageState.cy } };
+          canvas.setPointerCapture(e.pointerId);
+          parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: [] }, '*');
         } else {
           setSelection([]);
+          stageState.selected = false;
           parent.postMessage({ type:'LC_SELECTION_CHANGED', slotIds: [] }, '*');
         }
         if (redraw) redraw();
       });
-      window.addEventListener('pointerup', function(){ interaction = null; });
+      window.addEventListener('pointerup', function(){
+        var was = interaction;
+        interaction = null;
+        // 放開旋轉把手後重畫一次，選取框從「吸住的紅色」回到藍色
+        if (guidesOn && was && was.mode === 'rotate' && redraw) redraw();
+      });
       // Ctrl+Z／Cmd+Z：復原上一步位置/縮放/旋轉調整（輸入框打字時不要誤觸發）
       document.addEventListener('keydown', function(e){
         var tag = (e.target && e.target.tagName) || '';
@@ -729,12 +1190,50 @@ window.ShadowLayoutReceiver = (function () {
         e.preventDefault();
         var p = pos(e);
 
+        if (interaction.mode === 'stage-move'){
+          var sdx = p.x - interaction.startPointer.x, sdy = p.y - interaction.startPointer.y;
+          stageState.cx = interaction.startStage.cx + sdx;
+          stageState.cy = interaction.startStage.cy + sdy;
+          stageState.moved = true; // 手動調過之後，getStageBounds() 就不會再用預設位置蓋掉
+          if (redraw) redraw();
+          return;
+        }
+        if (interaction.mode === 'stage-resize'){
+          var ss = interaction.startStage;
+          var w0 = ss.unitW * ss.scaleMul;
+          var h0 = w0 * (_stageImg.naturalHeight / _stageImg.naturalWidth);
+          var sb0 = { left: ss.cx - w0/2, top: ss.cy - h0/2, right: ss.cx + w0/2, bottom: ss.cy + h0/2 };
+          var sAnchor;
+          if (interaction.corner === 'br') sAnchor = [sb0.left, sb0.top];
+          else if (interaction.corner === 'bl') sAnchor = [sb0.right, sb0.top];
+          else if (interaction.corner === 'tr') sAnchor = [sb0.left, sb0.bottom];
+          else sAnchor = [sb0.right, sb0.bottom];
+          var newSW = Math.abs(p.x - sAnchor[0]);
+          var newSScale = Math.max(0.15, Math.min(6, newSW / ss.unitW));
+          var newSH = (ss.unitW * newSScale) * (_stageImg.naturalHeight / _stageImg.naturalWidth);
+          stageState.scaleMul = newSScale;
+          if (interaction.corner === 'br' || interaction.corner === 'tr'){ stageState.cx = sAnchor[0] + newSW/2; }
+          else { stageState.cx = sAnchor[0] - newSW/2; }
+          if (interaction.corner === 'bl' || interaction.corner === 'br'){ stageState.cy = sAnchor[1] + newSH/2; }
+          else { stageState.cy = sAnchor[1] - newSH/2; }
+          stageState.moved = true;
+          if (redraw) redraw();
+          return;
+        }
+
         if (interaction.mode === 'rotate'){
           var active0 = slots[interaction.slotId];
           if (!active0) return;
           var curAngle = Math.atan2(p.y-interaction.center.y, p.x-interaction.center.x) * 180/Math.PI;
           var next = normalizeDeg(interaction.baseRot + (curAngle - interaction.startAngle));
-          if (e.shiftKey) next = Math.round(next / ROT_SNAP_DEG) * ROT_SNAP_DEG;
+          if (guidesOn){
+            // 一樣從拖曳起點的角度重算再吸，不拿上一次吸附後的角度累加，才不會黏住甩不開
+            var sn = snapAngle(next);
+            next = sn.deg;
+            interaction.snapped = sn.snapped;
+          } else if (e.shiftKey){
+            next = Math.round(next / ROT_SNAP_DEG) * ROT_SNAP_DEG;
+          }
           active0.rot = next;
           if (redraw) redraw();
           return;
@@ -743,17 +1242,40 @@ window.ShadowLayoutReceiver = (function () {
         if (interaction.mode === 'group-move'){
           var dx = p.x - interaction.startPointer.x, dy = p.y - interaction.startPointer.y;
           interaction.startSlots.forEach(function(s0){
+            if (s0.id === STAGE_GROUP_ID){
+              stageState.cx = s0.x + dx; stageState.cy = s0.y + dy; stageState.moved = true;
+              return;
+            }
             var active = slots[s0.id];
             if (active){ active.x = s0.x + dx; active.y = s0.y + dy; }
           });
+          if (guidesOn){
+            // 整組有色範圍中心吸畫布中線：先照滑鼠位移擺好(未吸附位置)，再整組補同一個位移
+            var gsn = centerSnapDelta(groupContentBounds(interaction.startSlots.map(function(s0){ return s0.id; })));
+            if (gsn.dx || gsn.dy){
+              interaction.startSlots.forEach(function(s0){
+                if (s0.id === STAGE_GROUP_ID){ stageState.cx += gsn.dx; stageState.cy += gsn.dy; return; }
+                var a = slots[s0.id];
+                if (a){ a.x += gsn.dx; a.y += gsn.dy; }
+              });
+            }
+          }
           if (redraw) redraw();
           return;
         }
         if (interaction.mode === 'group-resize'){
           // 以整組外框中心為準等比例縮放：目前指標離中心的距離 ÷ 一開始離中心的距離＝縮放倍率
-          var newRadius = Math.hypot(p.x-interaction.center.x, p.y-interaction.center.y) || 1;
-          var factor = Math.max(0.1, Math.min(8, newRadius / interaction.startRadius));
+          var gdx = p.x-interaction.center.x, gdy = p.y-interaction.center.y;
+          var gproj = gdx*interaction.axis.x + gdy*interaction.axis.y;
+          var factor = Math.max(0.1, Math.min(8, gproj / interaction.axisLen));
           interaction.startSlots.forEach(function(s0){
+            if (s0.id === STAGE_GROUP_ID){
+              stageState.cx = interaction.center.x + (s0.x - interaction.center.x) * factor;
+              stageState.cy = interaction.center.y + (s0.y - interaction.center.y) * factor;
+              stageState.scaleMul = Math.max(0.05, Math.min(10, s0.scaleMul * factor));
+              stageState.moved = true;
+              return;
+            }
             var active = slots[s0.id];
             if (!active) return;
             active.x = interaction.center.x + (s0.x - interaction.center.x) * factor;
@@ -772,21 +1294,70 @@ window.ShadowLayoutReceiver = (function () {
         var s = interaction.startSlot;
         if (interaction.mode === 'move'){
           active.x = s.x + dx2; active.y = s.y + dy2;
+          if (guidesOn){
+            // 有色範圍中心吸畫布正中間（兩軸各自判斷），永遠從上面算好的「未吸附位置」出發
+            var msn = centerSnapDelta(contentBoundsForState(activeSlotId, active));
+            active.x += msn.dx; active.y += msn.dy;
+          }
         } else if (interaction.mode === 'resize'){
-          var b0 = { left: s.x - (s.w0*s.scaleMul)/2, top: s.y - (s.h0*s.scaleMul), right: s.x + (s.w0*s.scaleMul)/2, bottom: s.y };
-          var anchor;
-          if (interaction.corner === 'br') anchor = [b0.left, b0.top];
-          else if (interaction.corner === 'bl') anchor = [b0.right, b0.top];
-          else if (interaction.corner === 'tr') anchor = [b0.left, b0.bottom];
-          else anchor = [b0.right, b0.bottom];
-          var newW = Math.abs(p.x - anchor[0]);
-          var newScale = Math.max(0.15, Math.min(6, newW / s.w0));
-          var newH = s.h0 * newScale;
+          /* ★2026-09修正：原本這裡的b0是用「整張圖(含透明留白)」的邊界算錨點/新寬度，
+             但畫面上實際看得到、可以點擊拖曳的控制點，位置是itemBounds()算出來的
+             「緊密框(扣掉透明留白)」——兩者不一致時，商品照片留白越多，差距越大，
+             使用者會覺得「拖控制桿的手感很奇怪、感覺離商品好遠」（2026-09-23回報：
+             「天天補貨日」這批商品四周留白特別多，特別明顯）。
+             改成：跟畫面上看到的控制點一樣，用itemBoundsForState()算的緊密框當錨點/
+             量測寬度的基準，讓拖曳距離跟畫面上實際看到的框大小成正比。緊密框(tw0/th0，
+             佔整張圖的比例)在整個拖曳過程中是固定的常數，用它反推「整張圖」該有的新
+             寬高、以及整張圖的中心/底部座標(active.x/y，這兩個欄位定義是「整張圖」的
+             center-x/bottom-y，不是緊密框的)，數學過程：
+               錨點(緊密框的另一個角)畫面座標不能變 → imgLeft_new = anchor.x - axRel*fullW_new
+               (axRel是這個角落在整張圖裡的水平比例，例如拖br角時錨點是緊密框左上角，
+               axRel=tight.tx)，active.x = imgLeft_new + fullW_new/2；垂直同理，另外還要
+               扣掉trimBottomPad(商品下緣另一種留白補償，邏輯跟itemBounds()一致)。
+             tw0<=0(理論上不會發生)時axRel/ayRel退回0或1，等同原本整張圖的算法，不影響
+             沒有tight資料的素材。 */
+          /* 2026-10：有旋轉的素材，選取框是「轉完之後的有色範圍」外框——縮放時對角那個角
+             固定不動。轉完的圖相對旋轉樞紐(整張圖中心)是等比縮放的，所以：
+             新樞紐 = 錨點 - 倍率×(錨點 - 舊樞紐)，再換回x(整張圖中心)/y(整張圖底部)。 */
+          if (rotatedBoxActive(activeSlotId, s)){
+            var cbr = contentBoundsForState(activeSlotId, s);
+            var ra, rc;
+            if (interaction.corner === 'br'){ ra = [cbr.x0, cbr.y0]; rc = [cbr.x1, cbr.y1]; }
+            else if (interaction.corner === 'bl'){ ra = [cbr.x1, cbr.y0]; rc = [cbr.x0, cbr.y1]; }
+            else if (interaction.corner === 'tr'){ ra = [cbr.x0, cbr.y1]; rc = [cbr.x1, cbr.y0]; }
+            else { ra = [cbr.x1, cbr.y1]; rc = [cbr.x0, cbr.y0]; }
+            var rax = rc[0]-ra[0], ray = rc[1]-ra[1], ral = Math.hypot(rax, ray) || 1;
+            var rproj = ((p.x-ra[0])*rax + (p.y-ra[1])*ray) / ral;
+            var rScale = Math.max(0.15, Math.min(6, (rproj/ral) * s.scaleMul));
+            var kf = rScale / s.scaleMul;
+            var pvx0 = s.x, pvy0 = s.y - s.h0*s.scaleMul/2;
+            var pvx1 = ra[0] - kf*(ra[0]-pvx0), pvy1 = ra[1] - kf*(ra[1]-pvy0);
+            active.scaleMul = rScale;
+            active.x = pvx1;
+            active.y = pvy1 + s.h0*rScale/2;
+            if (redraw) redraw();
+            return;
+          }
+          var tight0 = s.tight;
+          var tx0 = tight0 ? tight0.tx : 0, ty0 = tight0 ? tight0.ty : 0;
+          var tw0 = tight0 ? tight0.tw : 1, th0 = tight0 ? tight0.th : 1;
+          var b0 = itemBoundsForState(activeSlotId, s);
+          var anchor, corner0, axRel, ayRel;
+          if (interaction.corner === 'br'){ anchor = [b0.left, b0.top]; corner0 = [b0.right, b0.bottom]; axRel = tx0; ayRel = ty0; }
+          else if (interaction.corner === 'bl'){ anchor = [b0.right, b0.top]; corner0 = [b0.left, b0.bottom]; axRel = tx0+tw0; ayRel = ty0; }
+          else if (interaction.corner === 'tr'){ anchor = [b0.left, b0.bottom]; corner0 = [b0.right, b0.top]; axRel = tx0; ayRel = ty0+th0; }
+          else { anchor = [b0.right, b0.bottom]; corner0 = [b0.left, b0.top]; axRel = tx0+tw0; ayRel = ty0+th0; }
+
+          var axisX = corner0[0]-anchor[0], axisY = corner0[1]-anchor[1];
+          var axisLen = Math.hypot(axisX, axisY) || 1;
+          var proj = ((p.x-anchor[0])*axisX + (p.y-anchor[1])*axisY) / axisLen;
+          var newScale = Math.max(0.15, Math.min(6, (proj/axisLen) * s.scaleMul));
+          var fullWn = s.w0*newScale, fullHn = s.h0*newScale;
+          var trimBottomPadN = getTrimBottomPad(activeSlotId, { h0: s.h0, scaleMul: newScale });
+
           active.scaleMul = newScale;
-          if (interaction.corner === 'br' || interaction.corner === 'tr'){ active.x = anchor[0] + newW/2; }
-          else { active.x = anchor[0] - newW/2; }
-          if (interaction.corner === 'bl' || interaction.corner === 'br'){ active.y = anchor[1] + newH; }
-          else { active.y = anchor[1]; }
+          active.x = anchor[0] + fullWn*(0.5 - axRel);
+          active.y = anchor[1] - ayRel*fullHn - trimBottomPadN + fullHn;
         }
         if (redraw) redraw();
       }, { passive:false });
@@ -794,11 +1365,18 @@ window.ShadowLayoutReceiver = (function () {
 
     return {
       drawItems: drawItems,
+      drawStage: drawStage,
+      getStageBounds: getStageBounds,
+      setStageScale: setStageScale,
+      getStageScale: getStageScale,
+      isStageSelected: isStageSelected,
+      deselectStage: deselectStage,
       handleMessage: handleMessage,
       attachPointerEvents: attachPointerEvents,
       /* 給左側「圖層清單」用：點清單項目直接指定選取，不受畫布上重疊順序影響（單選） */
       setActiveSlot: function(slotId, redraw){
         setSelection(slotId ? [slotId] : []);
+        stageState.selected = false; // 跟畫布上單選商品同一套行為：單選商品時舞台自動取消選取，避免跟shift+多選的群組狀態混在一起搞不清楚
         if (redraw) redraw();
       },
       getActiveSlot: function(){ return activeSlotId; },
@@ -819,9 +1397,100 @@ window.ShadowLayoutReceiver = (function () {
         if (redraw) redraw();
       },
       getRotation: function(slotId){ return slots[slotId] ? (slots[slotId].rot || 0) : 0; },
+      /* 陰影獨立 X/Y 縮放（功能B）：只影響 ShadowPlugin 畫陰影時吃的 spw/sph，
+         完全不動這個slot的x/y/w0/h0/scaleMul，商品照片本體大小/位置不受影響。
+         axis 是 'x' 或 'y'；val 是倍率（1 = 100%，跟商品原始寬高一致）。 */
+      setShadowScale: function(slotId, axis, val, redraw){
+        if (!slots[slotId] || typeof val !== 'number' || val <= 0) return;
+        if (axis === 'x') slots[slotId].shadowScaleX = val;
+        else if (axis === 'y') slots[slotId].shadowScaleY = val;
+        if (redraw) redraw();
+      },
+      getShadowScale: function(slotId){
+        var s = slots[slotId];
+        return { x: s ? (s.shadowScaleX || 1) : 1, y: s ? (s.shadowScaleY || 1) : 1 };
+      },
+      /* 陰影獨立位置位移（2026-09新增，取代畫面上原本的「陰影寬度/長度」縮放滑桿，
+         做法跟 Mall SKBN 的「陰影左右/上下位移」一致）：val 是「畫布寬/高的比例」
+         （0.1 = 往右/往下移動畫布 10%），只移動 ShadowPlugin 畫陰影的位置，完全不動
+         這個slot的x/y/w0/h0/scaleMul，商品照片本體位置不受影響。axis 是 'x' 或 'y'。 */
+      setShadowOffset: function(slotId, axis, val, redraw){
+        if (!slots[slotId] || typeof val !== 'number' || !isFinite(val)) return;
+        if (axis === 'x') slots[slotId].shadowOffsetX = val;
+        else if (axis === 'y') slots[slotId].shadowOffsetY = val;
+        if (redraw) redraw();
+      },
+      getShadowOffset: function(slotId){
+        var s = slots[slotId];
+        return { x: s ? (s.shadowOffsetX || 0) : 0, y: s ? (s.shadowOffsetY || 0) : 0 };
+      },
       /* 復原（Ctrl+Z）：見上方 pushUndoSnapshot()/undo() 的註解，只涵蓋位置/縮放/旋轉，最多5步 */
       undo: undo,
-      peekUndoTs: peekUndoTs
+      peekUndoTs: peekUndoTs,
+      /* 給呼叫端（shadow-popup.js）讀出某個slot目前的原始x/y/w0/h0/scaleMul/rot，
+         用來存回S.shadowSlots[slotId].transform，這樣下次重開popup才能還原
+         使用者調整過的結果，不會被layout預設值蓋掉。找不到這個slot回傳null。 */
+      /* 2026-10：把某個素材「連同它的影子」鎖在W×H範圍內(留m比例的邊界)——
+         KV 1200畫布用（2026-10從蝦皮超划算移植），換圖、拖曳、縮放時每次重畫前呼叫一次。
+         extraL/extraR是影子往左/右多伸出去的比例(相對商品有效高度，實測貼地
+         影子往光源反側伸出約0.31倍高)，extraB是往下的比例；offX/offY是
+         影子位移滑桿(畫布比例)，也一併算進去。超出就先等比縮小(scaleMul)，
+         再把位置夾回範圍內；有改動回傳true。旋轉不納入計算。 */
+      constrainSlot: function(slotId, W, H, m, extraL, extraR, extraB){
+        var s = slots[slotId];
+        if(!s) return false;
+        var mx = W*m, my = H*m, changed = false;
+        function ext(){ return _shadowExtent(slotId, s, W, H, extraL, extraR, extraB); }
+        var e = ext();
+        var needW = e.r - e.l, needH = e.btm - e.t;
+        var f = Math.min((W-2*mx)/needW, (H-2*my)/needH, 1);
+        if(f < 0.9999){ s.scaleMul = s.scaleMul*f; changed = true; e = ext(); }
+        var dx = 0, dy = 0;
+        if(e.l < mx) dx = mx - e.l;
+        else if(e.r > W-mx) dx = (W-mx) - e.r;
+        if(e.t < my) dy = my - e.t;
+        else if(e.btm > H-my) dy = (H-my) - e.btm;
+        if(dx || dy){ s.x += dx; s.y += dy; changed = true; }
+        return changed;
+      },
+      /* 2026-10：跟constrainSlot()同一套範圍算法，但只「量」不改——回傳商品＋影子超出
+         W×H(留m邊界)的總px數，0＝完全在範圍內。陰影位移滑桿用它判斷「再推就會超出」，
+         超出就停在邊界，不再像constrainSlot()那樣反推商品。 */
+      shadowOverflow: function(slotId, W, H, m, extraL, extraR, extraB){
+        var s = slots[slotId];
+        if(!s) return 0;
+        var mx = W*m, my = H*m;
+        var e = _shadowExtent(slotId, s, W, H, extraL, extraR, extraB);
+        return Math.max(0, mx - e.l) + Math.max(0, e.r - (W-mx)) + Math.max(0, my - e.t) + Math.max(0, e.btm - (H-my));
+      },
+      /* 2026-10：每個素材自己的光源角度('left'|'top'|'right'，null＝跟全部一樣) */
+      setLightAngle: function(slotId, preset, redraw){
+        if(!slots[slotId]) return;
+        slots[slotId].lightAngle = preset || null;
+        if(redraw) redraw();
+      },
+      getLightAngle: function(slotId){ return slots[slotId] ? (slots[slotId].lightAngle || null) : null; },
+      clearAllLightAngles: function(redraw){
+        Object.keys(slots).forEach(function(id){ slots[id].lightAngle = null; });
+        if(redraw) redraw();
+      },
+      getSlotRaw: function(slotId){
+        var s = slots[slotId];
+        if(!s) return null;
+        return { x:s.x, y:s.y, w0:s.w0, h0:s.h0, scaleMul:s.scaleMul, rot:s.rot||0,
+          shadowScaleX:s.shadowScaleX||1, shadowScaleY:s.shadowScaleY||1,
+          shadowOffsetX:s.shadowOffsetX||0, shadowOffsetY:s.shadowOffsetY||0,
+          lightAngle:s.lightAngle||null };
+      },
+      /* 給呼叫端讀出舞台目前的原始cx/cy/scaleMul，用來存回S.stageTransform，
+         下次重開popup才能還原使用者調過的舞台大小/位置，不會被stage-defaults.js
+         的預設值蓋掉。跟getSlotRaw是同一套模式，只是舞台沒有slotId，全域只有一個。
+         moved=false（使用者還沒動過舞台）時回傳null，避免存一個「其實是預設值」
+         的假資料進去，讓下次判斷邏輯更單純。 */
+      getStageRaw: function(){
+        if(!stageState.moved) return null;
+        return { cx: stageState.cx, cy: stageState.cy, scaleMul: stageState.scaleMul };
+      }
     };
   }
 

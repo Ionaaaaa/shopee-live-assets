@@ -304,6 +304,13 @@
       return key;
     });
 
+    // 保護「數字+月/週年/年」：月份、週年、年份不加 $ 與千分位
+    out = out.replace(/(^|[^\d$,\x00])(\d{1,4})(?=月|週年|周年|年)/g, function(match, prefix, digits){
+      const key = makeAlphaToken('SPECIALNUM', protectedMap.length);
+      protectedMap.push({ token: key, value: prefix + digits });
+      return key;
+    });
+
     // 保護「數字+加+數字」
     out = out.replace(/(^|[^\d$,\x00])(\d+)(加)(\d+)/g, function(match, prefix, left, mid, right){
       const key = makeAlphaToken('SPECIALNUM', protectedMap.length);

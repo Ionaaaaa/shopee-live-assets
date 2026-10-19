@@ -1,24 +1,37 @@
 'use strict';
-console.log('%c[editor-shadow-canvas.js] 版本確認：2026-07-06-v2（含combo同步功能）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
+console.log('%c[editor-shadow-canvas.js] 版本確認：2026-10-19-v3（含影子吸取背景色／對齊吸附／陰影位移與個別光源角度，移植自 Circle）', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
 
 /* ── 1200x1200 商品／人物 陰影合成畫布 ── */
 var _shadowBigCanvas = null, _shadowBigCtx = null, _shadowBigReceiver = null, _shadowBigSimBg = null;
 var _shadowBigInited = false;
+var _shadowBigLastAngle = null;
 var _shadowBigUserBg = false; // 使用者是否手動上傳過自訂模擬背景（true 的話就不再被公版背景自動蓋掉）
 
 /* 模擬背景載入：優先套用「目前公版」的 01_thumbnail.jpg（720x720，跟 1200x1200 同為正方形，
    鋪滿不會變形），純預覽用、不會被匯出。找不到才退回 backgrounds/1200bg.jpg，再找不到就灰底。 */
+/* 影子吸取背景顏色（移植自 Circle）：模擬背景換了（公版背景／使用者自己上傳），
+   就用 ShadowPlugin.setBackground() 重新取樣背景下方的平均色當影子顏色（乘0.8變暗），
+   1200 畫布上的影子顏色才會跟背景配；匯出的 PNG 影子顏色也是這個，貼到各版位才不會灰灰的。
+   沒有背景（退回灰底）時不取樣，沿用目前的影子顏色。 */
+function setShadowBigSimBg(img){
+  _shadowBigSimBg = img;
+  if(img && window.ShadowPlugin && ShadowPlugin.setBackground){
+    try{ ShadowPlugin.setBackground(img); }catch(e){ console.warn('[shadow-compose] 影子取樣背景色失敗：', e); }
+  }
+  drawShadowBigCanvas();
+}
+
 function loadShadowBigSimBgForTheme(themeKey){
   var themeUrl = 'backgrounds/' + themeKey + '/01_thumbnail.jpg';
   var img = new Image();
-  img.onload = function(){ _shadowBigSimBg = img; drawShadowBigCanvas(); };
+  img.onload = function(){ setShadowBigSimBg(img); };
   img.onerror = function(){
     console.warn('[shadow-compose] 找不到公版背景 '+themeUrl+'，改用預設 backgrounds/1200bg.jpg');
     var fallback = new Image();
-    fallback.onload = function(){ _shadowBigSimBg = fallback; drawShadowBigCanvas(); };
+    fallback.onload = function(){ setShadowBigSimBg(fallback); };
     fallback.onerror = function(){
       console.warn('[shadow-compose] 找不到預設模擬背景 backgrounds/1200bg.jpg，改用灰底');
-      _shadowBigSimBg = null; drawShadowBigCanvas();
+      setShadowBigSimBg(null);
     };
     fallback.src = 'backgrounds/1200bg.jpg';
   };
@@ -32,7 +45,8 @@ function initShadowBigCanvasOnce(){
   _shadowBigCtx = _shadowBigCanvas.getContext('2d');
   _shadowBigCtx.imageSmoothingEnabled = true;
   _shadowBigCtx.imageSmoothingQuality = 'high'; // 商品/人物照片縮放畫進1200畫布時，用高品質重新取樣
-  _shadowBigReceiver = ShadowLayoutReceiver.create(_shadowBigCanvas);
+  /* guides:true＝開啟對齊參考線與吸附（拖曳靠近畫布中心/邊緣自動吸附、旋轉靠近0°/45°/90°自動吸附、雙擊歸零），見 shadow-layout-receiver.js 上方 GUIDE_* 說明 */
+  _shadowBigReceiver = ShadowLayoutReceiver.create(_shadowBigCanvas, { guides: true });
   _shadowBigReceiver.attachPointerEvents(drawShadowBigCanvas); // 直接在大畫布上拖曳/縮放商品與人物（點選會透過 LC_ACTIVE_CHANGED 自動同步回左側素材清單的選取高亮）
 
   loadShadowBigSimBgForTheme(S.theme); // 初次開啟：套用目前公版背景
@@ -44,7 +58,7 @@ function initShadowBigCanvasOnce(){
       var reader = new FileReader();
       reader.onload = function(ev){
         var img = new Image();
-        img.onload = function(){ _shadowBigUserBg = true; _shadowBigSimBg = img; drawShadowBigCanvas(); };
+        img.onload = function(){ _shadowBigUserBg = true; setShadowBigSimBg(img); };
         img.src = ev.target.result;
       };
       reader.readAsDataURL(f);
@@ -56,6 +70,7 @@ function initShadowBigCanvasOnce(){
     window.ShadowEditor.onStateChange(function(snapshot){ syncShadowBigCanvasFromState(snapshot); });
   }
 
+  bindShadowBigOffsetPanel();
   _shadowBigInited = true;
 }
 
@@ -77,6 +92,9 @@ function syncShadowBigCanvasFromState(snapshot){
     }
   });
 
+  /* 全域光源角度改變時，把各素材個別設定的角度清掉（跟 Circle 一致：按『全部素材』就是全部一起改） */
+  if(_shadowBigLastAngle !== null && _shadowBigLastAngle !== snapshot.angle && _shadowBigReceiver.clearAllLightAngles) _shadowBigReceiver.clearAllLightAngles();
+  _shadowBigLastAngle = snapshot.angle;
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ANGLE', preset: snapshot.angle }, drawShadowBigCanvas);
   /* 版型要先送，upsertSlot 才能正確判斷這個版型該用哪組 byCombo 位置 */
   _shadowBigReceiver.handleMessage({ type:'LC_SET_ENABLED', ids: snapshot.order || snapshot.enabled || [], combo: snapshot.combo }, drawShadowBigCanvas);
@@ -90,16 +108,171 @@ function syncShadowBigCanvasFromState(snapshot){
   });
   _shadowBigReceiver.setSelectedSlots(snapshot.selectedIds || (snapshot.activeSlotId ? [snapshot.activeSlotId] : []));
   drawShadowBigCanvas();
+  updateShadowBigOffsetPanel();
+}
+
+/* ── 陰影不超出畫布／陰影位移／個別光源角度（移植自 Circle shadow-popup.js）── */
+var SHADOW_BIG_EDGE_FADE_PX = 50; // 影子離1200畫布邊緣50px內漸漸淡掉，超出的淡尾巴不會變成硬切線
+
+function _shadowBigSlotType(id){
+  var defs = (window.ShadowEditor && window.ShadowEditor.SLOT_DEFS) || [];
+  var d = defs.filter(function(x){ return x.id === id; })[0];
+  return d ? d.type : null;
+}
+/* 這個素材目前的光源角度：自己有設定就用自己的，沒有就跟「全部素材」那組一樣 */
+function _shadowBigSlotLightAngle(id){
+  var own = _shadowBigReceiver && _shadowBigReceiver.getLightAngle ? _shadowBigReceiver.getLightAngle(id) : null;
+  if(own) return own;
+  var st = window.ShadowEditor && window.ShadowEditor.getFullState && window.ShadowEditor.getFullState();
+  return (st && st.angle) || '';
+}
+/* 依光源角度算影子左右伸出比例（實測約0.24倍商品高度，往光源反側伸）；讀不到角度時兩側都預留 */
+function _shadowBigSlotExtra(id){
+  var a = _shadowBigSlotLightAngle(id);
+  return { l: (a === 'right' || !a) ? 0.24 : 0, r: (a === 'left' || !a) ? 0.24 : 0 };
+}
+function _drawShadowBigItemsFaded(ctx){
+  if(window.ShadowPlugin && ShadowPlugin.setEdgeFade) ShadowPlugin.setEdgeFade(SHADOW_BIG_EDGE_FADE_PX);
+  try { _shadowBigReceiver.drawItems(ctx); }
+  finally { if(window.ShadowPlugin && ShadowPlugin.setEdgeFade) ShadowPlugin.setEdgeFade(0); }
+}
+var _shadowBigToastTimer = null;
+function showShadowBigEdgeToast(msg){
+  var stage = _shadowBigCanvas && _shadowBigCanvas.parentElement;
+  if(!stage) return;
+  stage.style.position = stage.style.position || 'relative';
+  var el = stage.querySelector('.shadow-edge-toast');
+  if(!el){
+    el = document.createElement('div');
+    el.className = 'shadow-edge-toast';
+    el.style.cssText = 'position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(20,20,20,.88);color:#fff;font-size:13px;padding:8px 14px;border-radius:8px;pointer-events:none;z-index:5;white-space:nowrap;transition:opacity .2s;';
+    stage.appendChild(el);
+  }
+  el.textContent = msg || '陰影避免超出畫布';
+  el.style.opacity = '1';
+  if(_shadowBigToastTimer) clearTimeout(_shadowBigToastTimer);
+  _shadowBigToastTimer = setTimeout(function(){ el.style.opacity = '0'; }, 1600);
 }
 
 function drawShadowBigCanvas(){
   if(!_shadowBigCtx) return;
+  /* 商品＋貼地影子不能超出1200畫布：每次重畫前先對每個商品呼叫 constrainSlot()，
+     超出就等比縮小再夾回範圍（留1%邊界）。人物（光暈型）允許超出，不鎖定。 */
+  if(_shadowBigReceiver.constrainSlot){
+    _shadowBigReceiver.getEnabledOrder().forEach(function(id){
+      if(_shadowBigSlotType(id) !== 'product') return;
+      var ex = _shadowBigSlotExtra(id);
+      _shadowBigReceiver.constrainSlot(id, 1200, 1200, 0.01, ex.l, ex.r, 0.02);
+    });
+  }
   _shadowBigCtx.clearRect(0,0,1200,1200);
   if(_shadowBigSimBg){ _shadowBigCtx.drawImage(_shadowBigSimBg,0,0,1200,1200); }
   else { _shadowBigCtx.fillStyle = '#d8d8d8'; _shadowBigCtx.fillRect(0,0,1200,1200); }
-  _shadowBigReceiver.drawItems(_shadowBigCtx);
+  _drawShadowBigItemsFaded(_shadowBigCtx);
 }
 
+/* 陰影獨立位置位移面板：只在「單選、且該素材已有圖」時顯示。位移量是畫布寬/高的比例（-0.3~0.3），
+   每個素材各自記住（見 shadow-layout-receiver.js 的 setShadowOffset/getShadowOffset）。 */
+function fmtShadowBigOffset(v){ var n = Math.round(v*100); return (n>0?'+':'')+n+'%'; }
+function updateShadowBigOffsetPanel(){
+  var panel = document.getElementById('shadow-offset-panel');
+  if(!panel || !_shadowBigReceiver || !_shadowBigReceiver.getShadowOffset) return;
+  var active = _shadowBigReceiver.getActiveSlot();
+  var selected = _shadowBigReceiver.getSelectedSlots();
+  var show = !!(active && selected.length <= 1 && _shadowBigReceiver.getEnabledOrder().indexOf(active) !== -1);
+  panel.style.display = show ? '' : 'none';
+  if(!show) return;
+  var off = _shadowBigReceiver.getShadowOffset(active);
+  document.getElementById('shadow-offset-x').value = off.x;
+  document.getElementById('shadow-offset-y').value = off.y;
+  document.getElementById('shadow-offset-x-val').textContent = fmtShadowBigOffset(off.x);
+  document.getElementById('shadow-offset-y-val').textContent = fmtShadowBigOffset(off.y);
+  var la = _shadowBigSlotLightAngle(active);
+  panel.querySelectorAll('[data-slot-angle]').forEach(function(b){ b.classList.toggle('active', b.dataset.slotAngle === la); });
+}
+
+/* 陰影推到畫布邊緣就停住：新位移會讓「商品＋影子」比原本更超出時，二分找最遠還能放的位移值停在那裡，
+   並提示「陰影避免超出畫布」，商品不動。人物（光暈）本來就允許超出，不檢查。 */
+function applyShadowBigOffset(axis, input){
+  var active = _shadowBigReceiver.getActiveSlot();
+  if(!active) return;
+  var want = Number(input.value);
+  var cur = _shadowBigReceiver.getShadowOffset(active)[axis];
+  var val = want;
+  if(_shadowBigSlotType(active) === 'product' && _shadowBigReceiver.shadowOverflow){
+    var ex = _shadowBigSlotExtra(active);
+    var over = function(v){
+      _shadowBigReceiver.setShadowOffset(active, axis, v);
+      return _shadowBigReceiver.shadowOverflow(active, 1200, 1200, 0.01, ex.l, ex.r, 0.02);
+    };
+    var base = over(cur);
+    if(over(want) > base + 0.5){
+      var lo = cur, hi = want; // lo＝不會更超出、hi＝會更超出
+      for(var i=0; i<18; i++){ var mid = (lo+hi)/2; if(over(mid) > base + 0.5) hi = mid; else lo = mid; }
+      val = lo;
+      input.value = val;
+      showShadowBigEdgeToast('陰影避免超出畫布');
+    }
+  }
+  document.getElementById('shadow-offset-'+axis+'-val').textContent = fmtShadowBigOffset(val);
+  _shadowBigReceiver.setShadowOffset(active, axis, val, drawShadowBigCanvas);
+}
+
+function bindShadowBigOffsetPanel(){
+  var panel = document.getElementById('shadow-offset-panel');
+  if(!panel || panel.dataset.bound) return;
+  panel.dataset.bound = '1';
+  var offX = document.getElementById('shadow-offset-x');
+  var offY = document.getElementById('shadow-offset-y');
+  offX.oninput = function(){ applyShadowBigOffset('x', offX); };
+  offY.oninput = function(){ applyShadowBigOffset('y', offY); };
+  panel.querySelectorAll('[data-slot-angle]').forEach(function(btn){
+    btn.onclick = function(){
+      var active = _shadowBigReceiver.getActiveSlot();
+      if(!active || !_shadowBigReceiver.setLightAngle) return;
+      _shadowBigReceiver.setLightAngle(active, btn.dataset.slotAngle, drawShadowBigCanvas);
+      updateShadowBigOffsetPanel();
+    };
+  });
+  document.getElementById('shadow-offset-reset').onclick = function(){
+    var active = _shadowBigReceiver.getActiveSlot();
+    if(!active) return;
+    _shadowBigReceiver.setShadowOffset(active, 'x', 0);
+    _shadowBigReceiver.setShadowOffset(active, 'y', 0, drawShadowBigCanvas);
+    updateShadowBigOffsetPanel();
+  };
+  /* 點選畫布上的素材時（receiver 會 postMessage LC_SELECTION_CHANGED），面板跟著更新 */
+  window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'LC_SELECTION_CHANGED') setTimeout(updateShadowBigOffsetPanel, 0);
+  });
+}
+
+/* 換公版後提醒重新確認陰影（做法同 Circle editor-main.js 的 showShadowStaleNotice）：
+   已經烤好的商品合成圖（S.imgs.host）裡的陰影顏色還是舊公版的，要重新確認一次才會刷新。
+   畫面上方顯示提示，點「重新確認」直接打開陰影面板，按「確認並匯出」完成後自動消失。
+   還沒有任何合成圖時不需要提示。 */
+function showShadowStaleNotice(){
+  if(!(S.imgs && S.imgs.host)) return;
+  S._shadowStale = true;
+  var el = document.getElementById('shadow-stale-notice');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'shadow-stale-notice';
+    el.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:900;background:#2a2118;border:1px solid #ee4d2d;color:#fff;border-radius:8px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,.45);';
+    el.innerHTML = '<span>公版已更換，商品的陰影顏色尚未更新，請重新確認一次。</span>'+
+      '<button class="tbtn primary" id="shadow-stale-btn" style="padding:4px 10px;">重新確認</button>'+
+      '<button class="tbtn" id="shadow-stale-x" style="padding:4px 8px;">×</button>';
+    document.body.appendChild(el);
+    el.querySelector('#shadow-stale-btn').onclick = function(){ openShadowPopup(); };
+    el.querySelector('#shadow-stale-x').onclick = clearShadowStaleNotice;
+  }
+  el.style.display = 'flex';
+}
+function clearShadowStaleNotice(){
+  S._shadowStale = false;
+  var el = document.getElementById('shadow-stale-notice');
+  if(el) el.style.display = 'none';
+}
 function openShadowPopup(){
   document.getElementById('popup-shadow').classList.add('open');
   initShadowBigCanvasOnce();
@@ -147,7 +320,9 @@ function exportShadowComposite(){
   sctx.imageSmoothingQuality = 'high';
   sctx.fillStyle = '#ffffff';
   sctx.fillRect(0,0,1200,1200);
-  ShadowPlugin.renderScene(sctx, states, true); // skipPhoto=true，只畫陰影
+  if(ShadowPlugin.setEdgeFade) ShadowPlugin.setEdgeFade(SHADOW_BIG_EDGE_FADE_PX); // 匯出也一樣淡出，跟畫面上看到的一致
+  try { ShadowPlugin.renderScene(sctx, states, true); } // skipPhoto=true，只畫陰影
+  finally { if(ShadowPlugin.setEdgeFade) ShadowPlugin.setEdgeFade(0); }
 
   try{
     var imgData = sctx.getImageData(0,0,1200,1200);
@@ -187,6 +362,7 @@ function exportShadowComposite(){
     if(!blob){ toast('匯出失敗','err'); return; }
     var file = new File([blob], 'shadow-composite.png', { type:'image/png' });
     applyImageFile(file, 'host'); // 沿用現有人物圖層管線，各版位可各自拖曳/縮放定位
+    clearShadowStaleNotice();
     closePopup('shadow');
     toast('已匯出並套用到人物圖層，可在各版位畫布拖曳調整位置','ok',3500);
   }, 'image/png');

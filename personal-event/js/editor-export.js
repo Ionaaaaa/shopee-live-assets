@@ -569,6 +569,7 @@ function _downloadAll(){
         setTimeout(captureLayouts, 300);
       }, restoreDelay);
     } else {
+      S.imgs.host = null; // 這個分頁沒有曝品區合成圖：不能沿用上一個分頁的，不然匯出會出現上一包的商品
       broadcastFull();
       /* 500ms給主題／背景圖／文字這些「本來就快」的東西一個基本緩衝；
          真正可能拖很久的LOGO原圖，交給上面 waitForLogo2Ready 實際等它畫完，

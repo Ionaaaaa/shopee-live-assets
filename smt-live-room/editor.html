@@ -50,6 +50,7 @@ body { font-family:'ShopeeNoto','Noto Sans TC',sans-serif;background:var(--bg);c
 .tbtn:hover { color:var(--text);background:#2e2e2e; }
 .tbtn.primary { background:var(--accent);border-color:var(--accent);color:white; }
 .tbtn.primary:hover { background:#d4442a; }
+.tbtn.active { background:var(--accent);color:#fff;border-color:var(--accent); }
 .tbtn svg { width:13px;height:13px;flex-shrink:0; }
 input[type="file"] { display:none; }
 
@@ -570,20 +571,31 @@ input[type="file"] { display:none; }
       <span class="popup-title">商品／人物 陰影編輯</span>
       <button class="popup-close" onclick="closePopup('shadow')">×</button>
     </div>
-    <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;">
+    <div style="padding:20px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
 
       <!-- 左：版型/角度/素材控制（素材清單本身可拖曳排序前後、右上角 × 刪除，點縮圖可直接選取） -->
-      <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;">
+      <!-- 固定最大高度＋內部捲動：選取商品出現位移面板時，popup 不會被撐高、1200 畫布位置不會跟著位移 -->
+      <div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:12px;max-height:min(78vh,640px);overflow-y:auto;padding-right:4px;">
         <div id="shadow-editor-mount"></div>
-        <div class="lc-field">
-          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">已套入背景色</label>
-          <input type="file" id="shadow-compose-bg-file" accept="image/*" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius);padding:6px 8px;font-size:12px;">
+        <!-- 陰影位置／光源角度（選取單一素材時才出現，移植自 Circle） -->
+        <div id="shadow-offset-panel" class="lc-field" style="display:none;">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;">這個素材的光源角度</label>
+          <div style="display:flex;gap:6px;margin-bottom:10px;">
+            <button type="button" class="tbtn" data-slot-angle="left">左</button>
+            <button type="button" class="tbtn" data-slot-angle="top">中</button>
+            <button type="button" class="tbtn" data-slot-angle="right">右</button>
+          </div>
+          <label style="display:block;font-size:12px;color:var(--text-muted);">陰影左右位移 <span id="shadow-offset-x-val">0%</span></label>
+          <input type="range" id="shadow-offset-x" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+          <label style="display:block;font-size:12px;color:var(--text-muted);margin-top:6px;">陰影上下位移 <span id="shadow-offset-y-val">0%</span></label>
+          <input type="range" id="shadow-offset-y" min="-0.3" max="0.3" step="0.01" value="0" style="width:100%;">
+          <button type="button" class="tbtn" id="shadow-offset-reset" style="margin-top:8px;width:100%;">重設陰影位置</button>
         </div>
         <button class="dl-btn" onclick="exportShadowComposite()">完成</button>
       </div>
 
       <!-- 右：1200x1200 合成畫布 -->
-      <div style="flex:1;min-width:280px;display:flex;align-items:center;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
+      <div style="flex:1;min-width:280px;align-self:flex-start;display:flex;align-items:flex-start;justify-content:center;background:#2a2a2a;border-radius:var(--radius);padding:12px;">
         <canvas id="shadow-compose-canvas" width="1200" height="1200" style="width:100%;max-width:560px;aspect-ratio:1/1;background:#444;border-radius:4px;touch-action:none;"></canvas>
       </div>
 
@@ -634,7 +646,7 @@ input[type="file"] { display:none; }
 <script src="js/editor-canvas-ui.js?v=20260730c"></script>
 <script src="js/editor-popups.js?v=20260730c"></script>
 <script src="js/editor-logo2-canvas.js?v=20260730c"></script>
-<script src="js/editor-shadow-canvas.js?v=20260730c"></script>
+<script src="js/editor-shadow-canvas.js?v=20261019a"></script>
 <script src="js/editor-import.js?v=20260730c"></script>
 <script src="js/editor-export.js?v=20260730c"></script>
 <script>
@@ -754,12 +766,12 @@ var pm=(function(){
 </script>
 
 <!-- 商品/人物 陰影套件（需放在上面內建 script 之後，才能抓到 window.iframes） -->
-<script src="js/shadow-plugin.js?v=20260730c"></script>
+<script src="js/shadow-plugin.js?v=20261019a"></script>
 <script src="js/frame-defaults.js?v=20260730c"></script>
 <script src="js/shadow-frame-plugin.js?v=20260730c"></script>
 <script src="js/shadow-layout-defaults.js?v=20260730c"></script>
 <script src="js/shadow-scene-scale.js?v=20260730c"></script>
-<script src="js/shadow-layout-receiver.js?v=20260730c"></script>
-<script src="js/shadow-editor-plugin.js?v=20260730c"></script>
+<script src="js/shadow-layout-receiver.js?v=20261019a"></script>
+<script src="js/shadow-editor-plugin.js?v=20261019a"></script>
 </body>
 </html>

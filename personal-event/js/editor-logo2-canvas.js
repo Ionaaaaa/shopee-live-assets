@@ -291,8 +291,47 @@ function logo2HandleSizeCanvasPx(){
 function logo2UpdateHint(){
   var el = document.getElementById('logo2-compose-hint');
   if(!el) return;
-  if(!_logo2Img){ el.textContent = '請先上傳 logo2 素材'; return; }
+  if(!_logo2Img){ el.textContent = '請先上傳 logo2 素材'; renderImportWarnings(); return; }
   el.textContent = '點選素材可 拖曳移動 / 放大縮小';
+  renderImportWarnings();
+}
+
+/* ── 匯入工單沒抓到的內容：一次只顯示『目前這一包、目前這個區塊』的提示 ──
+   Logo 沒抓到 → 只在 Logo 上傳區下方顯示；商品／商品組合沒抓到 → 只在曝品區左側顯示。
+   即時依目前狀態算（Logo 畫布有沒有圖、曝品格有沒有圖），使用者補上傳後自動消失，
+   換到下一包彈窗時也會跟著換成那一包自己的內容。 */
+var _importWarnHooked = false;
+function renderImportWarnings(){
+  var logoBox = document.getElementById('logo-import-warn');
+  var prodBox = document.getElementById('product-import-warn');
+  if(!logoBox && !prodBox) return;
+  var tab = (typeof TABS !== 'undefined') ? TABS[ACTIVE_TAB] : null;
+  var d = tab && tab.data;
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  if(logoBox){
+    if(d && d.logoName && !_logo2Img){
+      logoBox.style.display = '';
+      logoBox.innerHTML = '⚠ 工單 LOGO「' + esc(d.logoName) + '」沒有在對應資料夾找到檔名含 logo 的檔案，請手動上傳';
+    } else { logoBox.style.display = 'none'; }
+  }
+  if(prodBox){
+    var items = [];
+    if(d && d.level === 'A' && window.ShadowEditor){
+      var slots = (window.ShadowEditor.getFullState() || {}).slots || {};
+      [['host1','人物1',d.host1Name],['host2','人物2',d.host2Name],['product1','商品1',d.product1Name],['product2','商品2',d.product2Name],['product3','商品3',d.product3Name]].forEach(function(x){
+        if(x[2] && !slots[x[0]]) items.push(x[1] + '：工單「' + esc(x[2]) + '」');
+      });
+      if(d.comboRaw && !d.combo) items.push('商品組合：工單「' + esc(d.comboRaw) + '」不在範本的三種組合內，版型維持目前設定');
+    }
+    if(items.length){
+      prodBox.style.display = '';
+      prodBox.innerHTML = '⚠ 這一包工單有填、但沒找到素材，請手動上傳：<br>' + items.join('<br>');
+    } else { prodBox.style.display = 'none'; }
+  }
+  if(!_importWarnHooked && window.ShadowEditor && window.ShadowEditor.onStateChange){
+    _importWarnHooked = true;
+    window.ShadowEditor.onStateChange(function(){ renderImportWarnings(); });
+  }
 }
 
 /* ── 滑鼠互動：拖曳移動／拖角縮放（邏輯搬自 layout-logo2.js） ── */
