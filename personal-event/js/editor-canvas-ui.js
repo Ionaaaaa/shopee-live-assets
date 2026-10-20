@@ -252,7 +252,7 @@ function broadcastText(){
     combo:   (window.ShadowEditor && window.ShadowEditor.getCombo()) || null, // 目前版型A/B/C/D，給host-scene-scale.js依版型查詢用
     cSub:    v('cSub'),
     cMain:   v('cMain'),
-    cDate:   v('cDate'),
+    cDate:   v('cSub'), // 2026-10：日期顏色跟主標(cSub)連動，隱藏的cDate色票保留但不再使用；要改回獨立調色就換回v('cDate')
     sepColor: v('cSep'),
     logo1Url: logoAssetUrl('logo1', 'logos/logo_shopee_live.png'),
     ctaUrl:   logoAssetUrl('cta', 'logos/cta_btn.png'),
@@ -345,7 +345,7 @@ function broadcastFull(){
     combo:   (window.ShadowEditor && window.ShadowEditor.getCombo()) || null, // 目前版型A/B/C/D，給host-scene-scale.js依版型查詢用
     cSub:    v('cSub'),
     cMain:   v('cMain'),
-    cDate:   v('cDate'),
+    cDate:   v('cSub'), // 2026-10：日期顏色跟主標(cSub)連動，隱藏的cDate色票保留但不再使用；要改回獨立調色就換回v('cDate')
     sepColor: v('cSep'),
     logo1Url: logoAssetUrl('logo1', 'logos/logo_shopee_live.png'),
     ctaUrl:   logoAssetUrl('cta', 'logos/cta_btn.png'),
@@ -413,7 +413,7 @@ window.addEventListener('message', function(e){
     combo:   (window.ShadowEditor && window.ShadowEditor.getCombo()) || null, // 目前版型A/B/C/D，給host-scene-scale.js依版型查詢用
             cSub:    v('cSub'),
             cMain:   v('cMain'),
-            cDate:   v('cDate'),
+            cDate:   v('cSub'), // 2026-10：日期顏色跟主標(cSub)連動，隱藏的cDate色票保留但不再使用；要改回獨立調色就換回v('cDate')
             sepColor: v('cSep'),
             logo1Url: logoAssetUrl('logo1', 'logos/logo_shopee_live.png'),
             ctaUrl:   logoAssetUrl('cta', 'logos/cta_btn.png'),
