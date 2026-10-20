@@ -159,7 +159,6 @@
             '</div>' +
           '</div>' +
           '<div class="lc-field">' +
-            '<label>素材（拖曳可移動，右上角 × 可刪除；商品可去背、可勾選「拍立得」套白框）</label>' +
             '<div class="lc-slotbar" id="lc-slotbar"></div>' +
           '</div>' +
         '</div>' +

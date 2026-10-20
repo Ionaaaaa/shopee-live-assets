@@ -414,7 +414,14 @@ window.ShadowPlugin = (function () {
     /* 海外購物節保留：陰影獨立位置位移（畫布寬/高的比例），整組陰影一起平移、商品本體不動。 */
     var shadowOffX = (state.shadowOffsetX || 0) * ctx.canvas.width;
     var shadowOffY = (state.shadowOffsetY || 0) * ctx.canvas.height;
-    var shadowGroundY = state.y + trimBottomPad * squash + shadowOffY;
+    /* ★2026-10修正「影子根部左右偏」：主斜切陰影是拿整張PNG(含底部透明留白)去斜切，
+       斜切支點在PNG最底邊，不是商品真正碰地那條線——碰地線在支點往上「底部留白」
+       那麼高的地方，被斜切推開 shear×留白 的距離(底部留白越多偏越多，方向跟光源相反)。
+       上下方向原本就有補(留白×squash)，這裡把左右方向也補回去。
+       留白要用主陰影實際蓋印的高度sph算(陰影上下縮放≠1時才不會跑掉)。 */
+    var shadowShear = Math.tan(opts.angle * Math.PI / 180 * 0.55);
+    var shadowPadBottom = p.trim ? p.trim.bottom * (ph * (state.shadowScaleY || 1)) : 0;
+    var shadowGroundY = state.y + shadowPadBottom * squash + shadowOffY;
 
     /* 2026-07-28 跟 Iona 確認新增：水平置中修正——只影響「影子」的水平支點，
        商品照片本身的位置（py、cx - pw/2 那段）完全不動。如果商品PNG左右留白不對稱
@@ -429,7 +436,7 @@ window.ShadowPlugin = (function () {
        (trim.left-trim.right)*pw/2，留白越不對稱偏越多(實測左留白50%/右留白5%、
        商品寬500px時偏112px)。改成不加，trimCenterOffsetX保留不用。
        跟Mall SKBN那次修正同一個根源(x是整張圖中心vs有色範圍中心的認定不一致)。 */
-    var shadowCx = cx + shadowOffX;
+    var shadowCx = cx + shadowOffX + shadowShear * shadowPadBottom; // 補回斜切造成的根部左右偏移(見上方shadowGroundY說明)
 
     /* 2026-07-28 跟 Iona 確認新增：陰影不跟著商品旋轉。
        原本 withRotation() 包住整段（補強陰影＋主陰影＋照片），旋轉商品時陰影會

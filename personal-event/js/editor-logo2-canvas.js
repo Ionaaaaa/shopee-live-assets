@@ -325,7 +325,7 @@ function renderImportWarnings(){
     }
     if(items.length){
       prodBox.style.display = '';
-      prodBox.innerHTML = '⚠ 這一包工單有填、但沒找到素材，請手動上傳：<br>' + items.join('<br>');
+      prodBox.innerHTML = '⚠ 工單對不上的素材，請手動上傳：<br>' + items.join('<br>');
     } else { prodBox.style.display = 'none'; }
   }
   if(!_importWarnHooked && window.ShadowEditor && window.ShadowEditor.onStateChange){
